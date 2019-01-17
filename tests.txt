@@ -1,0 +1,16 @@
+# Minimal working program
+main()
+{
+    *0x6001 = 0;
+}
+
+# First test
+#in 4 5 6
+#out 1 2 3
+main()
+{
+    *0x6000 = 1;
+    *0x6000 = 2;
+    *0x6000 = 3;
+    *0x6001 = 0;
+}
