@@ -38,7 +38,7 @@ uint8_t read6502(uint16_t address)
 void write6502(uint16_t address, uint8_t value)
 {
     if (address < RAM_SIZE) ram[address] = value;
-    else if (address == DEBUG_PORT) printf("%2X ", value);
+    else if (address == DEBUG_PORT) printf("%d ", value);
     else if (address == STOP_PORT) run = false;
     else if (address >= ROM_BASE) rom[address - ROM_BASE] = value;
 }
