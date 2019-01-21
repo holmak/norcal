@@ -4,17 +4,30 @@
 #include <string.h>
 #include "Common.h"
 
-static void AppendArg(Expr *call, Expr *item)
-{
-    NYI();
-}
-
 static Expr *MakeExpr(ExprType type)
 {
     Expr *e = XAlloc(sizeof(*e));
     memset(e, 0, sizeof(*e));
     e->Type = type;
     return e;
+}
+
+static void AppendArg(Expr *expr, Expr *arg)
+{
+    ExprList *last = XAlloc(sizeof(*last));
+    last->E = arg;
+    last->Next = NULL;
+
+    if (!expr->Args)
+    {
+        expr->Args = last;
+    }
+    else
+    {
+        ExprList *p = expr->Args;
+        while (p->Next) p = p->Next;
+        p->Next = last;
+    }
 }
 
 static Expr *Int(int32_t i)
@@ -27,15 +40,15 @@ static Expr *Int(int32_t i)
 static Expr *Indirect(Expr *addr)
 {
     Expr *e = MakeExpr(EXPR_INDIRECT);
-    e->Left = addr;
+    AppendArg(e, addr);
     return e;
 }
 
 static Expr *Assign(Expr *dest, Expr *src)
 {
     Expr *e = MakeExpr(EXPR_ASSIGN);
-    e->Left = dest;
-    e->Right = src;
+    AppendArg(e, dest);
+    AppendArg(e, src);
     return e;
 }
 
@@ -43,12 +56,12 @@ static Expr *Assign(Expr *dest, Expr *src)
 static Expr *Sequence(Expr *a, Expr *b)
 {
     Expr *e = MakeExpr(EXPR_SEQUENCE);
-    e->Left = a;
-    e->Right = b;
+    AppendArg(e, a);
+    AppendArg(e, b);
     return e;
 }
 
-Expr *Parse(char *filename)
+Expr *ParseFile(char *filename)
 {
     // TODO: Parse the input file.
     FILE *f = fopen(filename, "r");

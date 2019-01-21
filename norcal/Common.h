@@ -10,11 +10,19 @@ typedef enum ExprType
 } ExprType;
 
 typedef struct Expr Expr;
+typedef struct ExprList ExprList;
+
 struct Expr
 {
     ExprType Type;
     int32_t Int;
-    Expr *Left, *Right;
+    ExprList *Args;
+};
+
+struct ExprList
+{
+    Expr *E;
+    ExprList *Next;
 };
 
 typedef enum Opcode Opcode;
@@ -31,7 +39,8 @@ enum Opcode
     INX          = 0xE8,
 };
 
-Expr *Parse(char *filename);
+Expr *ParseFile(char *filename);
+size_t CountArgs(Expr *e);
 void CompileProgram(Expr *e);
 void Emit(Opcode op);
 void Emit_U8(Opcode op, uint8_t arg);

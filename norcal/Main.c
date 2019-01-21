@@ -13,7 +13,7 @@ int main(int argc, char *argv[])
     }
     char *sourcefile = argv[1];
     char *outputfile = argv[2];
-    Expr *program = Parse(sourcefile);
+    Expr *program = ParseFile(sourcefile);
     CompileProgram(program);
     WriteImage(outputfile);
 }
