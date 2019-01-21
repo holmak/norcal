@@ -14,19 +14,15 @@ static Expr *MakeExpr(ExprType type)
 
 static void AppendArg(Expr *expr, Expr *arg)
 {
-    ExprList *last = XAlloc(sizeof(*last));
-    last->E = arg;
-    last->Next = NULL;
-
     if (!expr->Args)
     {
-        expr->Args = last;
+        expr->Args = arg;
     }
     else
     {
-        ExprList *p = expr->Args;
+        Expr *p = expr->Args;
         while (p->Next) p = p->Next;
-        p->Next = last;
+        p->Next = arg;
     }
 }
 

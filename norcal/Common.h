@@ -10,19 +10,13 @@ typedef enum ExprType
 } ExprType;
 
 typedef struct Expr Expr;
-typedef struct ExprList ExprList;
 
 struct Expr
 {
     ExprType Type;
     int32_t Int;
-    ExprList *Args;
-};
-
-struct ExprList
-{
-    Expr *E;
-    ExprList *Next;
+    Expr *Args;
+    Expr *Next;
 };
 
 typedef enum Opcode Opcode;

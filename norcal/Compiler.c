@@ -4,7 +4,7 @@
 size_t CountArgs(Expr *e)
 {
     size_t count = 0;
-    for (ExprList *p = e->Args; p; p = p->Next) count++;
+    for (Expr *p = e->Args; p; p = p->Next) count++;
     return count;
 }
 
@@ -12,7 +12,7 @@ static void GetOneArg(Expr *e, Expr **arg)
 {
     if (e->Args && !e->Args->Next)
     {
-        *arg = e->Args->E;
+        *arg = e->Args;
     }
     else
     {
@@ -24,8 +24,8 @@ static void GetTwoArgs(Expr *e, Expr **left, Expr **right)
 {
     if (e->Args && e->Args->Next && !e->Args->Next->Next)
     {
-        *left = e->Args->E;
-        *right = e->Args->Next->E;
+        *left = e->Args;
+        *right = e->Args->Next;
     }
     else
     {
@@ -121,9 +121,9 @@ static void CompileExpression(Expr *e)
     }
     else if (e->Type == EXPR_SEQUENCE)
     {
-        for (ExprList *p = e->Args; p; p = p->Next)
+        for (Expr *p = e->Args; p; p = p->Next)
         {
-            CompileExpression(p->E);
+            CompileExpression(p);
         }
     }
     else
