@@ -14,7 +14,7 @@ int main(int argc, char *argv[])
     char *sourcefile = argv[1];
     char *outputfile = argv[2];
     Expr *program = Parse(sourcefile);
-    Compile(program);
+    CompileProgram(program);
     WriteImage(outputfile);
 }
 
@@ -28,6 +28,12 @@ void *XAlloc(size_t size)
 void Panic(char *message)
 {
     fprintf(stderr, "Internal error: %s\n", message);
+    exit(1);
+}
+
+void Error(char *message)
+{
+    fprintf(stderr, "Error: %s\n", message);
     exit(1);
 }
 

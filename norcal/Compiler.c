@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include "Common.h"
 
-uint16_t GetGlobalAddress(Expr *e)
+static uint16_t GetGlobalAddress(Expr *e)
 {
     if (e->Type == EXPR_INDIRECT && e->Left->Type == EXPR_INT)
     {
@@ -14,14 +14,17 @@ uint16_t GetGlobalAddress(Expr *e)
     }
 }
 
-void Compile(Expr *e)
+static void CompileExpression(Expr *e)
 {
     switch (e->Type)
     {
     case EXPR_INT:
-        printf("; int %d\n", e->Int);
-        printf("    lda #$%02X\n", (uint8_t)e->Int);
-        printf("    ldx #$%02X\n", (uint8_t)(e->Int >> 8));
+        Emit(DEX);
+        Emit(DEX);
+        Emit_U8(LDA_IMM, e->Int & 0xFF);
+        Emit_U8(STA_ZP_X, 0);
+        Emit_U8(LDA_IMM, (e->Int >> 8) & 0xFF);
+        Emit_U8(STA_ZP_X, 1);
         break;
     case EXPR_INDIRECT:
         NYI();
@@ -29,18 +32,29 @@ void Compile(Expr *e)
     case EXPR_ASSIGN:
     {
         uint16_t address = GetGlobalAddress(e->Left);
-        Compile(e->Right);
-        printf("; =\n");
-        printf("    lda $00,X\n");
-        printf("    sta $%04X\n", address);
-        printf("    lda $01,X\n");
-        printf("    sta $%04X\n", address + 1);
-        printf("    inx\n");
-        printf("    inx\n");
+        CompileExpression(e->Right);
+        Emit_U8(LDA_ZP_X, 0);
+        Emit_U16(STA_ABS, address);
+        Emit_U8(LDA_ZP_X, 1);
+        Emit_U16(STA_ABS, address + 1);
+        Emit(INX);
+        Emit(INX);
         break;
     }
+    case EXPR_SEQUENCE:
+        CompileExpression(e->Left);
+        CompileExpression(e->Right);
+        break;
     default:
         NYI();
         break;
     }
+}
+
+void CompileProgram(Expr *e)
+{
+    // Prologue:
+    Emit(LDX_IMM, 0);
+
+    CompileExpression(e);
 }

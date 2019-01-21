@@ -39,11 +39,22 @@ static Expr *Assign(Expr *dest, Expr *src)
     return e;
 }
 
+// TODO: Support any number of subexpressions.
+static Expr *Sequence(Expr *a, Expr *b)
+{
+    Expr *e = MakeExpr(EXPR_SEQUENCE);
+    e->Left = a;
+    e->Right = b;
+    return e;
+}
+
 Expr *Parse(char *filename)
 {
     // TODO: Parse the input file.
     FILE *f = fopen(filename, "r");
     assert(f);
 
-    return Assign(Indirect(Int(0x6002)), Int(42));
+    return Sequence(
+        Assign(Indirect(Int(0x6000)), Int(42)),
+        Assign(Indirect(Int(0x6002)), Int(99)));
 }
