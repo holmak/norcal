@@ -14,6 +14,8 @@ int main(int argc, char *argv[])
     char *sourcefile = argv[1];
     char *outputfile = argv[2];
     Expr *program = ParseFile(sourcefile);
+    PrintExpr(program);
+    printf("\n");
     CompileProgram(program);
     WriteImage(outputfile);
 }

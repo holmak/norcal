@@ -23,6 +23,9 @@
     <ClCompile Include="Coder.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Syntax.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Common.h">

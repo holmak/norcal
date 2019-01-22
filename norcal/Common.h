@@ -4,6 +4,7 @@
 typedef enum ExprType
 {
     EXPR_INT,
+    EXPR_NAME,
     EXPR_INDIRECT,
     EXPR_ASSIGN,
     EXPR_SEQUENCE,
@@ -15,6 +16,7 @@ struct Expr
 {
     ExprType Type;
     int32_t Int;
+    char *Name;
     Expr *Args;
     Expr *Next;
 };
@@ -40,6 +42,12 @@ void Emit(Opcode op);
 void Emit_U8(Opcode op, uint8_t arg);
 void Emit_U16(Opcode op, uint16_t arg);
 void WriteImage(char *filename);
+
+// Syntax trees:
+bool MatchIntExpr(Expr *e, int32_t *n);
+bool MatchUnaryExpr(Expr *e, ExprType type, Expr **arg);
+bool MatchBinaryExpr(Expr *e, ExprType type, Expr **left, Expr **right);
+void PrintExpr(Expr *e);
 
 void *XAlloc(size_t size);
 void Panic(char *message);
