@@ -3,7 +3,6 @@
 
 typedef enum ExprType
 {
-    EXPR_TUPLE,
     EXPR_INT,
     EXPR_NAME,
     EXPR_INDIRECT,

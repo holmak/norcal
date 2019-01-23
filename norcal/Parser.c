@@ -178,20 +178,19 @@ static ExprType GetNodeFromName(char *name)
 
 static Expr *ParseList(Reader *r)
 {
-    Expr *tuple = MakeExpr(EXPR_TUPLE);
+    Expr *e = MakeExpr(EXPR_SEQUENCE);
     while (true)
     {
         SkipSpaces(r);
         if (r->Next == ')' || r->Next == EOF) break;
-        AppendArg(tuple, Parse(r));
+        AppendArg(e, Parse(r));
     }
 
-    if (!tuple->Args) Error("invalid syntax: empty tuple");
-    if (tuple->Args->Type != EXPR_NAME) Error("invalid syntax: tuple must begin with name");
-
     // Convert the tuple into the appropriate syntax node:
-    Expr *e = MakeExpr(GetNodeFromName(tuple->Args->Name));
-    e->Args = tuple->Args->Next;
+    if (!e->Args) Error("invalid syntax: empty tuple");
+    if (e->Args->Type != EXPR_NAME) Error("invalid syntax: tuple must begin with name");
+    e->Type = GetNodeFromName(e->Args->Name);
+    e->Args = e->Args->Next;
     return e;
 }
 

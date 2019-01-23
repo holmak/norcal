@@ -98,10 +98,6 @@ void PrintExpr(Expr *e)
     {
         printf("%s", e->Name);
     }
-    else if (e->Type == EXPR_TUPLE)
-    {
-        Panic("tuples should have been converted by this point");
-    }
     else
     {
         printf("(%s ", GetNameForNode(e->Type));
