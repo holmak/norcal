@@ -24,13 +24,16 @@ struct Expr
 typedef enum Opcode Opcode;
 enum Opcode
 {
+    STA_ZP       = 0x85,
     STA_ABS      = 0x8D,
     STA_ZP_X     = 0x95,
     LDY_IMM      = 0xA0,
     LDA_ZP_X_IND = 0xA1,
     LDX_IMM      = 0xA2,
     LDA_IMM      = 0xA9,
+    LDA_ZP_Y_IND = 0xB1,
     LDA_ZP_X     = 0xB5,
+    INY          = 0xC8,
     DEX          = 0xCA,
     INX          = 0xE8,
 };

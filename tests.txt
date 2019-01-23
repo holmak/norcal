@@ -8,3 +8,12 @@
     (assign (indirect 0x6000) 2)
     (assign (indirect 0x6000) 3)
     (assign (indirect 0x6002) 0))
+
+# Input
+#in 4 5 6
+#out 4 5 6
+(sequence
+    (assign (indirect 0x6000) (indirect 0x6000))
+    (assign (indirect 0x6000) (indirect 0x6000))
+    (assign (indirect 0x6000) (indirect 0x6000))
+    (assign (indirect 0x6002) 0))

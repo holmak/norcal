@@ -16,6 +16,10 @@ static uint16_t GetGlobalAddress(Expr *e)
     }
 }
 
+// TODO: Once a symbol table is implemented, reserve two bytes of zero page
+// for a temporary address variable.
+#define TempPtr 0x10
+
 static void CompileExpression(Expr *e)
 {
     int n;
@@ -31,7 +35,18 @@ static void CompileExpression(Expr *e)
     }
     else if (MatchUnaryExpr(e, EXPR_INDIRECT, &left))
     {
-        NYI();
+        CompileExpression(left);
+        // Copy address from stack into a zero-page pointer variable:
+        Emit_U8(LDA_ZP_X, 0);
+        Emit_U8(STA_ZP, TempPtr);
+        Emit_U8(LDA_ZP_X, 1);
+        Emit_U8(STA_ZP, TempPtr + 1);
+        // Read through the pointer and write it back to the stack:
+        Emit_U8(LDA_ZP_X_IND, 0);
+        Emit_U8(STA_ZP_X, 0);
+        Emit_U8(LDY_IMM, 1);
+        Emit_U8(LDA_ZP_Y_IND, TempPtr);
+        Emit_U8(STA_ZP_X, 1);
     }
     else if (MatchBinaryExpr(e, EXPR_ASSIGN, &left, &right))
     {
