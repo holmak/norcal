@@ -1,10 +1,10 @@
 # Minimal working program
-(set (deref 0x6002) 0)
+(assign (indirect 0x6002) 0)
 
 # Output
 #out 1 2 3
-(block
-    (set (deref 0x6000) 1)
-    (set (deref 0x6000) 2)
-    (set (deref 0x6000) 3)
-    (set (deref 0x6002) 0))
+(sequence
+    (assign (indirect 0x6000) 1)
+    (assign (indirect 0x6000) 2)
+    (assign (indirect 0x6000) 3)
+    (assign (indirect 0x6002) 0))

@@ -69,6 +69,22 @@ bool MatchBinaryExpr(Expr *e, ExprType type, Expr **left, Expr **right)
     }
 }
 
+static char *GetNameForNode(ExprType type)
+{
+    switch (type)
+    {
+    case EXPR_INDIRECT:
+        return "indirect";
+    case EXPR_ASSIGN:
+        return "assign";
+    case EXPR_SEQUENCE:
+        return "sequence";
+    default:
+        NYI();
+        return "n/a";
+    }
+}
+
 void PrintExpr(Expr *e)
 {
     int n;
@@ -82,17 +98,17 @@ void PrintExpr(Expr *e)
     {
         printf("%s", e->Name);
     }
-    else if (e->Type == EXPR_SEQUENCE)
+    else if (e->Type == EXPR_TUPLE)
     {
-        printf("(");
+        Panic("tuples should have been converted by this point");
+    }
+    else
+    {
+        printf("(%s ", GetNameForNode(e->Type));
         for (Expr *p = e->Args; p; p = p->Next)
         {
             PrintExpr(p);
             printf(p->Next ? " " : ")");
         }
-    }
-    else
-    {
-        NYI();
     }
 }

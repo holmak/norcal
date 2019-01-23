@@ -163,15 +163,35 @@ static Expr *Parse(Reader *r)
     }
 }
 
+static bool StrEqual(char *a, char *b)
+{
+    return !strcmp(a, b);
+}
+
+static ExprType GetNodeFromName(char *name)
+{
+    if (StrEqual(name, "sequence")) return EXPR_SEQUENCE;
+    else if (StrEqual(name, "assign")) return EXPR_ASSIGN;
+    else if (StrEqual(name, "indirect")) return EXPR_INDIRECT;
+    else Error("invalid syntax element");
+}
+
 static Expr *ParseList(Reader *r)
 {
-    Expr *e = MakeExpr(EXPR_SEQUENCE);
+    Expr *tuple = MakeExpr(EXPR_TUPLE);
     while (true)
     {
         SkipSpaces(r);
         if (r->Next == ')' || r->Next == EOF) break;
-        AppendArg(e, Parse(r));
+        AppendArg(tuple, Parse(r));
     }
+
+    if (!tuple->Args) Error("invalid syntax: empty tuple");
+    if (tuple->Args->Type != EXPR_NAME) Error("invalid syntax: tuple must begin with name");
+
+    // Convert the tuple into the appropriate syntax node:
+    Expr *e = MakeExpr(GetNodeFromName(tuple->Args->Name));
+    e->Args = tuple->Args->Next;
     return e;
 }
 
@@ -181,5 +201,5 @@ Expr *ParseFile(char *filename)
     reader.File = fopen(filename, "r");
     assert(reader.File);
     Read(&reader);
-    return ParseList(&reader);
+    return Parse(&reader);
 }
