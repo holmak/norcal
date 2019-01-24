@@ -6,6 +6,7 @@ typedef enum ExprType
     EXPR_INT,
     EXPR_NAME,
     EXPR_INDIRECT,
+    EXPR_CALL,
     EXPR_ASSIGN,
     EXPR_SEQUENCE,
 } ExprType;
@@ -24,6 +25,9 @@ struct Expr
 typedef enum Opcode Opcode;
 enum Opcode
 {
+    CLC          = 0x18,
+    SEC          = 0x38,
+    ADC_ZP_X     = 0x75,
     STA_ZP       = 0x85,
     STA_ABS      = 0x8D,
     STA_ZP_X     = 0x95,
@@ -36,6 +40,7 @@ enum Opcode
     INY          = 0xC8,
     DEX          = 0xCA,
     INX          = 0xE8,
+    SBC_ZP_X     = 0xF5,
 };
 
 Expr *ParseFile(char *filename);

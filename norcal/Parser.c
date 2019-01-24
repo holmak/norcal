@@ -173,7 +173,12 @@ static ExprType GetNodeFromName(char *name)
     if (StrEqual(name, "sequence")) return EXPR_SEQUENCE;
     else if (StrEqual(name, "assign")) return EXPR_ASSIGN;
     else if (StrEqual(name, "indirect")) return EXPR_INDIRECT;
-    else Error("invalid syntax element");
+    else if (StrEqual(name, "call")) return EXPR_CALL;
+    else
+    {
+        Error("invalid syntax element");
+        return 0;
+    }
 }
 
 static Expr *ParseList(Reader *r)

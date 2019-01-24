@@ -75,6 +75,8 @@ static char *GetNameForNode(ExprType type)
     {
     case EXPR_INDIRECT:
         return "indirect";
+    case EXPR_CALL:
+        return "call";
     case EXPR_ASSIGN:
         return "assign";
     case EXPR_SEQUENCE:

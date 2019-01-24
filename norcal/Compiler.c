@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 #include "Common.h"
 
 static uint16_t GetGlobalAddress(Expr *e)
@@ -47,6 +48,50 @@ static void CompileExpression(Expr *e)
         Emit_U8(LDY_IMM, 1);
         Emit_U8(LDA_ZP_Y_IND, TempPtr);
         Emit_U8(STA_ZP_X, 1);
+    }
+    else if (e->Type == EXPR_CALL)
+    {
+        if (!e->Args) Panic("invalid call syntax");
+        if (e->Args->Type != EXPR_NAME) Error("invalid function name; expressions are not accepted");
+        char *func = e->Args->Name;
+
+        int argCount = 0;
+        for (Expr *p = e->Args->Next; p; p = p->Next)
+        {
+            CompileExpression(p);
+            argCount++;
+        }
+
+        if (!strcmp(func, "+"))
+        {
+            if (argCount != 2) Panic("wrong number of arguments to binary operator");
+            Emit(CLC);
+            Emit_U8(LDA_ZP_X, 2);
+            Emit_U8(ADC_ZP_X, 0);
+            Emit_U8(STA_ZP_X, 2);
+            Emit_U8(LDA_ZP_X, 3);
+            Emit_U8(ADC_ZP_X, 1);
+            Emit_U8(STA_ZP_X, 3);
+            Emit(INX);
+            Emit(INX);
+        }
+        else if (!strcmp(func, "-"))
+        {
+            if (argCount != 2) Panic("wrong number of arguments to binary operator");
+            Emit(SEC);
+            Emit_U8(LDA_ZP_X, 2);
+            Emit_U8(SBC_ZP_X, 0);
+            Emit_U8(STA_ZP_X, 2);
+            Emit_U8(LDA_ZP_X, 3);
+            Emit_U8(SBC_ZP_X, 1);
+            Emit_U8(STA_ZP_X, 3);
+            Emit(INX);
+            Emit(INX);
+        }
+        else
+        {
+            Error("unknown function");
+        }
     }
     else if (MatchBinaryExpr(e, EXPR_ASSIGN, &left, &right))
     {
