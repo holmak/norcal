@@ -25,7 +25,7 @@ class Test:
         self.actual_output = []
 
 def parse_number_list(text):
-    return [int(s) for s in text.split()]
+    return [int(s, 0) for s in text.split()]
 
 tests = []
 
@@ -88,7 +88,12 @@ for test in tests:
         continue
     # Run:
     with open(INPUT_FILE, 'wb') as f:
-        f.write(bytes(test.input))
+        # Write input data as an array of uint16_t values:
+        data = bytearray()
+        for n in test.input:
+            data.append(n & 0xFF)
+            data.append((n >> 8) & 0xFF)
+        f.write(data)
     process = run_process([SIMULATOR, IMAGE_FILE, INPUT_FILE])
     if process == TIMED_OUT:
         test.actual_output = '(simulator timed out)'
@@ -158,6 +163,12 @@ html_footer2 = '''
 </script>
 '''
 
+def format_int(n):
+    if n >= 512:
+        return '0x{:X}'.format(n)
+    else:
+        return str(n)
+
 def pre(text):
     return text.replace('\r', '').strip()
 
@@ -165,7 +176,7 @@ def pre_data(data):
     if type(data) is str:
         return pre(data)
     elif len(data) > 0:
-        return ', '.join([str(n) for n in data])
+        return ', '.join([format_int(n) for n in data])
     else:
         return '(none)'
 
