@@ -6,7 +6,7 @@ static uint16_t GetGlobalAddress(Expr *e)
 {
     Expr *inner;
     int32_t address;
-    if (MatchUnaryExpr(e, EXPR_INDIRECT, &inner) && MatchIntExpr(inner, &address))
+    if (MatchUnaryCall(e, "*", &inner) && MatchIntExpr(inner, &address))
     {
         return (uint16_t)address;
     }
@@ -21,6 +21,21 @@ static uint16_t GetGlobalAddress(Expr *e)
 // for a temporary address variable.
 #define TempPtr 0x10
 
+// TODO: Remove this helper function once EXPR_ASSIGN is turned into a CALL expression.
+static bool MatchAssignExpr(Expr *e, Expr **left, Expr **right)
+{
+    if (e->Type == EXPR_ASSIGN)
+    {
+        *left = e->Args;
+        *right = e->Args->Next;
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+}
+
 static void CompileExpression(Expr *e)
 {
     int n;
@@ -34,7 +49,7 @@ static void CompileExpression(Expr *e)
         Emit_U8(LDA_IMM, (n >> 8) & 0xFF);
         Emit_U8(STA_ZP_X, 1);
     }
-    else if (MatchUnaryExpr(e, EXPR_INDIRECT, &left))
+    else if (MatchUnaryCall(e, "*", &left))
     {
         CompileExpression(left);
         // Copy address from stack into a zero-page pointer variable:
@@ -93,7 +108,7 @@ static void CompileExpression(Expr *e)
             Error("unknown function");
         }
     }
-    else if (MatchBinaryExpr(e, EXPR_ASSIGN, &left, &right))
+    else if (MatchAssignExpr(e, &left, &right))
     {
         uint16_t address = GetGlobalAddress(left);
         CompileExpression(right);
@@ -109,6 +124,7 @@ static void CompileExpression(Expr *e)
         for (Expr *p = e->Args; p; p = p->Next)
         {
             CompileExpression(p);
+            // TODO: Drop the result of each expression except the last.
         }
     }
     else

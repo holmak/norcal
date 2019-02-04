@@ -1,11 +1,29 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+typedef enum TokenType
+{
+    TO_INVALID,
+    TO_EOF,
+
+    TO_LPAREN,
+    TO_RPAREN,
+    TO_STAR,
+    TO_PLUS,
+    TO_MINUS,
+    TO_EQUALS,
+    TO_SEMICOLON,
+    TO_LBRACE,
+    TO_RBRACE,
+
+    TO_INT,
+    TO_NAME,
+} TokenType;
+
 typedef enum ExprType
 {
     EXPR_INT,
     EXPR_NAME,
-    EXPR_INDIRECT,
     EXPR_CALL,
     EXPR_ASSIGN,
     EXPR_SEQUENCE,
@@ -43,8 +61,17 @@ enum Opcode
     SBC_ZP_X     = 0xF5,
 };
 
+// Lexer:
+void InitLexer(char *filename);
+bool TryParseInt(int32_t *n);
+bool TryParseName(char **s);
+bool TryParse(TokenType expected);
+TokenType ReadNextToken();
+
 Expr *ParseFile(char *filename);
+
 void CompileProgram(Expr *e);
+
 void Emit(Opcode op);
 void Emit_U8(Opcode op, uint8_t arg);
 void Emit_U16(Opcode op, uint16_t arg);
@@ -52,8 +79,8 @@ void WriteImage(char *filename);
 
 // Syntax trees:
 bool MatchIntExpr(Expr *e, int32_t *n);
-bool MatchUnaryExpr(Expr *e, ExprType type, Expr **arg);
-bool MatchBinaryExpr(Expr *e, ExprType type, Expr **left, Expr **right);
+bool MatchUnaryCall(Expr *e, char *funcName, Expr **arg);
+bool MatchBinaryCall(Expr *e, char *funcName, Expr **left, Expr **right);
 void PrintExpr(Expr *e);
 
 void *XAlloc(size_t size);

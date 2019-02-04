@@ -1,15 +1,6 @@
-#define _CRT_SECURE_NO_WARNINGS
-#include <assert.h>
-#include <ctype.h>
 #include <stdio.h>
 #include <string.h>
 #include "Common.h"
-
-typedef struct Reader
-{
-    FILE *File;
-    int Next;
-} Reader;
 
 static Expr *MakeExpr(ExprType type)
 {
@@ -33,177 +24,229 @@ static void AppendArg(Expr *expr, Expr *arg)
     }
 }
 
-static int Read(Reader *r)
+static Expr *MakeNameExpr(char *name)
 {
-    int c = r->Next;
-    r->Next = fgetc(r->File);
-    return c;
+    Expr *e = MakeExpr(EXPR_NAME);
+    e->Name = name;
+    return e;
 }
 
-static bool TryRead(Reader *r, char c)
+static Expr* MakeUnaryExpr(Expr *func, Expr *arg)
 {
-    if (r->Next == c)
-    {
-        Read(r);
-        return true;
-    }
-    else
-    {
-        return false;
-    }
+    Expr* e = MakeExpr(EXPR_CALL);
+    AppendArg(e, func);
+    AppendArg(e, arg);
+    return e;
 }
 
-static bool TryReadAny(Reader *r, char *chars)
+static Expr* MakeBinaryExpr(Expr *func, Expr *left, Expr *right)
 {
-    if (strchr(chars, r->Next))
-    {
-        Read(r);
-        return true;
-    }
-    else
-    {
-        return false;
-    }
+    Expr* e = MakeExpr(EXPR_CALL);
+    AppendArg(e, func);
+    AppendArg(e, left);
+    AppendArg(e, right);
+    return e;
 }
 
-static void SkipSpaces(Reader *r)
+// "Primary" expressions
+static Expr *ParsePrimaryExpr()
 {
-    while (TryReadAny(r, " \t\n")) { /* skip */ }
-}
-
-static bool TryParseInteger(char *name, int32_t *integer)
-{
-    // TODO: Improve this function.
-    bool isHex = false;
-    int n = 0;
-    for (char *p = name; *p; p++)
+    int32_t n;
+    char *name;
+    if (TryParseInt(&n))
     {
-        char c = *p;
-        if (isHex)
-        {
-            char *hexdigits = "0123456789ABCDEF";
-            char *found = strchr(hexdigits, c);
-            if (found)
-            {
-                n = 16 * n + (int32_t)(found - hexdigits);
-            }
-            else
-            {
-                *integer = 0;
-                return false;
-            }
-        }
-        else
-        {
-            if (strchr("0123456789", c))
-            {
-                n = 10 * n + (c - '0');
-            }
-            else if (c == 'x')
-            {
-                // TODO: This will allow any number of digits to appear before
-                // the "x"; hex numbers should really be required to start
-                // as exactly "0x".
-                isHex = true;
-                n = 0;
-            }
-            else
-            {
-                *integer = 0;
-                return false;
-            }
-        }
-    }
-
-    *integer = n;
-    return true;
-}
-
-static Expr *ParseList(Reader *r);
-
-static Expr *Parse(Reader *r)
-{
-    if (TryRead(r, EOF))
-    {
-        Error("unexpected end of file");
-        return NULL;
-    }
-    else if (TryRead(r, '('))
-    {
-        Expr *e = ParseList(r);
-        SkipSpaces(r);
-        if (!TryRead(r, ')')) Error("expected )");
+        Expr *e = MakeExpr(EXPR_INT);
+        e->Int = n;
         return e;
     }
+    else if (TryParseName(&name))
+    {
+        return MakeNameExpr(name);
+    }
     else
     {
-        char name[128];
-        int len = 0;
-        while (!isspace(r->Next) && r->Next != ')')
-        {
-            if (len >= sizeof(name)) Error("identifier is too long");
-            name[len] = Read(r);
-            len++;
-        }
-        name[len] = '\0';
+        Error("expected an expression");
+        return NULL;
+    }
+}
 
+// Suffix operators
+static Expr *ParseSuffixExpr()
+{
+    return ParsePrimaryExpr();
+}
+
+// Unary prefix operators
+static Expr *ParseUnaryPrefixExpr()
+{
+    if (TryParse(TO_STAR))
+    {
+        return MakeUnaryExpr(MakeNameExpr("*"), ParseSuffixExpr());
+    }
+    else
+    {
+        return ParseSuffixExpr();
+    }
+}
+
+// (casts)
+static Expr *ParseCastExpr()
+{
+    return ParseUnaryPrefixExpr();
+}
+
+// * / %
+static Expr *ParseMultiplyExpr()
+{
+    return ParseCastExpr();
+}
+
+// + -
+static Expr *ParseAddExpr()
+{
+    Expr *e = ParseMultiplyExpr();
+    if (TryParse(TO_PLUS))
+    {
+        e = MakeBinaryExpr(MakeNameExpr("+"), e, ParseAddExpr());
+    }
+    else if (TryParse(TO_MINUS))
+    {
+        e = MakeBinaryExpr(MakeNameExpr("-"), e, ParseAddExpr());
+    }
+    return e;
+}
+
+// << >>
+static Expr *ParseShiftExpr()
+{
+    return ParseAddExpr();
+}
+
+// > >= etc.
+static Expr *ParseCompareExpr()
+{
+    return ParseShiftExpr();
+}
+
+// == !=
+static Expr *ParseEqualityExpr()
+{
+    return ParseCompareExpr();
+}
+
+// &
+static Expr *ParseBitwiseAndExpr()
+{
+    return ParseEqualityExpr();
+}
+
+// |
+static Expr *ParseBitwiseOrExpr()
+{
+    return ParseBitwiseAndExpr();
+}
+
+// &&
+static Expr *ParseLogicalAndExpr()
+{
+    return ParseBitwiseOrExpr();
+}
+
+// ||
+static Expr *ParseLogicalOrExpr()
+{
+    return ParseLogicalAndExpr();
+}
+
+// TODO: Incorporate this function into the parsing hierarchy.
+// ? :
+static Expr *ParseConditionalExpr()
+{
+    return ParseLogicalOrExpr();
+}
+
+// = += -= etc.
+static Expr *ParseAssignExpr()
+{
+    Expr *e = ParseLogicalOrExpr();
+    if (TryParse(TO_EQUALS))
+    {
+        Expr *left = e;
+        e = MakeExpr(EXPR_ASSIGN);
+        AppendArg(e, left);
+        AppendArg(e, ParseAssignExpr());
+        return e;
+    }
+    return e;
+}
+
+// ,
+static Expr *ParseCommaExpr()
+{
+    return ParseAssignExpr();
+}
+
+static Expr *ParseExpr()
+{
+    return ParseCommaExpr();
+}
+
+static char *TokenToString(TokenType token)
+{
+    switch (token)
+    {
+    case TO_LPAREN: return "(";
+    case TO_RPAREN: return ")";
+    case TO_STAR: return "*";
+    case TO_PLUS: return "+";
+    case TO_MINUS: return "-";
+    case TO_EQUALS: return "=";
+    case TO_SEMICOLON: return ";";
+    case TO_LBRACE: return "{";
+    case TO_RBRACE: return "}";
+    default:
+        NYI();
+        return "NYI";
+    }
+}
+
+void TestLexer()
+{
+    printf("Lexer output: ");
+    while (true)
+    {
         int32_t n;
-        if (TryParseInteger(name, &n))
+        char * name;
+        if (TryParseInt(&n))
         {
-            Expr *e = MakeExpr(EXPR_INT);
-            e->Int = n;
-            return e;
+            printf("0x%X ", n);
+        }
+        else if (TryParseName(&name))
+        {
+            printf("'%s' ", name);
+        }
+        else if (TryParse(TO_EOF))
+        {
+            printf("<EOF>\n");
+            break;
         }
         else
         {
-            Expr *e = MakeExpr(EXPR_NAME);
-            e->Name = _strdup(name);
-            return e;
+            TokenType token = ReadNextToken();
+            printf("%s ", TokenToString(token));
         }
     }
-}
-
-static bool StrEqual(char *a, char *b)
-{
-    return !strcmp(a, b);
-}
-
-static ExprType GetNodeFromName(char *name)
-{
-    if (StrEqual(name, "sequence")) return EXPR_SEQUENCE;
-    else if (StrEqual(name, "assign")) return EXPR_ASSIGN;
-    else if (StrEqual(name, "indirect")) return EXPR_INDIRECT;
-    else if (StrEqual(name, "call")) return EXPR_CALL;
-    else
-    {
-        Error("invalid syntax element");
-        return 0;
-    }
-}
-
-static Expr *ParseList(Reader *r)
-{
-    Expr *e = MakeExpr(EXPR_SEQUENCE);
-    while (true)
-    {
-        SkipSpaces(r);
-        if (r->Next == ')' || r->Next == EOF) break;
-        AppendArg(e, Parse(r));
-    }
-
-    // Convert the tuple into the appropriate syntax node:
-    if (!e->Args) Error("invalid syntax: empty tuple");
-    if (e->Args->Type != EXPR_NAME) Error("invalid syntax: tuple must begin with name");
-    e->Type = GetNodeFromName(e->Args->Name);
-    e->Args = e->Args->Next;
-    return e;
 }
 
 Expr *ParseFile(char *filename)
 {
-    Reader reader;
-    reader.File = fopen(filename, "r");
-    assert(reader.File);
-    Read(&reader);
-    return Parse(&reader);
+    InitLexer(filename);
+    if (!TryParse(TO_LBRACE)) Error("expected {");
+    Expr *block = MakeExpr(EXPR_SEQUENCE);
+    while (!TryParse(TO_RBRACE))
+    {
+        AppendArg(block, ParseExpr());
+        if (!TryParse(TO_SEMICOLON)) Error("expected ;");
+    }
+    return block;
 }

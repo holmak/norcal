@@ -1,28 +1,33 @@
 #include <stdio.h>
+#include <string.h>
 #include "Common.h"
 
-static void GetOneArg(Expr *e, Expr **arg)
-{
-    if (e->Args && !e->Args->Next)
-    {
-        *arg = e->Args;
-    }
-    else
-    {
-        Panic("expression has wrong number of arguments; expected one");
-    }
-}
-
-static void GetTwoArgs(Expr *e, Expr **left, Expr **right)
+static bool TryGetTwoArgs(Expr *e, Expr **a, Expr **b)
 {
     if (e->Args && e->Args->Next && !e->Args->Next->Next)
     {
-        *left = e->Args;
-        *right = e->Args->Next;
+        *a = e->Args;
+        *b = e->Args->Next;
+        return true;
     }
     else
     {
-        Panic("expression has wrong number of arguments; expected two");
+        return false;
+    }
+}
+
+static bool TryGetThreeArgs(Expr *e, Expr **a, Expr **b, Expr **c)
+{
+    if (e->Args && e->Args->Next && e->Args->Next->Next && !e->Args->Next->Next->Next)
+    {
+        *a = e->Args;
+        *b = e->Args->Next;
+        *c = e->Args->Next->Next;
+        return true;
+    }
+    else
+    {
+        return false;
     }
 }
 
@@ -40,41 +45,24 @@ bool MatchIntExpr(Expr *e, int32_t *n)
     }
 }
 
-bool MatchUnaryExpr(Expr *e, ExprType type, Expr **arg)
+bool MatchUnaryCall(Expr *e, char *funcName, Expr **arg)
 {
-    if (e->Type == type)
-    {
-        GetOneArg(e, arg);
-        return true;
-    }
-    else
-    {
-        *arg = NULL;
-        return false;
-    }
+    Expr *func;
+    return e->Type == EXPR_CALL && TryGetTwoArgs(e, &func, arg) &&
+        func->Type == EXPR_NAME && !strcmp(func->Name, funcName);
 }
 
-bool MatchBinaryExpr(Expr *e, ExprType type, Expr **left, Expr **right)
+bool MatchBinaryCall(Expr *e, char *funcName, Expr **left, Expr **right)
 {
-    if (e->Type == type)
-    {
-        GetTwoArgs(e, left, right);
-        return true;
-    }
-    else
-    {
-        *left = NULL;
-        *right = NULL;
-        return false;
-    }
+    Expr *func;
+    return e->Type == EXPR_CALL && TryGetThreeArgs(e, &func, left, right) &&
+        func->Type == EXPR_NAME && !strcmp(func->Name, funcName);
 }
 
 static char *GetNameForNode(ExprType type)
 {
     switch (type)
     {
-    case EXPR_INDIRECT:
-        return "indirect";
     case EXPR_CALL:
         return "call";
     case EXPR_ASSIGN:
