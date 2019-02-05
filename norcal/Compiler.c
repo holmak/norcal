@@ -19,23 +19,6 @@ static void CompileExpression(Expr *e)
         Emit_U8(LDA_IMM, (n >> 8) & 0xFF);
         Emit_U8(STA_ZP_X, 1);
     }
-    else if (MatchUnaryCall(e, "*", &left))
-    {
-        // TODO: This should be compiled like any normal function call.
-
-        CompileExpression(left);
-        // Copy address from stack into a zero-page pointer variable:
-        Emit_U8(LDA_ZP_X, 0);
-        Emit_U8(STA_ZP, TempPtr);
-        Emit_U8(LDA_ZP_X, 1);
-        Emit_U8(STA_ZP, TempPtr + 1);
-        // Read through the pointer and write it back to the stack:
-        Emit_U8(LDA_ZP_X_IND, 0);
-        Emit_U8(STA_ZP_X, 0);
-        Emit_U8(LDY_IMM, 1);
-        Emit_U8(LDA_ZP_Y_IND, TempPtr);
-        Emit_U8(STA_ZP_X, 1);
-    }
     else if (e->Type == EXPR_CALL)
     {
         if (!e->Args) Panic("no function specified for call");
@@ -49,7 +32,21 @@ static void CompileExpression(Expr *e)
             argCount++;
         }
 
-        if (!strcmp(func, "+"))
+        if (MatchUnaryCall(e, "*", &left) && argCount == 1)
+        {
+            // Copy address from stack into a zero-page pointer variable:
+            Emit_U8(LDA_ZP_X, 0);
+            Emit_U8(STA_ZP, TempPtr);
+            Emit_U8(LDA_ZP_X, 1);
+            Emit_U8(STA_ZP, TempPtr + 1);
+            // Read through the pointer and write it back to the stack:
+            Emit_U8(LDA_ZP_X_IND, 0);
+            Emit_U8(STA_ZP_X, 0);
+            Emit_U8(LDY_IMM, 1);
+            Emit_U8(LDA_ZP_Y_IND, TempPtr);
+            Emit_U8(STA_ZP_X, 1);
+        }
+        else if (!strcmp(func, "+"))
         {
             if (argCount != 2) Panic("wrong number of arguments to binary operator");
             Emit(CLC);
