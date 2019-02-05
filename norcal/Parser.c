@@ -126,15 +126,21 @@ static Expr *ParseMultiplyExpr()
 static Expr *ParseAddExpr()
 {
     Expr *e = ParseMultiplyExpr();
-    if (TryParse(TO_PLUS))
+    while (true)
     {
-        e = MakeBinaryExpr(MakeNameExpr("+"), e, ParseAddExpr());
+        if (TryParse(TO_PLUS))
+        {
+            e = MakeBinaryExpr(MakeNameExpr("+"), e, ParseMultiplyExpr());
+        }
+        else if (TryParse(TO_MINUS))
+        {
+            e = MakeBinaryExpr(MakeNameExpr("-"), e, ParseMultiplyExpr());
+        }
+        else
+        {
+            return e;
+        }
     }
-    else if (TryParse(TO_MINUS))
-    {
-        e = MakeBinaryExpr(MakeNameExpr("-"), e, ParseAddExpr());
-    }
-    return e;
 }
 
 // << >>
