@@ -79,20 +79,20 @@ static void CompileExpression(Expr *e)
         {
             if (argCount != 2) Panic("wrong number of arguments to binary operator");
 
+            // Get the destination address:
             Emit_U8(LDA_ZP_X, 2);
             Emit_U8(STA_ZP, TempPtr);
             Emit_U8(LDA_ZP_X, 3);
             Emit_U8(STA_ZP, TempPtr + 1);
-
+            // Copy the value to the destination, and also back onto the stack.
             Emit_U8(LDY_IMM, 0);
             Emit_U8(LDA_ZP_X, 0);
+            Emit_U8(STA_ZP_X, 2);
             Emit_U8(STA_ZP_Y_IND, TempPtr);
             Emit(INY);
             Emit_U8(LDA_ZP_X, 1);
+            Emit_U8(STA_ZP_X, 3);
             Emit_U8(STA_ZP_Y_IND, TempPtr);
-
-            Emit(INX);
-            Emit(INX);
             Emit(INX);
             Emit(INX);
         }
