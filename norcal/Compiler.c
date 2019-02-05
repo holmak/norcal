@@ -2,44 +2,14 @@
 #include <string.h>
 #include "Common.h"
 
-static uint16_t GetGlobalAddress(Expr *e)
-{
-    Expr *inner;
-    int32_t address;
-    if (MatchUnaryCall(e, "*", &inner) && MatchIntExpr(inner, &address))
-    {
-        return (uint16_t)address;
-    }
-    else
-    {
-        NYI();
-        return 0;
-    }
-}
-
 // TODO: Once a symbol table is implemented, reserve two bytes of zero page
 // for a temporary address variable.
 #define TempPtr 0x10
 
-// TODO: Remove this helper function once EXPR_ASSIGN is turned into a CALL expression.
-static bool MatchAssignExpr(Expr *e, Expr **left, Expr **right)
-{
-    if (e->Type == EXPR_ASSIGN)
-    {
-        *left = e->Args;
-        *right = e->Args->Next;
-        return true;
-    }
-    else
-    {
-        return false;
-    }
-}
-
 static void CompileExpression(Expr *e)
 {
     int n;
-    Expr *left, *right;
+    Expr *left;
     if (MatchIntExpr(e, &n))
     {
         Emit(DEX);
@@ -51,6 +21,8 @@ static void CompileExpression(Expr *e)
     }
     else if (MatchUnaryCall(e, "*", &left))
     {
+        // TODO: This should be compiled like any normal function call.
+
         CompileExpression(left);
         // Copy address from stack into a zero-page pointer variable:
         Emit_U8(LDA_ZP_X, 0);
@@ -66,8 +38,8 @@ static void CompileExpression(Expr *e)
     }
     else if (e->Type == EXPR_CALL)
     {
-        if (!e->Args) Panic("invalid call syntax");
-        if (e->Args->Type != EXPR_NAME) Error("invalid function name; expressions are not accepted");
+        if (!e->Args) Panic("no function specified for call");
+        if (e->Args->Type != EXPR_NAME) Error("calling via function pointer is not yet implemented");
         char *func = e->Args->Name;
 
         int argCount = 0;
@@ -103,21 +75,31 @@ static void CompileExpression(Expr *e)
             Emit(INX);
             Emit(INX);
         }
+        else if (!strcmp(func, "="))
+        {
+            if (argCount != 2) Panic("wrong number of arguments to binary operator");
+
+            Emit_U8(LDA_ZP_X, 2);
+            Emit_U16(STA_ABS, TempPtr);
+            Emit_U8(LDA_ZP_X, 3);
+            Emit_U16(STA_ABS, TempPtr + 1);
+
+            Emit_U8(LDY_IMM, 0);
+            Emit_U8(LDA_ZP_X, 0);
+            Emit_U16(STA_ZP_Y_IND, TempPtr);
+            Emit(INY);
+            Emit_U8(LDA_ZP_X, 1);
+            Emit_U16(STA_ZP_Y_IND, TempPtr + 1);
+
+            Emit(INX);
+            Emit(INX);
+            Emit(INX);
+            Emit(INX);
+        }
         else
         {
             Error("unknown function");
         }
-    }
-    else if (MatchAssignExpr(e, &left, &right))
-    {
-        uint16_t address = GetGlobalAddress(left);
-        CompileExpression(right);
-        Emit_U8(LDA_ZP_X, 0);
-        Emit_U16(STA_ABS, address);
-        Emit_U8(LDA_ZP_X, 1);
-        Emit_U16(STA_ABS, address + 1);
-        Emit(INX);
-        Emit(INX);
     }
     else if (e->Type == EXPR_SEQUENCE)
     {

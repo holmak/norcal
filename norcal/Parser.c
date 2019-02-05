@@ -48,6 +48,19 @@ static Expr* MakeBinaryExpr(Expr *func, Expr *left, Expr *right)
     return e;
 }
 
+static Expr *AddressOf(Expr *e)
+{
+    Expr *inner;
+    if (MatchUnaryCall(e, "*", &inner))
+    {
+        return inner;
+    }
+    else
+    {
+        return MakeUnaryExpr(MakeNameExpr("&"), e);
+    }
+}
+
 // "Primary" expressions
 static Expr *ParsePrimaryExpr()
 {
@@ -171,11 +184,7 @@ static Expr *ParseAssignExpr()
     Expr *e = ParseLogicalOrExpr();
     if (TryParse(TO_EQUALS))
     {
-        Expr *left = e;
-        e = MakeExpr(EXPR_ASSIGN);
-        AppendArg(e, left);
-        AppendArg(e, ParseAssignExpr());
-        return e;
+        e = MakeBinaryExpr(MakeNameExpr("="), AddressOf(e), ParseAssignExpr());
     }
     return e;
 }

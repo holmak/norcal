@@ -25,7 +25,6 @@ typedef enum ExprType
     EXPR_INT,
     EXPR_NAME,
     EXPR_CALL,
-    EXPR_ASSIGN,
     EXPR_SEQUENCE,
 } ExprType;
 
@@ -48,6 +47,7 @@ enum Opcode
     ADC_ZP_X     = 0x75,
     STA_ZP       = 0x85,
     STA_ABS      = 0x8D,
+    STA_ZP_Y_IND = 0x91,
     STA_ZP_X     = 0x95,
     LDY_IMM      = 0xA0,
     LDA_ZP_X_IND = 0xA1,
