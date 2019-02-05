@@ -31,17 +31,17 @@ static Expr *MakeNameExpr(char *name)
     return e;
 }
 
-static Expr* MakeUnaryExpr(Expr *func, Expr *arg)
+static Expr *MakeUnaryExpr(Expr *func, Expr *arg)
 {
-    Expr* e = MakeExpr(EXPR_CALL);
+    Expr *e = MakeExpr(EXPR_CALL);
     AppendArg(e, func);
     AppendArg(e, arg);
     return e;
 }
 
-static Expr* MakeBinaryExpr(Expr *func, Expr *left, Expr *right)
+static Expr *MakeBinaryExpr(Expr *func, Expr *left, Expr *right)
 {
-    Expr* e = MakeExpr(EXPR_CALL);
+    Expr *e = MakeExpr(EXPR_CALL);
     AppendArg(e, func);
     AppendArg(e, left);
     AppendArg(e, right);
