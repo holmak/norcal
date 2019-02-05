@@ -80,16 +80,16 @@ static void CompileExpression(Expr *e)
             if (argCount != 2) Panic("wrong number of arguments to binary operator");
 
             Emit_U8(LDA_ZP_X, 2);
-            Emit_U16(STA_ABS, TempPtr);
+            Emit_U8(STA_ZP, TempPtr);
             Emit_U8(LDA_ZP_X, 3);
-            Emit_U16(STA_ABS, TempPtr + 1);
+            Emit_U8(STA_ZP, TempPtr + 1);
 
             Emit_U8(LDY_IMM, 0);
             Emit_U8(LDA_ZP_X, 0);
-            Emit_U16(STA_ZP_Y_IND, TempPtr);
+            Emit_U8(STA_ZP_Y_IND, TempPtr);
             Emit(INY);
             Emit_U8(LDA_ZP_X, 1);
-            Emit_U16(STA_ZP_Y_IND, TempPtr + 1);
+            Emit_U8(STA_ZP_Y_IND, TempPtr);
 
             Emit(INX);
             Emit(INX);
