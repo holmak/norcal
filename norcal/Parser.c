@@ -2,6 +2,8 @@
 #include <string.h>
 #include "Common.h"
 
+static Expr *ParseExpr();
+
 static Expr *MakeExpr(ExprType type)
 {
     Expr *e = XAlloc(sizeof(*e));
@@ -75,6 +77,12 @@ static Expr *ParsePrimaryExpr()
     else if (TryParseName(&name))
     {
         return MakeNameExpr(name);
+    }
+    else if (TryParse(TO_LPAREN))
+    {
+        Expr *e = ParseExpr();
+        if (!TryParse(TO_RPAREN)) Error("expected )");
+        return e;
     }
     else
     {
