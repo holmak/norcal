@@ -158,7 +158,7 @@ bool TryParseInt(int32_t *n)
     }
 }
 
-bool TryParseName(char **s)
+bool TryParseAnyName(char **s)
 {
     if (NextType == TO_NAME)
     {
@@ -169,6 +169,19 @@ bool TryParseName(char **s)
     else
     {
         *s = NULL;
+        return false;
+    }
+}
+
+bool TryParseName(char *s)
+{
+    if (NextType == TO_NAME && !strcmp(s, NextName))
+    {
+        FetchToken();
+        return true;
+    }
+    else
+    {
         return false;
     }
 }

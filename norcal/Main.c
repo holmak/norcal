@@ -13,10 +13,10 @@ int main(int argc, char *argv[])
     }
     char *sourcefile = argv[1];
     char *outputfile = argv[2];
-    Expr *program = ParseFile(sourcefile);
+    Declaration *program = ParseFile(sourcefile);
 
-    printf("Parser output: ");
-    PrintExpr(program);
+    printf("Parser output:\n\n");
+    PrintProgram(program);
     printf("\n");
     
     CompileProgram(program);

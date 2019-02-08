@@ -12,6 +12,14 @@ static Expr *MakeExpr(ExprType type)
     return e;
 }
 
+static Declaration *MakeDecl(DeclType type)
+{
+    Declaration *d = XAlloc(sizeof(*d));
+    memset(d, 0, sizeof(*d));
+    d->Type = type;
+    return d;
+}
+
 static void AppendArg(Expr *expr, Expr *arg)
 {
     if (!expr->Args)
@@ -74,7 +82,7 @@ static Expr *ParsePrimaryExpr()
         e->Int = n;
         return e;
     }
-    else if (TryParseName(&name))
+    else if (TryParseAnyName(&name))
     {
         return MakeNameExpr(name);
     }
@@ -214,6 +222,23 @@ static Expr *ParseExpr()
     return ParseCommaExpr();
 }
 
+static Declaration *ParseDeclaration()
+{
+    Declaration *d = MakeDecl(DECL_FUNCTION);
+    if (!TryParseName("void")) Error("expected 'void'");
+    if (!TryParseAnyName(&d->Name)) Error("expected function name");
+    if (!TryParse(TO_LPAREN)) Error("expected (");
+    if (!TryParse(TO_RPAREN)) Error("expected )");
+    if (!TryParse(TO_LBRACE)) Error("expected {");
+    d->Body = MakeExpr(EXPR_SEQUENCE);
+    while (!TryParse(TO_RBRACE))
+    {
+        AppendArg(d->Body, ParseExpr());
+        if (!TryParse(TO_SEMICOLON)) Error("expected ;");
+    }
+    return d;
+}
+
 static char *TokenToString(TokenType token)
 {
     switch (token)
@@ -244,7 +269,7 @@ void TestLexer()
         {
             printf("0x%X ", n);
         }
-        else if (TryParseName(&name))
+        else if (TryParseAnyName(&name))
         {
             printf("'%s' ", name);
         }
@@ -261,15 +286,16 @@ void TestLexer()
     }
 }
 
-Expr *ParseFile(char *filename)
+Declaration *ParseFile(char *filename)
 {
     InitLexer(filename);
-    if (!TryParse(TO_LBRACE)) Error("expected {");
-    Expr *block = MakeExpr(EXPR_SEQUENCE);
-    while (!TryParse(TO_RBRACE))
+    Declaration *program = NULL;
+    while (!TryParse(TO_EOF))
     {
-        AppendArg(block, ParseExpr());
-        if (!TryParse(TO_SEMICOLON)) Error("expected ;");
+        Declaration *decl = ParseDeclaration();
+        // TODO: Append to the end of the list.
+        decl->Next = program;
+        program = decl;
     }
-    return block;
+    return program;
 }

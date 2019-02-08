@@ -112,10 +112,23 @@ static void CompileExpression(Expr *e)
     }
 }
 
-void CompileProgram(Expr *e)
+void CompileProgram(Declaration *program)
 {
     // Prologue:
     Emit_U8(LDX_IMM, 0);
 
-    CompileExpression(e);
+    // TODO: The various vectors must jump to appropriate specially-named functions.
+
+    for (Declaration *decl = program; decl; decl = decl->Next)
+    {
+        if (decl->Type == DECL_FUNCTION)
+        {
+            // TODO: Add the function to the symbol table.
+            CompileExpression(decl->Body);
+        }
+        else
+        {
+            Panic("unhandled declaration type");
+        }
+    }
 }

@@ -73,7 +73,7 @@ static char *GetNameForNode(ExprType type)
     }
 }
 
-void PrintExpr(Expr *e)
+static void PrintExpr(Expr *e)
 {
     int n;
     if (MatchIntExpr(e, &n))
@@ -94,5 +94,19 @@ void PrintExpr(Expr *e)
             PrintExpr(p);
             printf(p->Next ? " " : ")");
         }
+    }
+}
+
+void PrintProgram(Declaration *decl)
+{
+    if (decl->Type == DECL_FUNCTION)
+    {
+        printf("%s()\n    ", decl->Name);
+        PrintExpr(decl->Body);
+        printf("\n\n");
+    }
+    else
+    {
+        Panic("unhandled declaration type");
     }
 }

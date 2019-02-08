@@ -39,6 +39,21 @@ struct Expr
     Expr *Next;
 };
 
+typedef enum DeclType
+{
+    DECL_FUNCTION,
+} DeclType;
+
+typedef struct Declaration Declaration;
+
+struct Declaration
+{
+    DeclType Type;
+    char *Name;
+    Expr *Body;
+    Declaration *Next;
+};
+
 typedef enum Opcode Opcode;
 enum Opcode
 {
@@ -64,13 +79,14 @@ enum Opcode
 // Lexer:
 void InitLexer(char *filename);
 bool TryParseInt(int32_t *n);
-bool TryParseName(char **s);
+bool TryParseAnyName(char **s);
+bool TryParseName(char *s);
 bool TryParse(TokenType expected);
 TokenType ReadNextToken();
 
-Expr *ParseFile(char *filename);
+Declaration *ParseFile(char *filename);
 
-void CompileProgram(Expr *e);
+void CompileProgram(Declaration *program);
 
 void Emit(Opcode op);
 void Emit_U8(Opcode op, uint8_t arg);
@@ -81,7 +97,7 @@ void WriteImage(char *filename);
 bool MatchIntExpr(Expr *e, int32_t *n);
 bool MatchUnaryCall(Expr *e, char *funcName, Expr **arg);
 bool MatchBinaryCall(Expr *e, char *funcName, Expr **left, Expr **right);
-void PrintExpr(Expr *e);
+void PrintProgram(Declaration *decl);
 
 void *XAlloc(size_t size);
 void Panic(char *message);
