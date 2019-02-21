@@ -2,16 +2,97 @@
 #include <string.h>
 #include "Common.h"
 
+#define MAX_SYMBOLS 1024
+
+typedef enum SymbolKind
+{
+    SK_NONE = 0,
+    SK_CONSTANT,
+} SymbolKind;
+
+typedef struct Symbol
+{
+    SymbolKind Kind;
+    char *Name;
+    int32_t Value;
+} Symbol;
+
+static Symbol Symbols[MAX_SYMBOLS];
+
 // TODO: Once a symbol table is implemented, reserve two bytes of zero page
 // for a temporary address variable.
 #define TempPtr 0x10
 
+static void DefineSymbol(SymbolKind kind, char *name, int32_t value)
+{
+    Symbol *sym = NULL;
+    for (int i = 0; i < MAX_SYMBOLS; i++)
+    {
+        if (Symbols[i].Kind == SK_NONE)
+        {
+            sym = &Symbols[i];
+            break;
+        }
+    }
+
+    if (!sym) Panic("too many symbols defined");
+
+    sym->Kind = kind;
+    sym->Name = name;
+    sym->Value = value;
+}
+
+static bool FindSymbol(SymbolKind kind, char *name, Symbol **sym)
+{
+    for (int i = 0; i < MAX_SYMBOLS; i++)
+    {
+        if (Symbols[i].Kind == kind && !strcmp(Symbols[i].Name, name))
+        {
+            *sym = &Symbols[i];
+            return true;
+        }
+    }
+
+    *sym = NULL;
+    return false;
+}
+
+static int32_t EvaluateConstantExpression(Expr *e)
+{
+    // TODO: Evaluate more complex constant expressions, too.
+    int32_t n;
+    if (MatchIntExpr(e, &n))
+    {
+        return n;
+    }
+    else
+    {
+        Error("expression must be constant");
+        return 0;
+    }
+}
+
 static void CompileExpression(Expr *e)
 {
-    int n;
+    int32_t n;
     Expr *left;
     if (MatchIntExpr(e, &n))
     {
+        Emit(DEX);
+        Emit(DEX);
+        Emit_U8(LDA_IMM, n & 0xFF);
+        Emit_U8(STA_ZP_X, 0);
+        Emit_U8(LDA_IMM, (n >> 8) & 0xFF);
+        Emit_U8(STA_ZP_X, 1);
+    }
+    else if (e->Type == EXPR_NAME)
+    {
+        Symbol *sym;
+        if (!FindSymbol(SK_CONSTANT, e->Name, &sym)) Error("undefined symbol");
+
+        // TODO: Make sure the constant value is not too big.
+        n = sym->Value;
+
         Emit(DEX);
         Emit(DEX);
         Emit_U8(LDA_IMM, n & 0xFF);
@@ -114,6 +195,26 @@ static void CompileExpression(Expr *e)
 
 void CompileProgram(Declaration *program)
 {
+    // First pass: Read all declarations to get type information and global symbols.
+    for (Declaration *decl = program; decl; decl = decl->Next)
+    {
+        if (decl->Type == DECL_FUNCTION)
+        {
+            // TODO: Record function types so that they can be typechecked later.
+        }
+        else if (decl->Type == DECL_CONSTANT)
+        {
+            uint16_t value = EvaluateConstantExpression(decl->Body);
+            DefineSymbol(SK_CONSTANT, decl->Name, value);
+        }
+        else
+        {
+            Panic("unhandled declaration type");
+        }
+    }
+
+    // Second pass: Generate code for each function.
+
     // Prologue:
     Emit_U8(LDX_IMM, 0);
 
@@ -123,12 +224,7 @@ void CompileProgram(Declaration *program)
     {
         if (decl->Type == DECL_FUNCTION)
         {
-            // TODO: Add the function to the symbol table.
             CompileExpression(decl->Body);
-        }
-        else
-        {
-            Panic("unhandled declaration type");
         }
     }
 }

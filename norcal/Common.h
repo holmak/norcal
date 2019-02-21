@@ -42,6 +42,7 @@ struct Expr
 typedef enum DeclType
 {
     DECL_FUNCTION,
+    DECL_CONSTANT,
 } DeclType;
 
 typedef struct Declaration Declaration;
@@ -97,7 +98,7 @@ void WriteImage(char *filename);
 bool MatchIntExpr(Expr *e, int32_t *n);
 bool MatchUnaryCall(Expr *e, char *funcName, Expr **arg);
 bool MatchBinaryCall(Expr *e, char *funcName, Expr **left, Expr **right);
-void PrintProgram(Declaration *decl);
+void PrintProgram(Declaration *program);
 
 void *XAlloc(size_t size);
 void Panic(char *message);

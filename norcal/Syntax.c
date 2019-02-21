@@ -97,16 +97,25 @@ static void PrintExpr(Expr *e)
     }
 }
 
-void PrintProgram(Declaration *decl)
+void PrintProgram(Declaration *program)
 {
-    if (decl->Type == DECL_FUNCTION)
+    for (Declaration *decl = program; decl; decl = decl->Next)
     {
-        printf("%s()\n    ", decl->Name);
-        PrintExpr(decl->Body);
-        printf("\n\n");
-    }
-    else
-    {
-        Panic("unhandled declaration type");
+        if (decl->Type == DECL_FUNCTION)
+        {
+            printf("%s()\n    ", decl->Name);
+            PrintExpr(decl->Body);
+            printf("\n\n");
+        }
+        else if (decl->Type == DECL_CONSTANT)
+        {
+            printf("define %s = ", decl->Name);
+            PrintExpr(decl->Body);
+            printf("\n\n");
+        }
+        else
+        {
+            Panic("unhandled declaration type");
+        }
     }
 }

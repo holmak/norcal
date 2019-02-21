@@ -224,17 +224,29 @@ static Expr *ParseExpr()
 
 static Declaration *ParseDeclaration()
 {
-    Declaration *d = MakeDecl(DECL_FUNCTION);
-    if (!TryParseName("void")) Error("expected 'void'");
-    if (!TryParseAnyName(&d->Name)) Error("expected function name");
-    if (!TryParse(TO_LPAREN)) Error("expected (");
-    if (!TryParse(TO_RPAREN)) Error("expected )");
-    if (!TryParse(TO_LBRACE)) Error("expected {");
-    d->Body = MakeExpr(EXPR_SEQUENCE);
-    while (!TryParse(TO_RBRACE))
+    Declaration *d;
+    if (TryParseName("define"))
     {
-        AppendArg(d->Body, ParseExpr());
+        d = MakeDecl(DECL_CONSTANT);
+        if (!TryParseAnyName(&d->Name)) Error("expected a name");
+        if (!TryParse(TO_EQUALS)) Error("expected =");
+        d->Body = ParseExpr();
         if (!TryParse(TO_SEMICOLON)) Error("expected ;");
+    }
+    else
+    {
+        d = MakeDecl(DECL_FUNCTION);
+        if (!TryParseName("void")) Error("expected 'void'");
+        if (!TryParseAnyName(&d->Name)) Error("expected function name");
+        if (!TryParse(TO_LPAREN)) Error("expected (");
+        if (!TryParse(TO_RPAREN)) Error("expected )");
+        if (!TryParse(TO_LBRACE)) Error("expected {");
+        d->Body = MakeExpr(EXPR_SEQUENCE);
+        while (!TryParse(TO_RBRACE))
+        {
+            AppendArg(d->Body, ParseExpr());
+            if (!TryParse(TO_SEMICOLON)) Error("expected ;");
+        }
     }
     return d;
 }
