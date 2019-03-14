@@ -62,3 +62,31 @@ void reset()
     *OUT = (*OUT = (*OUT = *OUT));
     *STOP = 0;
 }
+
+# Locals
+#in 0x1122
+#out 0x1122
+define OUT = 0x6000;
+define STOP = 0x6002;
+void reset()
+{
+    uint16_t a = *OUT;
+    *OUT = a;
+    *STOP = 0;
+}
+
+# Locals
+#in 0x1122 0x3344
+#out 0x3344 0x1122 0x3344
+define OUT = 0x6000;
+define STOP = 0x6002;
+void reset()
+{
+    uint16_t b;
+    uint16_t a = *OUT;
+    b = *OUT;
+    *OUT = b;
+    *OUT = a;
+    *OUT = b;
+    *STOP = 0;
+}
