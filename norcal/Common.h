@@ -60,19 +60,27 @@ enum Opcode
 {
     CLC          = 0x18,
     SEC          = 0x38,
+    ADC_ZP       = 0x65,
     ADC_ZP_X     = 0x75,
     STA_ZP       = 0x85,
+    DEY          = 0x88,
     STA_ABS      = 0x8D,
+    STX_ABS      = 0x8E,
     STA_ZP_Y_IND = 0x91,
     STA_ZP_X     = 0x95,
     LDY_IMM      = 0xA0,
     LDA_ZP_X_IND = 0xA1,
     LDX_IMM      = 0xA2,
+    LDA_ZP       = 0xA5,
     LDA_IMM      = 0xA9,
+    TAX          = 0xAA,
+    LDA_ABS      = 0xAD,
+    LDX_ABS      = 0xAE,
     LDA_ZP_Y_IND = 0xB1,
     LDA_ZP_X     = 0xB5,
     INY          = 0xC8,
     DEX          = 0xCA,
+    SBC_ZP       = 0xE5,
     INX          = 0xE8,
     SBC_ZP_X     = 0xF5,
 };
@@ -95,6 +103,8 @@ void Emit_U16(Opcode op, uint16_t arg);
 void WriteImage(char *filename);
 
 // Syntax trees:
+void AppendExpr(Expr **list, Expr *e);
+Expr *MakeLoadExpr(int32_t address);
 bool MatchIntExpr(Expr *e, int32_t *n);
 bool MatchUnaryCall(Expr *e, char *funcName, Expr **arg);
 bool MatchBinaryCall(Expr *e, char *funcName, Expr **left, Expr **right);

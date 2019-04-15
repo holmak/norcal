@@ -20,18 +20,30 @@ static Declaration *MakeDecl(DeclType type)
     return d;
 }
 
-static void AppendArg(Expr *expr, Expr *arg)
+void AppendExpr(Expr **list, Expr *e)
 {
-    if (!expr->Args)
+    if (*list)
     {
-        expr->Args = arg;
+        Expr *p = *list;
+        while (p->Next) p = p->Next;
+        p->Next = e;
     }
     else
     {
-        Expr *p = expr->Args;
-        while (p->Next) p = p->Next;
-        p->Next = arg;
+        *list = e;
     }
+}
+
+static void AppendArg(Expr *call, Expr *arg)
+{
+    AppendExpr(&call->Args, arg);
+}
+
+static Expr *MakeIntExpr(int32_t n)
+{
+    Expr *e = MakeExpr(EXPR_INT);
+    e->Int = n;
+    return e;
 }
 
 static Expr *MakeNameExpr(char *name)
@@ -58,16 +70,21 @@ static Expr *MakeBinaryExpr(Expr *func, Expr *left, Expr *right)
     return e;
 }
 
+Expr *MakeLoadExpr(int32_t address)
+{
+    return MakeUnaryExpr(MakeNameExpr("$load"), MakeIntExpr(address));
+}
+
 static Expr *AddressOf(Expr *e)
 {
     Expr *inner;
-    if (MatchUnaryCall(e, "*", &inner))
+    if (MatchUnaryCall(e, "$load", &inner))
     {
         return inner;
     }
     else
     {
-        return MakeUnaryExpr(MakeNameExpr("&"), e);
+        return MakeUnaryExpr(MakeNameExpr("$addr_of"), e);
     }
 }
 
@@ -78,9 +95,7 @@ static Expr *ParsePrimaryExpr()
     char *name;
     if (TryParseInt(&n))
     {
-        Expr *e = MakeExpr(EXPR_INT);
-        e->Int = n;
-        return e;
+        return MakeIntExpr(n);
     }
     else if (TryParseAnyName(&name))
     {
@@ -110,7 +125,7 @@ static Expr *ParseUnaryPrefixExpr()
 {
     if (TryParse(TO_STAR))
     {
-        return MakeUnaryExpr(MakeNameExpr("*"), ParseSuffixExpr());
+        return MakeUnaryExpr(MakeNameExpr("$load"), ParseSuffixExpr());
     }
     else
     {
@@ -138,11 +153,11 @@ static Expr *ParseAddExpr()
     {
         if (TryParse(TO_PLUS))
         {
-            e = MakeBinaryExpr(MakeNameExpr("+"), e, ParseMultiplyExpr());
+            e = MakeBinaryExpr(MakeNameExpr("$add"), e, ParseMultiplyExpr());
         }
         else if (TryParse(TO_MINUS))
         {
-            e = MakeBinaryExpr(MakeNameExpr("-"), e, ParseMultiplyExpr());
+            e = MakeBinaryExpr(MakeNameExpr("$sub"), e, ParseMultiplyExpr());
         }
         else
         {
@@ -206,7 +221,7 @@ static Expr *ParseAssignExpr()
     Expr *e = ParseLogicalOrExpr();
     if (TryParse(TO_EQUALS))
     {
-        e = MakeBinaryExpr(MakeNameExpr("="), AddressOf(e), ParseAssignExpr());
+        e = MakeBinaryExpr(MakeNameExpr("$assign"), AddressOf(e), ParseAssignExpr());
     }
     return e;
 }
@@ -244,7 +259,8 @@ static Declaration *ParseDeclaration()
         d->Body = MakeExpr(EXPR_SEQUENCE);
         while (!TryParse(TO_RBRACE))
         {
-            AppendArg(d->Body, ParseExpr());
+            Expr *stmt = ParseExpr();
+            AppendArg(d->Body, stmt);
             if (!TryParse(TO_SEMICOLON)) Error("expected ;");
         }
     }
