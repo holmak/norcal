@@ -21,6 +21,9 @@
     <ClCompile Include="Parser.c" />
     <ClCompile Include="Syntax.c" />
   </ItemGroup>
+  <ItemGroup>
+    <Natvis Include="Expr.natvis" />
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{65399D1F-900B-4443-81F4-A7E8277A79A0}</ProjectGuid>
     <RootNamespace>norcal</RootNamespace>
