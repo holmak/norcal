@@ -225,6 +225,7 @@ static void CompileExpression(Expr *e, Destination dest, Continuation cont)
 
             // Copy all of the argument values from the temporaries into the function's call frame.
             // TODO: Get the call frame address (and type information) from the function's type entry.
+            EmitComment("copy arguments to call frame");
             int paramAddress = T0;
             for (Expr *temp = temps; temp; temp = temp->Next)
             {
@@ -296,6 +297,7 @@ static void CompileExpression(Expr *e, Destination dest, Continuation cont)
     {
         for (Expr *p = e->Args; p; p = p->Next)
         {
+            EmitComment("begin new statement");
             // Drop the result of each expression except the last.
             if (p->Next)
             {

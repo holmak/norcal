@@ -18,6 +18,8 @@ static uint8_t Prg[32 * 1024];
 static uint8_t Chr[8 * 1024];
 static size_t PrgNext;
 
+static FILE *CommentFile;
+
 static void Append(uint8_t b)
 {
     if (PrgNext >= sizeof(Prg)) Error("program size limit exceeded");
@@ -40,6 +42,21 @@ void Emit_U16(Opcode op, uint16_t arg)
     Append(op);
     Append((uint8_t)arg);
     Append((uint8_t)(arg >> 8));
+}
+
+void EmitComment(char *comment)
+{
+    if (!CommentFile)
+    {
+        // TODO: Choose a more appropriate path for the comments file.
+        CommentFile = fopen("comments.txt", "w");
+        assert(CommentFile);
+    }
+
+    char line[256];
+    int len = sprintf(line, "%04X    %s\n", (uint16_t)PrgNext, comment);
+    assert(fwrite(line, len, 1, CommentFile) == 1);
+    fflush(CommentFile);
 }
 
 void WriteImage(char *filename)

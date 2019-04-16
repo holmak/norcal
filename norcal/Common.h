@@ -100,6 +100,7 @@ void CompileProgram(Declaration *program);
 void Emit(Opcode op);
 void Emit_U8(Opcode op, uint8_t arg);
 void Emit_U16(Opcode op, uint16_t arg);
+void EmitComment(char *comment);
 void WriteImage(char *filename);
 
 // Syntax trees:
