@@ -213,14 +213,28 @@ static void CompileExpression(Expr *e, Destination dest, Continuation cont)
 
             // Evaluate the arguments and store the results in temporary variables.
             // TODO: (optimization) The first arg doesn't have to be simplified, since we haven't started assembling a call frame yet.
-            // TODO: (optimization) Only do this for args that involve a call; otherwise the arg is simple enough to just copy.
+            // Optimization: Sufficiently simple arguments (such as literal ints) can skip this
+            //   step and be written directly into the call frame.
             Expr *temps = NULL;
             for (Expr *arg = firstArg; arg; arg = arg->Next)
             {
-                int argSize = SizeOfUInt16;
-                int temp = AllocTemp(argSize);
-                CompileExpression(arg, temp, CONT_FALLTHROUGH);
-                AppendExpr(&temps, MakeLoadExpr(temp));
+                // When creating the list of "simple expressions", we can't reuse AST nodes, because
+                // they form their own list. Instead, create a new copy of the expression,
+                // unconnected to the rest of the AST.
+                int32_t n;
+                Expr *simpleArg;
+                if (false && MatchIntExpr(arg, &n))
+                {
+                    simpleArg = MakeIntExpr(n);
+                }
+                else
+                {
+                    int argSize = SizeOfUInt16;
+                    int temp = AllocTemp(argSize);
+                    CompileExpression(arg, temp, CONT_FALLTHROUGH);
+                    simpleArg = MakeLoadExpr(temp);
+                }
+                AppendExpr(&temps, simpleArg);
             }
 
             // Copy all of the argument values from the temporaries into the function's call frame.

@@ -39,7 +39,7 @@ static void AppendArg(Expr *call, Expr *arg)
     AppendExpr(&call->Args, arg);
 }
 
-static Expr *MakeIntExpr(int32_t n)
+Expr *MakeIntExpr(int32_t n)
 {
     Expr *e = MakeExpr(EXPR_INT);
     e->Int = n;

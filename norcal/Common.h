@@ -105,6 +105,7 @@ void WriteImage(char *filename);
 
 // Syntax trees:
 void AppendExpr(Expr **list, Expr *e);
+Expr *MakeIntExpr(int32_t n);
 Expr *MakeLoadExpr(int32_t address);
 bool MatchIntExpr(Expr *e, int32_t *n);
 bool MatchUnaryCall(Expr *e, char *funcName, Expr **arg);
