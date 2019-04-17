@@ -223,7 +223,7 @@ static void CompileExpression(Expr *e, Destination dest, Continuation cont)
                 // unconnected to the rest of the AST.
                 int32_t n;
                 Expr *simpleArg;
-                if (false && MatchIntExpr(arg, &n))
+                if (MatchIntExpr(arg, &n))
                 {
                     simpleArg = MakeIntExpr(n);
                 }
