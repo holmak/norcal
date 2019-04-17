@@ -16,6 +16,7 @@
   <ItemGroup>
     <ClCompile Include="Coder.c" />
     <ClCompile Include="Compiler.c" />
+    <ClCompile Include="Disassembler.c" />
     <ClCompile Include="Lexer.c" />
     <ClCompile Include="Main.c" />
     <ClCompile Include="Parser.c" />
