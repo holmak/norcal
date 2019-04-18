@@ -202,8 +202,18 @@ static void CompileExpression(Expr *e, Destination dest, Continuation cont)
         }
         else if (!strcmp(func, "$assign") && EvaluateConstantExpression(firstArg, &addr))
         {
-            EmitComment("$assign simple");
-            CompileExpression(firstArg->Next, addr, cont);
+            if (dest == DEST_DISCARD)
+            {
+                EmitComment("$assign to constant address");
+                CompileExpression(firstArg->Next, addr, cont);
+            }
+            else
+            {
+                EmitComment("$assign to constant address, and produce the assigned value");
+                CompileExpression(firstArg->Next, DEST_ACC, cont);
+                EmitCopyAccTo(addr);
+                EmitCopyAccTo(dest);
+            }
         }
         else if (!strcmp(func, "$sequence"))
         {
