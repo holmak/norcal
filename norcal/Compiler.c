@@ -74,18 +74,19 @@ static void DefineSymbol(SymbolKind kind, char *name, int32_t value)
     sym->Value = value;
 }
 
-static bool FindSymbol(char *name, Symbol **sym)
+static bool FindSymbol(char *name, Symbol **found)
 {
     for (int i = 0; i < MAX_SYMBOLS; i++)
     {
-        if (!strcmp(Symbols[i].Name, name))
+        Symbol *sym = &Symbols[i];
+        if (sym->Kind != SK_NONE && !strcmp(sym->Name, name))
         {
-            *sym = &Symbols[i];
+            *found = sym;
             return true;
         }
     }
 
-    *sym = NULL;
+    *found = NULL;
     return false;
 }
 
