@@ -88,6 +88,12 @@ static char *OperandFormatStrings[] = {
     " %+02X",
 };
 
+static void ReadNextComment(FILE *comments, int32_t *address, char *text)
+{
+    int matched = fscanf(comments, "%X %500[^\n]", address, text);
+    if (matched != 2) *address = INT32_MAX;
+}
+
 void Disassemble(char *outputfile)
 {
     FILE *program = fopen(outputfile, "rb");
@@ -98,9 +104,20 @@ void Disassemble(char *outputfile)
     // Skip the iNES header.
     for (int i = 0; i < 16; i++) fgetc(program);
 
+    int commentAddress;
+    char comment[500];
+    ReadNextComment(comments, &commentAddress, comment);
+
     // Read program bytes:
-    for (int32_t addr = 0x8000; addr < 0x10000; addr++)
+    const int CodeBaseAddress = 0x8000;
+    for (int32_t addr = 0; addr < 0x10000; addr++)
     {
+        while (addr >= commentAddress)
+        {
+            fprintf(dis, "; %s\n", comment);
+            ReadNextComment(comments, &commentAddress, comment);
+        }
+
         int opcode = fgetc(program);
         if (opcode == EOF)
         {
@@ -116,7 +133,7 @@ void Disassemble(char *outputfile)
         OperandFormat format = OperandFormats[opcode];
         int operandSize = OperandSizes[format];
 
-        fprintf(dis, "%04X    %02X", (uint16_t)addr, opcode);
+        fprintf(dis, "%04X    %02X", (uint16_t)(CodeBaseAddress + addr), opcode);
 
         int operand = 0;
         for (int i = 0; i < 2; i++)
