@@ -249,6 +249,7 @@ static void CompileExpression(Expr *e, Destination dest, Continuation cont)
             }
 
             // For builtin operations, instead of jumping to a function, emit the code inline.
+            EmitComment(func);
             if (!strcmp(func, "$load"))
             {
                 if (argCount != 1) Panic("wrong number of arguments to unary operator");
