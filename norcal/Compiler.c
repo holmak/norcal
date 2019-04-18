@@ -205,6 +205,22 @@ static void CompileExpression(Expr *e, Destination dest, Continuation cont)
             EmitComment("$assign simple");
             CompileExpression(firstArg->Next, addr, cont);
         }
+        else if (!strcmp(func, "$sequence"))
+        {
+            for (Expr *p = firstArg; p; p = p->Next)
+            {
+                EmitComment("begin new statement");
+                // Drop the result of each expression except the last.
+                if (p->Next)
+                {
+                    CompileExpression(p, DEST_DISCARD, CONT_FALLTHROUGH);
+                }
+                else
+                {
+                    CompileExpression(p, dest, cont);
+                }
+            }
+        }
         else
         {
             // This is a non-intrinsic function call.
@@ -295,22 +311,6 @@ static void CompileExpression(Expr *e, Destination dest, Continuation cont)
                 Emit(INY);
                 Emit_U8(LDA_ZP, T3);
                 Emit_U8(STA_ZP_Y_IND, T0);
-            }
-            else if (!strcmp(func, "$sequence"))
-            {
-                for (Expr *p = firstArg; p; p = p->Next)
-                {
-                    EmitComment("begin new statement");
-                    // Drop the result of each expression except the last.
-                    if (p->Next)
-                    {
-                        CompileExpression(p, DEST_DISCARD, CONT_FALLTHROUGH);
-                    }
-                    else
-                    {
-                        CompileExpression(p, dest, cont);
-                    }
-                }
             }
             else
             {
