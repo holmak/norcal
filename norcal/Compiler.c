@@ -199,6 +199,11 @@ static void CompileExpression(Expr *e, Destination dest, Continuation cont)
             Emit_U16(LDX_ABS, addr + 1);
             EmitCopyAccTo(dest);
         }
+        else if (!strcmp(func, "$assign") && EvaluateConstantExpression(firstArg, &addr))
+        {
+            EmitComment("$assign simple");
+            CompileExpression(firstArg->Next, addr, cont);
+        }
         else
         {
             // This is a non-intrinsic function call.
