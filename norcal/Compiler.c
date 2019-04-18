@@ -4,6 +4,11 @@
 
 #define MAX_SYMBOLS 1024
 
+typedef enum Type
+{
+    TYPE_UINT16,
+} Type;
+
 typedef enum SymbolKind
 {
     SK_NONE = 0,
@@ -36,8 +41,6 @@ static Symbol Symbols[MAX_SYMBOLS];
 #define RamEnd 0x800
 static int RamNext = RamStart;
 
-#define SizeOfUInt16 2
-
 // Temporary pseudoregisters for intrinsic operations, such as arithmetic.
 // TODO: Once a symbol table is implemented, mark this space as allocated.
 #define T0 0x00F0
@@ -53,6 +56,16 @@ static uint8_t LowByte(int32_t n)
 static uint8_t HighByte(int32_t n)
 {
     return (n >> 8) & 0xFF;
+}
+
+static int32_t SizeOf(Type type)
+{
+    if (type == TYPE_UINT16) return 2;
+    else
+    {
+        NYI();
+        return 1;
+    }
 }
 
 static void DefineSymbol(SymbolKind kind, char *name, int32_t value)
@@ -255,7 +268,7 @@ static void CompileExpression(Expr *e, Destination dest, Continuation cont)
                 }
                 else
                 {
-                    int argSize = SizeOfUInt16;
+                    int argSize = SizeOf(TYPE_UINT16);
                     int temp = AllocTemp(argSize);
                     CompileExpression(arg, temp, CONT_FALLTHROUGH);
                     simpleArg = MakeLoadExpr(temp);
@@ -269,7 +282,7 @@ static void CompileExpression(Expr *e, Destination dest, Continuation cont)
             int paramAddress = T0;
             for (Expr *temp = temps; temp; temp = temp->Next)
             {
-                int paramSize = SizeOfUInt16;
+                int paramSize = SizeOf(TYPE_UINT16);
                 CompileExpression(temp, paramAddress, CONT_FALLTHROUGH);
                 paramAddress += paramSize;
             }
