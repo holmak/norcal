@@ -194,7 +194,7 @@ static void CompileExpression(Expr *e, Destination dest, Continuation cont)
 
         // Handle certain functions as "intrinsics"; otherwise use the general function call mechanism.
         int32_t addr;
-        if (!strcmp(func, "$load") && MatchIntExpr(firstArg, &addr))
+        if (!strcmp(func, "$load") && EvaluateConstantExpression(firstArg, &addr))
         {
             Emit_U16(LDA_ABS, addr);
             Emit_U16(LDX_ABS, addr + 1);
@@ -239,7 +239,7 @@ static void CompileExpression(Expr *e, Destination dest, Continuation cont)
                 // unconnected to the rest of the AST.
                 int32_t n;
                 Expr *simpleArg;
-                if (MatchIntExpr(arg, &n))
+                if (EvaluateConstantExpression(arg, &n))
                 {
                     simpleArg = MakeIntExpr(n);
                 }
