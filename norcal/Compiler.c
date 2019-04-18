@@ -114,19 +114,29 @@ static int AllocTemp(int size)
     return AllocGlobal(size);
 }
 
-static int32_t EvaluateConstantExpression(Expr *e)
+// Return true if the expression was constant, and therefore able to be evaluated.
+static bool EvaluateConstantExpression(Expr *e, int32_t *value)
 {
     // TODO: Evaluate more complex constant expressions, too.
-    int32_t n;
-    if (MatchIntExpr(e, &n))
+    if (MatchIntExpr(e, value))
     {
-        return n;
+        return true;
     }
-    else
+    else if (e->Type == EXPR_NAME)
     {
-        Error("expression must be constant");
-        return 0;
+        Symbol *sym;
+        if (!FindSymbol(e->Name, &sym)) Error("undefined symbol");
+
+        if (sym->Kind == SK_CONSTANT)
+        {
+            // TODO: Make sure the constant value is not too big.
+            *value = sym->Value;
+            return true;
+        }
     }
+
+    *value = 0;
+    return false;
 }
 
 static EmitLoadImmediate(Destination dest, int32_t imm)
@@ -164,26 +174,10 @@ static EmitCopyAccTo(Destination dest)
 
 static void CompileExpression(Expr *e, Destination dest, Continuation cont)
 {
-    int32_t n;
-    if (MatchIntExpr(e, &n))
+    int32_t value;
+    if (EvaluateConstantExpression(e, &value))
     {
-        EmitLoadImmediate(dest, n);
-    }
-    else if (e->Type == EXPR_NAME)
-    {
-        Symbol *sym;
-        if (!FindSymbol(e->Name, &sym)) Error("undefined symbol");
-
-        if (sym->Kind == SK_CONSTANT)
-        {
-            // TODO: Make sure the constant value is not too big.
-            n = sym->Value;
-            EmitLoadImmediate(dest, n);
-        }
-        else
-        {
-            Panic("NYI");
-        }
+        EmitLoadImmediate(dest, value);
     }
     else if (e->Type == EXPR_CALL)
     {
@@ -340,7 +334,11 @@ void CompileProgram(Declaration *program)
         }
         else if (decl->Type == DECL_CONSTANT)
         {
-            uint16_t value = EvaluateConstantExpression(decl->Body);
+            int32_t value;
+            if (!EvaluateConstantExpression(decl->Body, &value))
+            {
+                Error("expression must be constant");
+            }
             DefineSymbol(SK_CONSTANT, decl->Name, value);
         }
         else
