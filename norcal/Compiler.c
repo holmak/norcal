@@ -17,7 +17,7 @@ typedef struct Symbol
     int32_t Value;
 } Symbol;
 
-// type Destination = Discard | Accumulator | Variable name
+// type Destination = Discard | Accumulator | Global Address
 typedef int32_t Destination;
 #define DEST_DISCARD -1
 #define DEST_ACC -2
