@@ -25,7 +25,6 @@ typedef enum ExprType
     EXPR_INT,
     EXPR_NAME,
     EXPR_CALL,
-    EXPR_SEQUENCE,
 } ExprType;
 
 typedef struct Expr Expr;

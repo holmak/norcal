@@ -256,7 +256,8 @@ static Declaration *ParseDeclaration()
         if (!TryParse(TO_LPAREN)) Error("expected (");
         if (!TryParse(TO_RPAREN)) Error("expected )");
         if (!TryParse(TO_LBRACE)) Error("expected {");
-        d->Body = MakeExpr(EXPR_SEQUENCE);
+        d->Body = MakeExpr(EXPR_CALL);
+        AppendArg(d->Body, MakeNameExpr("$sequence"));
         while (!TryParse(TO_RBRACE))
         {
             Expr *stmt = ParseExpr();

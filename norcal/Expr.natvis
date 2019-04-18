@@ -6,9 +6,8 @@
     <DisplayString Condition="Type == EXPR_NAME">{{ {Name,s} }}</DisplayString>
     <!-- TODO: The EXPR_CALL visualization assumes that the function is identified by an EXPR_NAME expression. -->
     <DisplayString Condition="Type == EXPR_CALL">{{ CALL {Args->Name,s} }}</DisplayString>
-    <DisplayString Condition="Type == EXPR_SEQUENCE">{{ SEQUENCE ... }}</DisplayString>
     <Expand>
-      <LinkedListItems Condition="Type == EXPR_CALL || Type == EXPR_SEQUENCE">
+      <LinkedListItems Condition="Type == EXPR_CALL">
         <HeadPointer>Args</HeadPointer>
         <NextPointer>Next</NextPointer>
         <ValueNode>this</ValueNode>

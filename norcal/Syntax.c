@@ -59,20 +59,6 @@ bool MatchBinaryCall(Expr *e, char *funcName, Expr **left, Expr **right)
         func->Type == EXPR_NAME && !strcmp(func->Name, funcName);
 }
 
-static char *GetNameForNode(ExprType type)
-{
-    switch (type)
-    {
-    case EXPR_CALL:
-        return "call";
-    case EXPR_SEQUENCE:
-        return "sequence";
-    default:
-        NYI();
-        return "n/a";
-    }
-}
-
 static void PrintExpr(Expr *e)
 {
     int n;
@@ -88,7 +74,7 @@ static void PrintExpr(Expr *e)
     }
     else
     {
-        printf("(%s ", GetNameForNode(e->Type));
+        printf("(");
         for (Expr *p = e->Args; p; p = p->Next)
         {
             PrintExpr(p);
