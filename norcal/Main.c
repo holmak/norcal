@@ -22,6 +22,8 @@ int main(int argc, char *argv[])
     CompileProgram(program);
     WriteImage(outputfile);
     Disassemble(outputfile);
+
+    return 0;
 }
 
 void *XAlloc(size_t size)
