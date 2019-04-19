@@ -84,6 +84,11 @@ enum Opcode
     SBC_ZP_X     = 0xF5,
 };
 
+typedef enum Type
+{
+    TYPE_UINT16,
+} Type;
+
 // Lexer:
 void InitLexer(char *filename);
 bool TryParseInt(int32_t *n);

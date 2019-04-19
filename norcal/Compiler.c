@@ -4,15 +4,11 @@
 
 #define MAX_SYMBOLS 1024
 
-typedef enum Type
-{
-    TYPE_UINT16,
-} Type;
-
 typedef enum SymbolKind
 {
     SK_NONE = 0,
     SK_CONSTANT,
+    SK_LOCAL,
 } SymbolKind;
 
 typedef struct Symbol
@@ -193,6 +189,29 @@ static void CompileExpression(Expr *e, Destination dest, Continuation cont)
     {
         EmitLoadImmediate(dest, value);
     }
+    else if (e->Type == EXPR_NAME)
+    {
+        Symbol *sym;
+        if (!FindSymbol(e->Name, &sym)) Error("undefined symbol");
+        if (sym->Kind != SK_LOCAL) NYI();
+        int32_t address = sym->Value;
+        if (dest == DEST_DISCARD)
+        {
+            // NOP
+        }
+        else if (dest == DEST_ACC)
+        {
+            Emit_U16(LDA_ABS, address);
+            Emit_U16(LDX_ABS, address + 1);
+        }
+        else
+        {
+            Emit_U16(LDA_ABS, address);
+            Emit_U16(STA_ABS, dest);
+            Emit_U16(LDA_ABS, address + 1);
+            Emit_U16(STA_ABS, dest + 1);
+        }
+    }
     else if (e->Type == EXPR_CALL)
     {
         if (!e->Args) Panic("no function specified for call");
@@ -242,6 +261,29 @@ static void CompileExpression(Expr *e, Destination dest, Continuation cont)
                 {
                     CompileExpression(p, dest, cont);
                 }
+            }
+        }
+        else if (!strcmp(func, "$local"))
+        {
+            if (argCount != 1) Panic("wrong number of args in local declaration");
+            if (firstArg->Type != EXPR_NAME) Panic("invalid local declaration node");
+            int address = AllocGlobal(SizeOf(TYPE_UINT16));
+            DefineSymbol(SK_LOCAL, firstArg->Name, address);
+        }
+        else if (!strcmp(func, "$addr_of"))
+        {
+            if (argCount != 1) Panic("wrong number of args");
+            if (firstArg->Type == EXPR_NAME)
+            {
+                Symbol *sym;
+                if (!FindSymbol(firstArg->Name, &sym)) Error("undefined symbol");
+                if (sym->Kind != SK_LOCAL) NYI();
+                int32_t address = sym->Value;
+                EmitLoadImmediate(dest, address);
+            }
+            else
+            {
+                NYI();
             }
         }
         else

@@ -75,6 +75,13 @@ Expr *MakeLoadExpr(int32_t address)
     return MakeUnaryExpr(MakeNameExpr("$load"), MakeIntExpr(address));
 }
 
+static Expr *MakeSequenceExpr()
+{
+    Expr *e = MakeExpr(EXPR_CALL);
+    AppendArg(e, MakeNameExpr("$sequence"));
+    return e;
+}
+
 static Expr *AddressOf(Expr *e)
 {
     Expr *inner;
@@ -85,6 +92,26 @@ static Expr *AddressOf(Expr *e)
     else
     {
         return MakeUnaryExpr(MakeNameExpr("$addr_of"), e);
+    }
+}
+
+static Expr *MakeAssignExpr(Expr *dst, Expr *src)
+{
+    return MakeBinaryExpr(MakeNameExpr("$assign"), AddressOf(dst), src);
+}
+
+static bool TryParseType(Type *type)
+{
+    // TODO: Recognize all type names.
+    if (TryParseName("uint16_t"))
+    {
+        *type = TYPE_UINT16;
+        return true;
+    }
+    else
+    {
+        type = NULL;
+        return false;
     }
 }
 
@@ -221,7 +248,7 @@ static Expr *ParseAssignExpr()
     Expr *e = ParseLogicalOrExpr();
     if (TryParse(TO_EQUALS))
     {
-        e = MakeBinaryExpr(MakeNameExpr("$assign"), AddressOf(e), ParseAssignExpr());
+        e = MakeAssignExpr(e, ParseAssignExpr());
     }
     return e;
 }
@@ -256,13 +283,30 @@ static Declaration *ParseDeclaration()
         if (!TryParse(TO_LPAREN)) Error("expected (");
         if (!TryParse(TO_RPAREN)) Error("expected )");
         if (!TryParse(TO_LBRACE)) Error("expected {");
-        d->Body = MakeExpr(EXPR_CALL);
-        AppendArg(d->Body, MakeNameExpr("$sequence"));
+        d->Body = MakeSequenceExpr();
         while (!TryParse(TO_RBRACE))
         {
-            Expr *stmt = ParseExpr();
-            AppendArg(d->Body, stmt);
-            if (!TryParse(TO_SEMICOLON)) Error("expected ;");
+            Type type;
+            if (TryParseType(&type))
+            {
+                // Declare a local variable:
+                char *localname;
+                if (!TryParseAnyName(&localname)) Error("expected variable name");
+                // If no initial value is specified, initialize to zero.
+                Expr *value;
+                if (TryParse(TO_EQUALS)) value = ParseExpr();
+                else value = MakeIntExpr(0);
+                if (!TryParse(TO_SEMICOLON)) Error("expected ;");
+                AppendArg(d->Body, MakeUnaryExpr(MakeNameExpr("$local"), MakeNameExpr(localname)));
+                AppendArg(d->Body, MakeAssignExpr(MakeNameExpr(localname), value));
+            }
+            else
+            {
+                // An expression-statement:
+                Expr *stmt = ParseExpr();
+                AppendArg(d->Body, stmt);
+                if (!TryParse(TO_SEMICOLON)) Error("expected ;");
+            }
         }
     }
     return d;
