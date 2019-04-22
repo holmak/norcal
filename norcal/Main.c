@@ -41,7 +41,8 @@ void Panic(char *message)
 
 void Error(char *message)
 {
-    fprintf(stderr, "Error: %s\n", message);
+    FilePos pos = GetNextTokenPosition();
+    fprintf(stderr, "Error (line %d, column %d): %s\n", pos.Line, pos.Column, message);
     exit(1);
 }
 

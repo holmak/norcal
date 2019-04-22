@@ -20,6 +20,11 @@ typedef enum TokenType
     TO_NAME,
 } TokenType;
 
+typedef struct FilePos
+{
+    int Line, Column;
+} FilePos;
+
 typedef enum ExprType
 {
     EXPR_INT,
@@ -96,6 +101,7 @@ bool TryParseAnyName(char **s);
 bool TryParseName(char *s);
 bool TryParse(TokenType expected);
 TokenType ReadNextToken();
+FilePos GetNextTokenPosition();
 
 Declaration *ParseFile(char *filename);
 

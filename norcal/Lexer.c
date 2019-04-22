@@ -4,17 +4,30 @@
 #include "Common.h"
 
 static FILE *File;
+
+// The next char, and its position in the file:
 static int NextChar;
+static FilePos NextCharPos;
 
 // Next token:
 static TokenType NextType;
 static int NextInt;
 static char *NextName;
+static FilePos TokenPos, LastTokenPos;
 
 static int FetchChar()
 {
     int c = NextChar;
     NextChar = fgetc(File);
+    if (c == '\n')
+    {
+        NextCharPos.Line++;
+        NextCharPos.Column = 0;
+    }
+    else
+    {
+        NextCharPos.Column++;
+    }
     return c;
 }
 
@@ -93,6 +106,10 @@ static void FetchToken()
     // Skip spaces:
     while (strchr(" \t\n", NextChar)) FetchChar();
 
+    // Record the location of this token:
+    LastTokenPos = TokenPos;
+    TokenPos = NextCharPos;
+
     // Handle characters in order of ASCII value:
     // (Unprintable characters shouldn't be in the file, and whitespace was already skipped.)
     if (TryRead(EOF)) NextType = TO_EOF;
@@ -134,6 +151,11 @@ static void FetchToken()
     {
         NYI();
     }
+}
+
+FilePos GetNextTokenPosition()
+{
+    return TokenPos;
 }
 
 void InitLexer(char *filename)
