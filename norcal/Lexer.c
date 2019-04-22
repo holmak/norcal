@@ -98,7 +98,7 @@ static bool TryConvertInt(char *name, int32_t *integer)
 
 static bool IsNameChar(char c)
 {
-    return (c == '_') || (c >= '0' && c < '9') || (c >= 'A' && c < 'Z') || (c >= 'a' && c < 'z');
+    return (c == '_') || (c >= '0' && c <= '9') || (c >= 'A' && c < 'Z') || (c >= 'a' && c < 'z');
 }
 
 static void FetchToken()
