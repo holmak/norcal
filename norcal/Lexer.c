@@ -46,6 +46,12 @@ static bool TryRead(char c)
 
 static bool TryConvertInt(char *name, int32_t *integer)
 {
+    char *decimalDigits = "0123456789";
+
+    // If the token doesn't start with a digit, it isn't a number.
+    *integer = 0;
+    if (!strchr(decimalDigits, *name)) return false;
+
     // TODO: Improve this function.
     bool isHex = false;
     int n = 0;
@@ -62,13 +68,12 @@ static bool TryConvertInt(char *name, int32_t *integer)
             }
             else
             {
-                *integer = 0;
                 return false;
             }
         }
         else
         {
-            if (strchr("0123456789", c))
+            if (strchr(decimalDigits, c))
             {
                 n = 10 * n + (c - '0');
             }
@@ -82,7 +87,6 @@ static bool TryConvertInt(char *name, int32_t *integer)
             }
             else
             {
-                *integer = 0;
                 return false;
             }
         }
