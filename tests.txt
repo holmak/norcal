@@ -90,3 +90,23 @@ void reset()
     *OUT = b;
     *STOP = 0;
 }
+
+# If statements
+#in 1 0 1
+#out 10 10 99 11
+define OUT = 0x6000;
+define STOP = 0x6002;
+void reset()
+{
+    uint16_t x = 0;
+    if (*OUT) x = x + 1;
+    *OUT = x;
+    if (*OUT) { x = x + 1; }
+    *OUT = x;
+    if (*OUT)
+    {
+        *OUT = 99;
+        x = x + 1;
+    }
+    *OUT = x;
+}
