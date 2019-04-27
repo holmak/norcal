@@ -427,7 +427,7 @@ void CompileProgram(Declaration *program)
     {
         if (decl->Type == DECL_FUNCTION)
         {
-            CompileExpression(decl->Body, DEST_ACC, CONT_FALLTHROUGH);
+            CompileExpression(decl->Body, DEST_DISCARD, CONT_FALLTHROUGH);
             // TODO: Return.
         }
     }
