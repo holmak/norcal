@@ -62,11 +62,16 @@ struct Declaration
 typedef enum Opcode Opcode;
 enum Opcode
 {
+    ORA_ZP       = 0x05,
+    ORA_IMM      = 0x09,
+    ORA_ABS      = 0x0D,
     CLC          = 0x18,
     SEC          = 0x38,
+    JMP_ABS      = 0x4C,
     ADC_ZP       = 0x65,
     ADC_ZP_X     = 0x75,
     STA_ZP       = 0x85,
+    STX_ZP       = 0x86,
     DEY          = 0x88,
     STA_ABS      = 0x8D,
     STX_ABS      = 0x8E,
@@ -84,8 +89,10 @@ enum Opcode
     LDA_ZP_X     = 0xB5,
     INY          = 0xC8,
     DEX          = 0xCA,
+    BNE          = 0xD0,
     SBC_ZP       = 0xE5,
     INX          = 0xE8,
+    BEQ          = 0xF0,
     SBC_ZP_X     = 0xF5,
 };
 
@@ -110,7 +117,10 @@ void CompileProgram(Declaration *program);
 void Emit(Opcode op);
 void Emit_U8(Opcode op, uint8_t arg);
 void Emit_U16(Opcode op, uint16_t arg);
+void EmitFix_S8(int32_t address, int32_t target);
+void EmitFix_U16(int32_t address, int32_t target);
 void EmitComment(char *comment);
+int32_t GetCurrentCodeAddress();
 void WriteImage(char *filename);
 void Disassemble(char *outputfile);
 
@@ -122,6 +132,10 @@ bool MatchIntExpr(Expr *e, int32_t *n);
 bool MatchUnaryCall(Expr *e, char *funcName, Expr **arg);
 bool MatchBinaryCall(Expr *e, char *funcName, Expr **left, Expr **right);
 void PrintProgram(Declaration *program);
+
+// General utility:
+uint8_t LowByte(int32_t n);
+uint8_t HighByte(int32_t n);
 
 void *XAlloc(size_t size);
 void Panic(char *message);

@@ -91,9 +91,23 @@ void reset()
     *STOP = 0;
 }
 
-# If statements
+# If statement
+#in 4 0x1200 0 6
+#out 1 2 4
+define OUT = 0x6000;
+define STOP = 0x6002;
+void reset()
+{
+    if (*OUT) *OUT = 1;
+    if (*OUT) *OUT = 2;
+    if (*OUT) *OUT = 3;
+    if (*OUT) *OUT = 4;
+    *STOP = 0;
+}
+
+# If statement
 #in 1 0 1
-#out 10 10 99 11
+#out 1 1 9 2
 define OUT = 0x6000;
 define STOP = 0x6002;
 void reset()
@@ -105,8 +119,9 @@ void reset()
     *OUT = x;
     if (*OUT)
     {
-        *OUT = 99;
+        *OUT = 9;
         x = x + 1;
     }
     *OUT = x;
+    *STOP = 0;
 }

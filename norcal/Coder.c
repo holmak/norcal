@@ -14,9 +14,11 @@ static uint8_t Header[16] =
     0x00, 0x00,
 };
 
+#define PrgRomBase 0x8000
+
 static uint8_t Prg[32 * 1024];
 static uint8_t Chr[8 * 1024];
-static size_t PrgNext;
+static int32_t PrgNext;
 
 static FILE *CommentFile;
 
@@ -57,6 +59,28 @@ void EmitComment(char *comment)
     int len = sprintf(line, "%04X    %s\n", (uint16_t)PrgNext, comment);
     assert(fwrite(line, len, 1, CommentFile) == 1);
     fflush(CommentFile);
+}
+
+void EmitFix_S8(int32_t address, int32_t target)
+{
+    int32_t romOffset = address - PrgRomBase;
+    if (romOffset < 0 || romOffset >= PrgNext) Panic("fixup address is out of bounds");
+    int32_t offset = target - address - 1;
+    if (offset < INT8_MIN || offset > INT8_MAX) Panic("branch distance is too far");
+    Prg[romOffset] = (uint8_t)offset;
+}
+
+void EmitFix_U16(int32_t address, int32_t target)
+{
+    int32_t romOffset = address - PrgRomBase;
+    if (romOffset < 0 || romOffset + 1 >= PrgNext) Panic("fixup address is out of bounds");
+    Prg[romOffset] = LowByte(target);
+    Prg[romOffset + 1] = HighByte(target);
+}
+
+int32_t GetCurrentCodeAddress()
+{
+    return PrgRomBase + PrgNext;
 }
 
 void WriteImage(char *filename)

@@ -1,3 +1,4 @@
+#define _CRT_SECURE_NO_WARNINGS
 #include <stdio.h>
 #include <string.h>
 #include "Common.h"
@@ -9,6 +10,8 @@ typedef enum SymbolKind
     SK_NONE = 0,
     SK_CONSTANT,
     SK_LOCAL,
+    SK_FIXUP_REL,
+    SK_FIXUP_ABS,
 } SymbolKind;
 
 typedef struct Symbol
@@ -23,13 +26,22 @@ typedef int32_t Destination;
 #define DEST_DISCARD -1
 #define DEST_ACC -2
 
+typedef enum JumpCondition
+{
+    JUMP_NEVER,
+    JUMP_IF_TRUE,
+    JUMP_IF_FALSE,
+} JumpCondition;
+
 typedef struct Continuation
 {
-    char *IfTrue;
-    char *IfFalse;
+    JumpCondition When;
+    char *Target;
 } Continuation;
 
-#define CONT_FALLTHROUGH (Continuation){ NULL, NULL }
+#define CONT_FALLTHROUGH (Continuation){ JUMP_NEVER, NULL }
+
+static int NextLabelNumber = 0;
 
 static Symbol Symbols[MAX_SYMBOLS];
 
@@ -44,12 +56,25 @@ static int RamNext = RamStart;
 #define T2 (T0 + 2)
 #define T3 (T0 + 3)
 
-static uint8_t LowByte(int32_t n)
+static Continuation MakeBranch(JumpCondition when, char *target)
+{
+    Continuation cont = { when, target };
+    return cont;
+}
+
+static char *MakeUniqueLabel()
+{
+    char name[32];
+    sprintf(name, "@L%d", NextLabelNumber++);
+    return _strdup(name);
+}
+
+uint8_t LowByte(int32_t n)
 {
     return n & 0xFF;
 }
 
-static uint8_t HighByte(int32_t n)
+uint8_t HighByte(int32_t n)
 {
     return (n >> 8) & 0xFF;
 }
@@ -149,8 +174,17 @@ static bool EvaluateConstantExpression(Expr *e, int32_t *value)
     return false;
 }
 
-static EmitLoadImmediate(Destination dest, int32_t imm)
+// Jump unconditionally.
+static void EmitJump(char *target)
 {
+    Emit_U16(JMP_ABS, 0);
+    int32_t fixupAddress = GetCurrentCodeAddress() - 2;
+    DefineSymbol(SK_FIXUP_ABS, target, fixupAddress);
+}
+
+static void EmitLoadImmediate(int32_t imm, Destination dest, Continuation cont)
+{
+    EmitComment("load immediate");
     if (dest == DEST_DISCARD)
     {
         // NOP
@@ -163,13 +197,19 @@ static EmitLoadImmediate(Destination dest, int32_t imm)
     else
     {
         Emit_U8(LDA_IMM, LowByte(imm));
+        Emit_U8(LDX_IMM, HighByte(imm));
         Emit_U16(STA_ABS, dest);
-        Emit_U8(LDA_IMM, HighByte(imm));
-        Emit_U16(STA_ABS, dest + 1);
+        Emit_U16(STX_ABS, dest + 1);
+    }
+
+    if ((cont.When == JUMP_IF_TRUE && imm != 0) ||
+        (cont.When == JUMP_IF_FALSE && imm == 0))
+    {
+        EmitJump(cont.Target);
     }
 }
 
-static EmitCopyAccTo(Destination dest)
+static void EmitStoreAcc(Destination dest)
 {
     if (dest == DEST_DISCARD || dest == DEST_ACC)
     {
@@ -182,12 +222,58 @@ static EmitCopyAccTo(Destination dest)
     }
 }
 
+static void EmitBranchOnAcc(Continuation cont)
+{
+    if (cont.When != JUMP_NEVER)
+    {
+        // TODO: Values used as branch conditions must have a single-byte type, for easy comparison against zero.
+        EmitComment("branch on ACC");
+        Emit_U8(ORA_IMM, 0);
+        Opcode op = (cont.When == JUMP_IF_TRUE) ? BNE : BEQ;
+        Emit_U8(op, 0);
+        int32_t fixupAddress = GetCurrentCodeAddress() - 1;
+        DefineSymbol(SK_FIXUP_REL, cont.Target, fixupAddress);
+    }
+}
+
+static void EmitLoad(int32_t address, Destination dest, Continuation cont)
+{
+    // Even if the value is unused, always read the address; it might be a hardware register.
+    Emit_U16(LDA_ABS, address);
+    Emit_U16(LDX_ABS, address + 1);
+    EmitStoreAcc(dest);
+    EmitBranchOnAcc(cont);
+}
+
+// Fix up jumps that forward-referenced a label:
+static void FixReferencesTo(char *label)
+{
+    int32_t target = GetCurrentCodeAddress();
+    for (int i = 0; i < MAX_SYMBOLS; i++)
+    {
+        Symbol *sym = &Symbols[i];
+        if (sym->Kind != SK_NONE && !strcmp(sym->Name, label))
+        {
+            if (sym->Kind == SK_FIXUP_REL)
+            {
+                EmitFix_S8(sym->Value, target);
+                memset(sym, 0, sizeof(*sym));
+            }
+            else if (sym->Kind == SK_FIXUP_ABS)
+            {
+                EmitFix_U16(sym->Value, target);
+                memset(sym, 0, sizeof(*sym));
+            }
+        }
+    }
+}
+
 static void CompileExpression(Expr *e, Destination dest, Continuation cont)
 {
     int32_t value;
     if (EvaluateConstantExpression(e, &value))
     {
-        EmitLoadImmediate(dest, value);
+        EmitLoadImmediate(value, dest, cont);
     }
     else if (e->Type == EXPR_NAME)
     {
@@ -195,22 +281,7 @@ static void CompileExpression(Expr *e, Destination dest, Continuation cont)
         if (!FindSymbol(e->Name, &sym)) Error("undefined symbol");
         if (sym->Kind != SK_LOCAL) NYI();
         int32_t address = sym->Value;
-        if (dest == DEST_DISCARD)
-        {
-            // NOP
-        }
-        else if (dest == DEST_ACC)
-        {
-            Emit_U16(LDA_ABS, address);
-            Emit_U16(LDX_ABS, address + 1);
-        }
-        else
-        {
-            Emit_U16(LDA_ABS, address);
-            Emit_U16(STA_ABS, dest);
-            Emit_U16(LDA_ABS, address + 1);
-            Emit_U16(STA_ABS, dest + 1);
-        }
+        EmitLoad(address, dest, cont);
     }
     else if (e->Type == EXPR_CALL)
     {
@@ -228,23 +299,23 @@ static void CompileExpression(Expr *e, Destination dest, Continuation cont)
         int32_t addr;
         if (!strcmp(func, "$load") && EvaluateConstantExpression(firstArg, &addr))
         {
-            Emit_U16(LDA_ABS, addr);
-            Emit_U16(LDX_ABS, addr + 1);
-            EmitCopyAccTo(dest);
+            EmitLoad(addr, dest, cont);
         }
         else if (!strcmp(func, "$assign") && EvaluateConstantExpression(firstArg, &addr))
         {
             if (dest == DEST_DISCARD)
             {
-                EmitComment("$assign to constant address");
+                EmitComment("assign to constant address");
+                // Let the sub-expression handle storing the data _and_ any conditional branch.
                 CompileExpression(firstArg->Next, addr, cont);
             }
             else
             {
-                EmitComment("$assign to constant address, and produce the assigned value");
-                CompileExpression(firstArg->Next, DEST_ACC, cont);
-                EmitCopyAccTo(addr);
-                EmitCopyAccTo(dest);
+                EmitComment("assign to constant address, and produce the assigned value");
+                CompileExpression(firstArg->Next, DEST_ACC, CONT_FALLTHROUGH);
+                EmitStoreAcc(addr);
+                EmitStoreAcc(dest);
+                EmitBranchOnAcc(cont);
             }
         }
         else if (!strcmp(func, "$sequence"))
@@ -269,6 +340,8 @@ static void CompileExpression(Expr *e, Destination dest, Continuation cont)
             if (firstArg->Type != EXPR_NAME) Panic("invalid local declaration node");
             int address = AllocGlobal(SizeOf(TYPE_UINT16));
             DefineSymbol(SK_LOCAL, firstArg->Name, address);
+            if (dest != DEST_DISCARD) Panic("cannot store value of expression of type 'void'");
+            if (cont.When != JUMP_NEVER) Panic("cannot branch based on value of type 'void'");
         }
         else if (!strcmp(func, "$addr_of"))
         {
@@ -279,12 +352,35 @@ static void CompileExpression(Expr *e, Destination dest, Continuation cont)
                 if (!FindSymbol(firstArg->Name, &sym)) Error("undefined symbol");
                 if (sym->Kind != SK_LOCAL) NYI();
                 int32_t address = sym->Value;
-                EmitLoadImmediate(dest, address);
+                EmitLoadImmediate(address, dest, cont);
             }
             else
             {
                 NYI();
             }
+        }
+        else if (!strcmp(func, "$switch"))
+        {
+            if (argCount != 2) Panic("wrong number of items in switch expression");
+            Expr *test = firstArg;
+            Expr *then = firstArg->Next;
+            char *end = MakeUniqueLabel();
+
+            // TODO: Handle any number of clauses. For each clause:
+            {
+                char *nextClause = MakeUniqueLabel();
+                // If this clause's condition is false, try the next clause:
+                CompileExpression(test, DEST_DISCARD, MakeBranch(JUMP_IF_FALSE, nextClause));
+                // If the condition was true, execute the clause body:
+                CompileExpression(then, dest, cont);
+                // After executing the body of a clause, skip the rest of the clauses:
+                EmitJump(end);
+                EmitComment("end of switch clause");
+                FixReferencesTo(nextClause);
+            }
+
+            EmitComment("end of switch");
+            FixReferencesTo(end);
         }
         else
         {
@@ -383,8 +479,10 @@ static void CompileExpression(Expr *e, Destination dest, Continuation cont)
                 Error("unknown function");
             }
 
-            // Copy the return value from the accumulator to its destination.
-            EmitCopyAccTo(dest);
+            // The return value is placed in DEST_ACC.
+
+            EmitStoreAcc(dest);
+            EmitBranchOnAcc(cont);
 
             EndTempScope();
         }
