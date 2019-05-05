@@ -3,14 +3,16 @@ import subprocess
 
 # Configuration
 TEST_DIR = 'test_files'
-TESTS_FILE = 'tests.txt'
-SOURCE_FILE = os.path.join(TEST_DIR, 'source.txt')
-IMAGE_FILE = os.path.join(TEST_DIR, 'program.nes')
-INPUT_FILE = os.path.join(TEST_DIR, 'input.bin')
-REPORT_FILE = os.path.join(TEST_DIR, 'results.html')
-COMPILER = 'norcal/x64/Debug/norcal.exe'
-SIMULATOR = 'sim6502/x64/Debug/sim6502.exe'
+TESTS_FILE = '../tests.txt'
+SOURCE_FILE = 'source.c'
+IMAGE_FILE = 'program.nes'
+INPUT_FILE = 'input.bin'
+REPORT_FILE = 'results.html'
+COMPILER = '../norcal/x64/Debug/norcal.exe'
+SIMULATOR = '../sim6502/x64/Debug/sim6502.exe'
+
 os.makedirs(TEST_DIR, exist_ok=True)
+os.chdir(TEST_DIR)
 
 #############################################################################
 # Read in the test cases.
