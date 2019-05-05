@@ -8,7 +8,7 @@
 #define TEST_LEXER false
 
 static char *Input;
-static FilePos NextCharPos;
+static FilePos InputPos;
 
 // Next token:
 static TokenType NextType;
@@ -48,12 +48,12 @@ static int FetchChar()
     int c = *Input;
     if (c == '\n')
     {
-        NextCharPos.Line++;
-        NextCharPos.Column = 0;
+        InputPos.Line++;
+        InputPos.Column = 0;
     }
     else
     {
-        NextCharPos.Column++;
+        InputPos.Column++;
     }
     return c;
 }
@@ -148,7 +148,7 @@ static void FetchToken()
 
     // Record the location of this token:
     LastTokenPos = TokenPos;
-    TokenPos = NextCharPos;
+    TokenPos = InputPos;
 
     // Handle characters in order of ASCII value:
     // (Unprintable characters shouldn't be in the file, and whitespace was already skipped.)
@@ -201,7 +201,7 @@ FilePos GetNextTokenPosition()
 void InitLexer(char *filename)
 {
     Input = ReadEntireFile(filename);
-    NextCharPos = (FilePos){ 0, 0 };
+    InputPos = (FilePos){ 0, 0 };
 
     if (TEST_PREPROCESSOR)
     {
@@ -211,7 +211,7 @@ void InitLexer(char *filename)
         {
             int c = GetNextChar();
             if (!c) break;
-            FilePos pos = NextCharPos;
+            FilePos pos = InputPos;
             fprintf(f, "%d,%d: ", pos.Line, pos.Column);
             if (c == '\n') fputs("\\n", f);
             else fputc(c, f);
