@@ -8,7 +8,7 @@ SOURCE_FILE = 'source.c'
 IMAGE_FILE = 'program.nes'
 INPUT_FILE = 'input.bin'
 REPORT_FILE = 'results.html'
-COMPILER = '../norcalsharp/bin/Debug/norcal.exe'
+COMPILER = '../norcal/bin/Debug/norcal.exe'
 SIMULATOR = '../sim6502/x64/Debug/sim6502.exe'
 
 os.makedirs(TEST_DIR, exist_ok=True)
