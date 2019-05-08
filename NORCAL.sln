@@ -7,6 +7,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "norcal", "norcal\norcal.vcx
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "sim6502", "sim6502\sim6502.vcxproj", "{1F51C467-6D52-4B3B-AAA2-D668A291E860}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "norcalsharp", "norcalsharp\norcalsharp.csproj", "{0BCD2B0F-8B58-4C91-AD32-94714211881D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -21,6 +23,10 @@ Global
 		{1F51C467-6D52-4B3B-AAA2-D668A291E860}.Debug|x64.Build.0 = Debug|x64
 		{1F51C467-6D52-4B3B-AAA2-D668A291E860}.Release|x64.ActiveCfg = Release|x64
 		{1F51C467-6D52-4B3B-AAA2-D668A291E860}.Release|x64.Build.0 = Release|x64
+		{0BCD2B0F-8B58-4C91-AD32-94714211881D}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{0BCD2B0F-8B58-4C91-AD32-94714211881D}.Debug|x64.Build.0 = Debug|Any CPU
+		{0BCD2B0F-8B58-4C91-AD32-94714211881D}.Release|x64.ActiveCfg = Release|Any CPU
+		{0BCD2B0F-8B58-4C91-AD32-94714211881D}.Release|x64.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

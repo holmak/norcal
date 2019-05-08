@@ -8,7 +8,7 @@ SOURCE_FILE = 'source.c'
 IMAGE_FILE = 'program.nes'
 INPUT_FILE = 'input.bin'
 REPORT_FILE = 'results.html'
-COMPILER = '../norcal/x64/Debug/norcal.exe'
+COMPILER = '../norcalsharp/bin/Debug/norcal.exe'
 SIMULATOR = '../sim6502/x64/Debug/sim6502.exe'
 
 os.makedirs(TEST_DIR, exist_ok=True)
@@ -86,7 +86,7 @@ for test in tests:
         test.actual_output = '(compiler timed out)'
         continue
     elif process.returncode != 0:
-        test.actual_output = process.stderr.decode('utf_8')
+        test.actual_output = 'compiler error:\n' + process.stderr.decode('utf_8')
         continue
     # Run:
     with open(INPUT_FILE, 'wb') as f:
@@ -101,7 +101,7 @@ for test in tests:
         test.actual_output = '(simulator timed out)'
         continue
     elif process.returncode != 0:
-        test.actual_output = process.stderr.decode('utf_8')
+        test.actual_output = 'simulator error:\n' + process.stderr.decode('utf_8')
         continue
     test.actual_output = parse_number_list(process.stdout.decode('utf_8'))
     test.passed = (test.actual_output == test.expected_output)
