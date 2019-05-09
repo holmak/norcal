@@ -375,6 +375,7 @@ partial class Parser
         TokenPos = InputPos;
 
         // Handle characters in order of ASCII value:
+
         // (Unprintable characters shouldn't be in the file, and whitespace was already skipped.)
         if (TryRead('\0')) NextType = TokenType.EOF;
         else if (GetNextChar() <= ' ') NextType = TokenType.INVALID;
@@ -383,6 +384,26 @@ partial class Parser
         else if (TryRead('*')) NextType = TokenType.STAR;
         else if (TryRead('+')) NextType = TokenType.PLUS;
         else if (TryRead('-')) NextType = TokenType.MINUS;
+        else if (TryRead('/'))
+        {
+            if (TryRead('/'))
+            {
+                // This is a single-line comment:
+                while (true)
+                {
+                    char c = GetNextChar();
+                    if (c == '\n' || c == '\0') break;
+                    FetchChar();
+                }
+
+                // Fetch the token following this comment:
+                FetchToken();
+            }
+            else
+            {
+                NextType = TokenType.SLASH;
+            }
+        }
         else if (TryRead(';')) NextType = TokenType.SEMICOLON;
         else if (TryRead('=')) NextType = TokenType.EQUALS;
         else if (TryRead('{')) NextType = TokenType.LBRACE;
@@ -520,8 +541,7 @@ partial class Parser
 
     void ParserError(string message)
     {
-        Console.Error.WriteLine("syntax error: " + message);
-        Environment.Exit(1);
+        Program.Error("syntax error: " + message);
     }
 }
 
@@ -540,6 +560,7 @@ enum TokenType
     STAR,
     PLUS,
     MINUS,
+    SLASH,
     EQUALS,
     SEMICOLON,
     LBRACE,

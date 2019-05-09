@@ -125,3 +125,19 @@ void reset()
     *OUT = x;
     *STOP = 0;
 }
+
+# Single line comments
+#in
+#out 1 4 5
+define OUT = 0x6000;
+define STOP = 0x6002;
+void reset()
+{
+    *OUT = 1;
+    //*OUT = 2;
+//    *OUT = 3;
+    *OUT = 4;
+    //
+    *OUT = 5;
+    *STOP = 0;
+}
