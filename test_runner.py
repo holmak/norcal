@@ -8,11 +8,16 @@ SOURCE_FILE = 'source.c'
 IMAGE_FILE = 'program.nes'
 INPUT_FILE = 'input.bin'
 REPORT_FILE = 'results.html'
+DISASM_FILE = 'dis.s'
 COMPILER = '../norcal/bin/Debug/norcal.exe'
 SIMULATOR = '../sim6502/x64/Debug/sim6502.exe'
 
 os.makedirs(TEST_DIR, exist_ok=True)
 os.chdir(TEST_DIR)
+
+def read_text_file(path):
+    with open(path, 'r') as f:
+        return f.read()
 
 #############################################################################
 # Read in the test cases.
@@ -88,6 +93,7 @@ for test in tests:
     elif process.returncode != 0:
         test.actual_output = 'compiler error:\n' + process.stderr.decode('utf_8')
         continue
+    test.disasm = read_text_file(DISASM_FILE)
     # Run:
     with open(INPUT_FILE, 'wb') as f:
         # Write input data as an array of uint16_t values:
@@ -203,7 +209,7 @@ with open(REPORT_FILE, 'w') as report:
             report.write('<td bgcolor="#E9322E"></td>\n')
         report.write('<td>' + test.description + '</td>\n')
         report.write('<td><pre>' + pre(test.source) + '</pre></td>\n')
-        report.write('<td><pre>' + pre(test.disasm) + '</pre></td>\n')
+        report.write('<td><details><summary>Show</summary><pre>' + pre(test.disasm) + '</pre></details></td>\n')
         report.write('<td><pre>' + pre_data(test.input) + '</pre></td>\n')
         report.write('<td><pre>' + pre_data(test.actual_output) + '</pre></td>\n')
         report.write('<td><pre>' + pre_data(test.expected_output) + '</pre></td>\n')
