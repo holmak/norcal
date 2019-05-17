@@ -141,3 +141,99 @@ void reset()
     *OUT = 5;
     *STOP = 0;
 }
+
+# Functions
+#in 2 3 4
+#out 1 2 1 3 1 4
+define OUT = 0x6000;
+define STOP = 0x6002;
+void reset()
+{
+    f();
+    f();
+    f();
+    *STOP = 0;
+}
+
+void f() { *OUT = 1; *OUT = *OUT; }
+
+# Function arguments
+#in
+#out 1 7 2 8 3 9
+define OUT = 0x6000;
+define STOP = 0x6002;
+void reset()
+{
+    f(7, 1);
+    f(8, 2);
+    f(9, 3);
+    *STOP = 0;
+}
+
+void f(uint16_t red, uint16_t blue)
+{
+    *OUT = blue;
+    *OUT = red;
+}
+
+# Function return values
+#in
+#out 3 5 7
+define OUT = 0x6000;
+define STOP = 0x6002;
+void reset()
+{
+    *OUT = f(1);
+    *OUT = f(2);
+    *OUT = f(3);
+    *STOP = 0;
+}
+
+void f(uint16_t arg)
+{
+    arg = arg + arg;
+    return arg + 1;
+}
+
+# Multiple functions
+#in
+#out 3 5 7
+define OUT = 0x6000;
+define STOP = 0x6002;
+void reset()
+{
+    *OUT = f(1);
+    *OUT = f(2);
+    *OUT = f(3);
+    *STOP = 0;
+}
+
+void f(uint16_t arg)
+{
+    arg = arg + arg;
+    return arg + 1;
+}
+
+# Entry points
+#in
+#out 0x1122
+define OUT = 0x6000;
+define STOP = 0x6002;
+
+void reset()
+{
+    *OUT = 0x9988;
+    *STOP = 0;
+}
+
+void nmi()
+{
+    *OUT = 0x7766;
+    *STOP = 0;
+}
+
+void reset()
+{
+    *OUT = 0x2211;
+    *STOP = 0;
+}
