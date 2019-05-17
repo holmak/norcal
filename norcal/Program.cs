@@ -29,13 +29,13 @@ static class Program
     {
         foreach (Declaration decl in program)
         {
-            if (decl.Type == DeclarationType.Function)
+            if (decl.Kind == DeclarationKind.Function)
             {
                 Console.Write("{0}()\n    ", decl.Name);
                 PrintExpr(decl.Body);
                 Console.Write("\n\n");
             }
-            else if (decl.Type == DeclarationType.Constant)
+            else if (decl.Kind == DeclarationKind.Constant)
             {
                 Console.Write("define {0} = ", decl.Name);
                 PrintExpr(decl.Body);
@@ -191,7 +191,7 @@ partial class Expr
     public Expr[] Args;
 }
 
-enum DeclarationType
+enum DeclarationKind
 {
     Function,
     Constant,
@@ -199,7 +199,8 @@ enum DeclarationType
 
 class Declaration
 {
-    public DeclarationType Type;
+    public DeclarationKind Kind;
+    public CType Type;
     public string Name;
     public Expr Body;
 }
@@ -210,8 +211,10 @@ enum Opcode
     ORA_IMM      = 0x09,
     ORA_ABS      = 0x0D,
     CLC          = 0x18,
+    JSR          = 0x20,
     SEC          = 0x38,
     JMP_ABS      = 0x4C,
+    RTS          = 0x60,
     ADC_ZP       = 0x65,
     ADC_ZP_X     = 0x75,
     STA_ZP       = 0x85,
@@ -238,10 +241,4 @@ enum Opcode
     INX          = 0xE8,
     BEQ          = 0xF0,
     SBC_ZP_X     = 0xF5,
-}
-
-enum CType
-{
-    Void,
-    UInt16,
 }

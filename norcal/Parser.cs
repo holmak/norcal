@@ -45,7 +45,9 @@ partial class Parser
         Declaration d = new Declaration();
         if (TryParseName("define"))
         {
-            d.Type = DeclarationType.Constant;
+            d.Kind = DeclarationKind.Constant;
+            // TODO: Parse a type name.
+            d.Type = CType.UInt16;
             if (!TryParseAnyName(out d.Name)) ParserError("expected a name");
             if (!TryParse(TokenType.EQUALS)) ParserError("expected =");
             d.Body = ParseExpr();
@@ -53,8 +55,8 @@ partial class Parser
         }
         else
         {
-            d.Type = DeclarationType.Function;
-            if (!TryParseName("void")) ParserError("expected 'void'");
+            d.Kind = DeclarationKind.Function;
+            if (!TryParseType(out d.Type)) ParserError("expected a return type");
             if (!TryParseAnyName(out d.Name)) ParserError("expected function name");
             if (!TryParse(TokenType.LPAREN)) ParserError("expected (");
             if (!TryParse(TokenType.RPAREN)) ParserError("expected )");
@@ -239,7 +241,14 @@ partial class Parser
     // Suffix operators
     Expr ParseSuffixExpr()
     {
-        return ParsePrimaryExpr();
+        Expr e = ParsePrimaryExpr();
+        while (TryParse(TokenType.LPAREN))
+        {
+            List<Expr> args = new List<Expr>();
+            if (!TryParse(TokenType.RPAREN)) ParserError("expected )");
+            e = Expr.MakeCall(e, args);
+        }
+        return e;
     }
 
     // "Primary" expressions
@@ -349,8 +358,12 @@ partial class Parser
 
     bool TryParseType(out CType type)
     {
-        // TODO: Recognize all type names.
-        if (TryParseName("uint16_t"))
+        if (TryParseName("void"))
+        {
+            type = CType.Void;
+            return true;
+        }
+        else if (TryParseName("uint16_t"))
         {
             type = CType.UInt16;
             return true;

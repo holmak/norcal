@@ -9,6 +9,7 @@ partial class Compiler
     int RamNext = RamStart;
     int NextLabelNumber = 0;
     List<Symbol> Symbols = new List<Symbol>();
+    List<Fixup> Fixups = new List<Fixup>();
 
     static readonly int RamStart = 0x300;
     static readonly int RamEnd = 0x800;
@@ -40,7 +41,7 @@ partial class Compiler
 
     static int SizeOf(CType type)
     {
-        if (type == CType.UInt16) return 2;
+        if (type.Tag == CTypeTag.Simple && type.SimpleType == CSimpleType.UInt16) return 2;
         else
         {
             Program.NYI();
@@ -48,13 +49,16 @@ partial class Compiler
         }
     }
 
-    void DefineSymbol(SymbolKind kind, string name, int value)
+    void DefineSymbol(SymbolKind kind, string name, int value, CType type)
     {
+        // TODO: It is an error to define two things with the same name.
+
         Symbols.Add(new Symbol
         {
             Kind = kind,
             Name = name,
             Value = value,
+            Type = type,
         });
     }
 
@@ -128,7 +132,7 @@ partial class Compiler
     {
         Emit_U16(Opcode.JMP_ABS, 0);
         int fixupAddress = GetCurrentCodeAddress() - 2;
-        DefineSymbol(SymbolKind.FixupAbsolute, target, fixupAddress);
+        Fixups.Add(new Fixup(FixupKind.Absolute, fixupAddress, target));
     }
 
     void EmitLoadImmediate(int imm, int dest, Continuation cont)
@@ -181,7 +185,7 @@ partial class Compiler
             Opcode op = (cont.When == JumpCondition.IfTrue) ? Opcode.BNE : Opcode.BEQ;
             Emit_U8(op, 0);
             int fixupAddress = GetCurrentCodeAddress() - 1;
-            DefineSymbol(SymbolKind.FixupRelative, cont.Target, fixupAddress);
+            Fixups.Add(new Fixup(FixupKind.Relative, fixupAddress, cont.Target));
         }
     }
 
@@ -198,19 +202,19 @@ partial class Compiler
     void FixReferencesTo(string label)
     {
         int target = GetCurrentCodeAddress();
-        foreach (Symbol sym in Symbols)
+        foreach (Fixup fixup in Fixups)
         {
-            if (sym.Name == label)
+            if (fixup.Target == label)
             {
-                if (sym.Kind == SymbolKind.FixupRelative)
+                if (fixup.Kind == FixupKind.Relative)
                 {
-                    EmitFix_S8(sym.Value, target);
-                    // TODO: Remove this symbol entry.
+                    EmitFix_S8(fixup.Location, target);
+                    fixup.Kind = FixupKind.None;
                 }
-                else if (sym.Kind == SymbolKind.FixupAbsolute)
+                else if (fixup.Kind == FixupKind.Absolute)
                 {
-                    EmitFix_U16(sym.Value, target);
-                    // TODO: Remove this symbol entry.
+                    EmitFix_U16(fixup.Location, target);
+                    fixup.Kind = FixupKind.None;
                 }
             }
         }
@@ -286,7 +290,7 @@ partial class Compiler
                 if (argCount != 1) Program.Panic("wrong number of args in local declaration");
                 if (args[0].Type != ExprType.Name) Program.Panic("invalid local declaration node");
                 int address = AllocGlobal(SizeOf(CType.UInt16));
-                DefineSymbol(SymbolKind.Local, args[0].Name, address);
+                DefineSymbol(SymbolKind.Local, args[0].Name, address, CType.UInt16);
                 if (dest != DestinationDiscard) Program.Panic("cannot store value of expression of type 'void'");
                 if (cont.When != JumpCondition.Never) Program.Panic("cannot branch based on value of type 'void'");
             }
@@ -342,6 +346,7 @@ partial class Compiler
                 List<Expr> temps = new List<Expr>();
                 foreach (Expr arg in e.Args)
                 {
+                    // TODO: The comment below is no longer accurate:
                     // When creating the list of "simple expressions", we can't reuse AST nodes, because
                     // they form their own list. Instead, create a new copy of the expression,
                     // unconnected to the rest of the AST.
@@ -422,8 +427,14 @@ partial class Compiler
                 }
                 else
                 {
-                    // TODO: Look up the function and JSR to it.
-                    Program.Error("unknown function");
+                    // Check to see whether this function is defined:
+                    // (It probably won't have as address assigned yet, but we can make sure it exists.)
+                    Symbol sym;
+                    if (!FindSymbol(func, out sym)) Program.Error("function not defined: " + func);
+
+                    // JSR to the function:
+                    Emit_U16(Opcode.JSR, 0);
+                    Fixups.Add(new Fixup(FixupKind.Absolute, GetCurrentCodeAddress() - 2, func));
                 }
 
                 // The return value is placed in the accumulator.
@@ -445,18 +456,22 @@ partial class Compiler
         // First pass: Read all declarations to get type information and global symbols.
         foreach (Declaration decl in program)
         {
-            if (decl.Type == DeclarationType.Function)
+            if (decl.Kind == DeclarationKind.Function)
             {
-                // TODO: Record function types so that they can be typechecked later.
+                List<FunctionParameterInfo> parameters = new List<FunctionParameterInfo>();
+                // TODO: Allocate space for each parameter and store it in the symbol table.
+                // TODO: Make the parameters part of the function type.
+                CType type = CType.MakeFunction(decl.Name, parameters, decl.Type);
+                DefineSymbol(SymbolKind.Constant, decl.Name, 0, type);
             }
-            else if (decl.Type == DeclarationType.Constant)
+            else if (decl.Kind == DeclarationKind.Constant)
             {
                 int value;
                 if (!EvaluateConstantExpression(decl.Body, out value))
                 {
                     Program.Error("expression must be constant");
                 }
-                DefineSymbol(SymbolKind.Constant, decl.Name, value);
+                DefineSymbol(SymbolKind.Constant, decl.Name, value, CType.UInt16);
             }
             else
             {
@@ -470,12 +485,39 @@ partial class Compiler
 
         foreach (Declaration decl in program)
         {
-            if (decl.Type == DeclarationType.Function)
+            if (decl.Kind == DeclarationKind.Function)
             {
+                EmitComment("define function " + decl.Name);
+
+                // Record the address of this function's code:
+                Symbol sym;
+                if (!FindSymbol(decl.Name, out sym)) Program.Panic("a symbol should already be defined for this function.");
+                sym.Value = GetCurrentCodeAddress();
+
                 CompileExpression(decl.Body, DestinationDiscard, Continuation.Fallthrough);
-                // TODO: Return.
+                Emit(Opcode.RTS);
             }
         }
+
+        // Fix references to functions:
+        foreach (Fixup fixup in Fixups)
+        {
+            if (fixup.Kind != FixupKind.None)
+            {
+                Symbol sym;
+                if (!FindSymbol(fixup.Target, out sym)) Program.Error("function not defined: " + fixup.Target);
+                int target = sym.Value;
+
+                if (fixup.Kind == FixupKind.Absolute)
+                {
+                    EmitFix_U16(fixup.Location, target);
+                    fixup.Kind = FixupKind.None;
+                }
+            }
+        }
+
+        // All fixups should now be fixed.
+        if (Fixups.Any(x => x.Kind != FixupKind.None)) Program.Panic("some fixups remain");
     }
 }
 
@@ -484,8 +526,6 @@ enum SymbolKind
     None = 0,
     Constant,
     Local,
-    FixupRelative,
-    FixupAbsolute,
 }
 
 class Symbol
@@ -493,6 +533,28 @@ class Symbol
     public SymbolKind Kind;
     public string Name;
     public int Value;
+    public CType Type;
+}
+
+class Fixup
+{
+    public FixupKind Kind;
+    public readonly int Location;
+    public readonly string Target;
+
+    public Fixup(FixupKind kind, int location, string target)
+    {
+        Kind = kind;
+        Location = location;
+        Target = target;
+    }
+}
+
+enum FixupKind
+{
+    None,
+    Relative,
+    Absolute,
 }
 
 // type Destination = Discard | Accumulator | AbsoluteAddress Int
@@ -516,4 +578,60 @@ struct Continuation
     }
 
     public static readonly Continuation Fallthrough = new Continuation(JumpCondition.Never, null);
+}
+
+// CType = SimpleType | FunctionType (name, params, returnType) | ...
+partial class CType
+{
+    public CTypeTag Tag;
+    public CSimpleType SimpleType;
+    public string Name;
+    public List<FunctionParameterInfo> FunctionParameters;
+    public CType Subtype;
+}
+
+enum CTypeTag
+{
+    Simple,
+    Function,
+}
+
+enum CSimpleType
+{
+    Void,
+    UInt16,
+}
+
+class FunctionParameterInfo
+{
+    public CType Type;
+    public string Name;
+}
+
+partial class CType
+{
+    public static readonly CType Void = MakeSimple(CSimpleType.Void);
+    public static readonly CType UInt16 = MakeSimple(CSimpleType.UInt16);
+
+    public static CType MakeSimple(CSimpleType simple)
+    {
+        return new CType
+        {
+            Tag = CTypeTag.Simple,
+            SimpleType = simple,
+        };
+    }
+
+    public static CType MakeFunction(string name, List<FunctionParameterInfo> parameters, CType returnType)
+    {
+        return new CType
+        {
+            Tag = CTypeTag.Function,
+            Name = name,
+            FunctionParameters = parameters,
+            Subtype = returnType,
+        };
+    }
+
+    // TODO: Implement equality testing.
 }
