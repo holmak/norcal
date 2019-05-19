@@ -113,7 +113,7 @@ partial class Compiler
         else if (e.Type == ExprType.Name)
         {
             Symbol sym;
-            if (!FindSymbol(e.Name, out sym)) Program.Error("undefined symbol");
+            if (!FindSymbol(e.Name, out sym)) Program.Error("undefined symbol: {0}", e.Name);
 
             if (sym.Kind == SymbolKind.Constant)
             {
