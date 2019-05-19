@@ -126,6 +126,11 @@ partial class Parser
             }
             stmt = Expr.MakeCall(Expr.MakeName("$switch"), test, then);
         }
+        else if (TryParseName("return"))
+        {
+            stmt = Expr.MakeCall(Expr.MakeName("$return"), ParseExpr());
+            if (!TryParse(TokenType.SEMICOLON)) ParserError("expected ;");
+        }
         else
         {
             // An expression-statement:

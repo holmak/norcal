@@ -218,6 +218,13 @@ partial class Compiler
                 EmitComment("end of switch");
                 FixReferencesTo(end);
             }
+            else if (func == "$return")
+            {
+                if (argCount != 1) Program.Panic("wrong number of items in switch expression");
+                EmitComment("return");
+                CompileExpression(args[0], DestinationAcc, Continuation.Fallthrough);
+                Emit(Opcode.RTS);
+            }
             else
             {
                 // This is a non-intrinsic function call.
