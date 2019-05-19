@@ -24,207 +24,83 @@ partial class Compiler
     static readonly int T2 = (T0 + 2);
     static readonly int T3 = (T0 + 3);
 
-    string MakeUniqueLabel()
+    public void CompileProgram(List<Declaration> program)
     {
-        return string.Format("@L{0}", NextLabelNumber++);
-    }
-
-    byte LowByte(int n)
-    {
-        return (byte)(n & 0xFF);
-    }
-
-    byte HighByte(int n)
-    {
-        return (byte)((n >> 8) & 0xFF);
-    }
-
-    static int SizeOf(CType type)
-    {
-        if (type.Tag == CTypeTag.Simple && type.SimpleType == CSimpleType.UInt16) return 2;
-        else
+        // First pass: Read all declarations to get type information and global symbols.
+        foreach (Declaration decl in program)
         {
-            Program.NYI();
-            return 1;
-        }
-    }
-
-    void DefineSymbol(SymbolKind kind, string name, int value, CType type, int[] paramAddresses)
-    {
-        // TODO: It is an error to define two things with the same name.
-
-        Symbols.Add(new Symbol
-        {
-            Kind = kind,
-            Name = name,
-            Value = value,
-            Type = type,
-            ParamAddresses = paramAddresses,
-        });
-    }
-
-    bool FindSymbol(string name, out Symbol found)
-    {
-        foreach (Symbol sym in Symbols)
-        {
-            if (sym.Name == name)
+            if (decl.Kind == DeclarationKind.Function)
             {
-                found = sym;
-                return true;
+                // Allocate space for each parameter and store it in the symbol table.
+                int[] addresses = new int[decl.Type.Parameters.Count];
+                for (int i = 0; i < addresses.Length; i++)
+                {
+                    addresses[i] = AllocGlobal(SizeOf(decl.Type.Parameters[i].Type));
+                }
+
+                DefineSymbol(SymbolKind.Constant, decl.Name, 0, decl.Type, addresses);
+            }
+            else if (decl.Kind == DeclarationKind.Constant)
+            {
+                int value;
+                if (!EvaluateConstantExpression(decl.Body, out value))
+                {
+                    Program.Error("expression must be constant");
+                }
+                DefineSymbol(SymbolKind.Constant, decl.Name, value, CType.UInt16, null);
+            }
+            else
+            {
+                Program.Panic("unhandled declaration type");
             }
         }
 
-        found = null;
-        return false;
-    }
+        // Second pass: Generate code for each function.
 
-    // Allocate 'size' bytes in RAM and return the address.
-    int AllocGlobal(int size)
-    {
-        if (RamNext + size > RamEnd) Program.Error("Not enough RAM to allocate global.");
-        int address = RamNext;
-        RamNext += size;
-        return address;
-    }
+        // TODO: The various vectors must jump to appropriate specially-named functions.
 
-    void BeginTempScope()
-    {
-        // TODO
-    }
-
-    void EndTempScope()
-    {
-        // TODO
-    }
-
-    // TODO: Temporary variables can be freed when the current temp scope ends.
-    int AllocTemp(int size)
-    {
-        return AllocGlobal(size);
-    }
-
-    // Return true if the expression was constant, and therefore able to be evaluated.
-    bool EvaluateConstantExpression(Expr e, out int value)
-    {
-        // TODO: Evaluate more complex constant expressions, too.
-        if (e.MatchInt(out value))
+        foreach (Declaration decl in program)
         {
-            return true;
-        }
-        else if (e.Type == ExprType.Name)
-        {
-            Symbol sym;
-            if (!FindSymbol(e.Name, out sym)) Program.Error("undefined symbol: {0}", e.Name);
-
-            if (sym.Kind == SymbolKind.Constant)
+            if (decl.Kind == DeclarationKind.Function)
             {
-                // TODO: Make sure the constant value is not too big.
-                value = sym.Value;
-                return true;
+                EmitComment("define function " + decl.Name);
+
+                // Record the address of this function's code:
+                Symbol sym;
+                if (!FindSymbol(decl.Name, out sym)) Program.Panic("a symbol should already be defined for this function.");
+                sym.Value = GetCurrentCodeAddress();
+
+                // Define each of the function's parameters as a local variable:
+                for (int i = 0; i < decl.Type.Parameters.Count; i++)
+                {
+                    FunctionParameterInfo p = decl.Type.Parameters[i];
+                    DefineSymbol(SymbolKind.Local, p.Name, sym.ParamAddresses[i], p.Type, null);
+                }
+
+                CompileExpression(decl.Body, DestinationDiscard, Continuation.Fallthrough);
+                Emit(Opcode.RTS);
             }
         }
 
-        value = 0;
-        return false;
-    }
-
-    // Jump unconditionally.
-    void EmitJump(string target)
-    {
-        Emit_U16(Opcode.JMP_ABS, 0);
-        int fixupAddress = GetCurrentCodeAddress() - 2;
-        Fixups.Add(new Fixup(FixupKind.Absolute, fixupAddress, target));
-    }
-
-    void EmitLoadImmediate(int imm, int dest, Continuation cont)
-    {
-        EmitComment("load immediate");
-        if (dest == DestinationDiscard)
-        {
-            // NOP
-        }
-        else if (dest == DestinationAcc)
-        {
-            Emit_U8(Opcode.LDA_IMM, LowByte(imm));
-            Emit_U8(Opcode.LDX_IMM, HighByte(imm));
-        }
-        else
-        {
-            Emit_U8(Opcode.LDA_IMM, LowByte(imm));
-            Emit_U8(Opcode.LDX_IMM, HighByte(imm));
-            Emit_U16(Opcode.STA_ABS, dest);
-            Emit_U16(Opcode.STX_ABS, dest + 1);
-        }
-
-        if ((cont.When == JumpCondition.IfTrue && imm != 0) ||
-            (cont.When == JumpCondition.IfFalse && imm == 0))
-        {
-            EmitJump(cont.Target);
-        }
-    }
-
-    void EmitStoreAcc(int dest)
-    {
-        if (dest == DestinationDiscard || dest == DestinationAcc)
-        {
-            // NOP
-        }
-        else
-        {
-            Emit_U16(Opcode.STA_ABS, dest);
-            Emit_U16(Opcode.STX_ABS, dest + 1);
-        }
-    }
-
-    void EmitBranchOnAcc(Continuation cont)
-    {
-        if (cont.When != JumpCondition.Never)
-        {
-            // TODO: Values used as branch conditions must have a single-byte type, for easy comparison against zero.
-            EmitComment("branch on ACC");
-            Emit_U8(Opcode.ORA_IMM, 0);
-            Opcode op = (cont.When == JumpCondition.IfTrue) ? Opcode.BNE : Opcode.BEQ;
-            Emit_U8(op, 0);
-            int fixupAddress = GetCurrentCodeAddress() - 1;
-            Fixups.Add(new Fixup(FixupKind.Relative, fixupAddress, cont.Target));
-        }
-    }
-
-    void EmitLoad(int address, int dest, Continuation cont)
-    {
-        // Even if the value is unused, always read the address; it might be a hardware register.
-        Emit_U16(Opcode.LDA_ABS, address);
-        Emit_U16(Opcode.LDX_ABS, address + 1);
-        EmitStoreAcc(dest);
-        EmitBranchOnAcc(cont);
-    }
-
-    // Fix up jumps that forward-referenced a label:
-    void FixReferencesTo(string label)
-    {
-        int target = GetCurrentCodeAddress();
+        // Fix references to functions:
         foreach (Fixup fixup in Fixups)
         {
-            if (fixup.Target == label)
+            if (fixup.Kind != FixupKind.None)
             {
-                if (fixup.Kind == FixupKind.Relative)
-                {
-                    EmitFix_S8(fixup.Location, target);
-                    fixup.Kind = FixupKind.None;
-                }
-                else if (fixup.Kind == FixupKind.Absolute)
+                Symbol sym;
+                if (!FindSymbol(fixup.Target, out sym)) Program.Error("function not defined: " + fixup.Target);
+                int target = sym.Value;
+
+                if (fixup.Kind == FixupKind.Absolute)
                 {
                     EmitFix_U16(fixup.Location, target);
                     fixup.Kind = FixupKind.None;
                 }
             }
         }
-    }
 
-    void DefineLocal(CType type, string name)
-    {
-        int address = AllocGlobal(SizeOf(type));
-        DefineSymbol(SymbolKind.Local, name, address, type, null);
+        // All fixups should now be fixed.
+        if (Fixups.Any(x => x.Kind != FixupKind.None)) Program.Panic("some fixups remain");
     }
 
     void CompileExpression(Expr e, int dest, Continuation cont)
@@ -465,83 +341,207 @@ partial class Compiler
         }
     }
 
-    public void CompileProgram(List<Declaration> program)
+    // Return true if the expression was constant, and therefore able to be evaluated.
+    bool EvaluateConstantExpression(Expr e, out int value)
     {
-        // First pass: Read all declarations to get type information and global symbols.
-        foreach (Declaration decl in program)
+        // TODO: Evaluate more complex constant expressions, too.
+        if (e.MatchInt(out value))
         {
-            if (decl.Kind == DeclarationKind.Function)
+            return true;
+        }
+        else if (e.Type == ExprType.Name)
+        {
+            Symbol sym;
+            if (!FindSymbol(e.Name, out sym)) Program.Error("undefined symbol: {0}", e.Name);
+
+            if (sym.Kind == SymbolKind.Constant)
             {
-                // Allocate space for each parameter and store it in the symbol table.
-                int[] addresses = new int[decl.Type.Parameters.Count];
-                for (int i = 0; i < addresses.Length; i++)
-                {
-                    addresses[i] = AllocGlobal(SizeOf(decl.Type.Parameters[i].Type));
-                }
-                
-                DefineSymbol(SymbolKind.Constant, decl.Name, 0, decl.Type, addresses);
-            }
-            else if (decl.Kind == DeclarationKind.Constant)
-            {
-                int value;
-                if (!EvaluateConstantExpression(decl.Body, out value))
-                {
-                    Program.Error("expression must be constant");
-                }
-                DefineSymbol(SymbolKind.Constant, decl.Name, value, CType.UInt16, null);
-            }
-            else
-            {
-                Program.Panic("unhandled declaration type");
+                // TODO: Make sure the constant value is not too big.
+                value = sym.Value;
+                return true;
             }
         }
 
-        // Second pass: Generate code for each function.
+        value = 0;
+        return false;
+    }
 
-        // TODO: The various vectors must jump to appropriate specially-named functions.
+    // Jump unconditionally.
+    void EmitJump(string target)
+    {
+        Emit_U16(Opcode.JMP_ABS, 0);
+        int fixupAddress = GetCurrentCodeAddress() - 2;
+        Fixups.Add(new Fixup(FixupKind.Absolute, fixupAddress, target));
+    }
 
-        foreach (Declaration decl in program)
+    void EmitLoadImmediate(int imm, int dest, Continuation cont)
+    {
+        EmitComment("load immediate");
+        if (dest == DestinationDiscard)
         {
-            if (decl.Kind == DeclarationKind.Function)
-            {
-                EmitComment("define function " + decl.Name);
-
-                // Record the address of this function's code:
-                Symbol sym;
-                if (!FindSymbol(decl.Name, out sym)) Program.Panic("a symbol should already be defined for this function.");
-                sym.Value = GetCurrentCodeAddress();
-
-                // Define each of the function's parameters as a local variable:
-                for (int i = 0; i < decl.Type.Parameters.Count; i++)
-                {
-                    FunctionParameterInfo p = decl.Type.Parameters[i];
-                    DefineSymbol(SymbolKind.Local, p.Name, sym.ParamAddresses[i], p.Type, null);
-                }
-
-                CompileExpression(decl.Body, DestinationDiscard, Continuation.Fallthrough);
-                Emit(Opcode.RTS);
-            }
+            // NOP
+        }
+        else if (dest == DestinationAcc)
+        {
+            Emit_U8(Opcode.LDA_IMM, LowByte(imm));
+            Emit_U8(Opcode.LDX_IMM, HighByte(imm));
+        }
+        else
+        {
+            Emit_U8(Opcode.LDA_IMM, LowByte(imm));
+            Emit_U8(Opcode.LDX_IMM, HighByte(imm));
+            Emit_U16(Opcode.STA_ABS, dest);
+            Emit_U16(Opcode.STX_ABS, dest + 1);
         }
 
-        // Fix references to functions:
+        if ((cont.When == JumpCondition.IfTrue && imm != 0) ||
+            (cont.When == JumpCondition.IfFalse && imm == 0))
+        {
+            EmitJump(cont.Target);
+        }
+    }
+
+    void EmitStoreAcc(int dest)
+    {
+        if (dest == DestinationDiscard || dest == DestinationAcc)
+        {
+            // NOP
+        }
+        else
+        {
+            Emit_U16(Opcode.STA_ABS, dest);
+            Emit_U16(Opcode.STX_ABS, dest + 1);
+        }
+    }
+
+    void EmitBranchOnAcc(Continuation cont)
+    {
+        if (cont.When != JumpCondition.Never)
+        {
+            // TODO: Values used as branch conditions must have a single-byte type, for easy comparison against zero.
+            EmitComment("branch on ACC");
+            Emit_U8(Opcode.ORA_IMM, 0);
+            Opcode op = (cont.When == JumpCondition.IfTrue) ? Opcode.BNE : Opcode.BEQ;
+            Emit_U8(op, 0);
+            int fixupAddress = GetCurrentCodeAddress() - 1;
+            Fixups.Add(new Fixup(FixupKind.Relative, fixupAddress, cont.Target));
+        }
+    }
+
+    void EmitLoad(int address, int dest, Continuation cont)
+    {
+        // Even if the value is unused, always read the address; it might be a hardware register.
+        Emit_U16(Opcode.LDA_ABS, address);
+        Emit_U16(Opcode.LDX_ABS, address + 1);
+        EmitStoreAcc(dest);
+        EmitBranchOnAcc(cont);
+    }
+
+    // Fix up jumps that forward-referenced a label:
+    void FixReferencesTo(string label)
+    {
+        int target = GetCurrentCodeAddress();
         foreach (Fixup fixup in Fixups)
         {
-            if (fixup.Kind != FixupKind.None)
+            if (fixup.Target == label)
             {
-                Symbol sym;
-                if (!FindSymbol(fixup.Target, out sym)) Program.Error("function not defined: " + fixup.Target);
-                int target = sym.Value;
-
-                if (fixup.Kind == FixupKind.Absolute)
+                if (fixup.Kind == FixupKind.Relative)
+                {
+                    EmitFix_S8(fixup.Location, target);
+                    fixup.Kind = FixupKind.None;
+                }
+                else if (fixup.Kind == FixupKind.Absolute)
                 {
                     EmitFix_U16(fixup.Location, target);
                     fixup.Kind = FixupKind.None;
                 }
             }
         }
+    }
 
-        // All fixups should now be fixed.
-        if (Fixups.Any(x => x.Kind != FixupKind.None)) Program.Panic("some fixups remain");
+    void DefineLocal(CType type, string name)
+    {
+        int address = AllocGlobal(SizeOf(type));
+        DefineSymbol(SymbolKind.Local, name, address, type, null);
+    }
+
+    string MakeUniqueLabel()
+    {
+        return string.Format("@L{0}", NextLabelNumber++);
+    }
+
+    byte LowByte(int n)
+    {
+        return (byte)(n & 0xFF);
+    }
+
+    byte HighByte(int n)
+    {
+        return (byte)((n >> 8) & 0xFF);
+    }
+
+    static int SizeOf(CType type)
+    {
+        if (type.Tag == CTypeTag.Simple && type.SimpleType == CSimpleType.UInt16) return 2;
+        else
+        {
+            Program.NYI();
+            return 1;
+        }
+    }
+
+    void DefineSymbol(SymbolKind kind, string name, int value, CType type, int[] paramAddresses)
+    {
+        // TODO: It is an error to define two things with the same name.
+
+        Symbols.Add(new Symbol
+        {
+            Kind = kind,
+            Name = name,
+            Value = value,
+            Type = type,
+            ParamAddresses = paramAddresses,
+        });
+    }
+
+    bool FindSymbol(string name, out Symbol found)
+    {
+        foreach (Symbol sym in Symbols)
+        {
+            if (sym.Name == name)
+            {
+                found = sym;
+                return true;
+            }
+        }
+
+        found = null;
+        return false;
+    }
+
+    // Allocate 'size' bytes in RAM and return the address.
+    int AllocGlobal(int size)
+    {
+        if (RamNext + size > RamEnd) Program.Error("Not enough RAM to allocate global.");
+        int address = RamNext;
+        RamNext += size;
+        return address;
+    }
+
+    void BeginTempScope()
+    {
+        // TODO
+    }
+
+    void EndTempScope()
+    {
+        // TODO
+    }
+
+    // TODO: Temporary variables can be freed when the current temp scope ends.
+    int AllocTemp(int size)
+    {
+        return AllocGlobal(size);
     }
 }
 
