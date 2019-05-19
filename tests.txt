@@ -197,21 +197,25 @@ void f(uint16_t arg)
 
 # Multiple functions
 #in
-#out 3 5 7
+#out 3 4 7
 define OUT = 0x6000;
 define STOP = 0x6002;
 void reset()
 {
     *OUT = f(1);
-    *OUT = f(2);
+    *OUT = g(2);
     *OUT = f(3);
     *STOP = 0;
 }
 
 void f(uint16_t arg)
 {
-    arg = arg + arg;
-    return arg + 1;
+    return arg + arg + 1;
+}
+
+void g(uint16_t arg)
+{
+    return arg + arg;
 }
 
 # Entry points
@@ -232,7 +236,7 @@ void nmi()
     *STOP = 0;
 }
 
-void reset()
+void brk()
 {
     *OUT = 0x2211;
     *STOP = 0;
