@@ -220,19 +220,19 @@ void g(uint16_t arg)
 
 # Entry points
 #in
-#out 0x1122
+#out 0x9988
 define OUT = 0x6000;
 define STOP = 0x6002;
-
-void reset()
-{
-    *OUT = 0x9988;
-    *STOP = 0;
-}
 
 void nmi()
 {
     *OUT = 0x7766;
+    *STOP = 0;
+}
+
+void reset()
+{
+    *OUT = 0x9988;
     *STOP = 0;
 }
 

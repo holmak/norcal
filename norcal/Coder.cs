@@ -83,20 +83,22 @@ partial class Compiler
     public void WriteImage(string filename)
     {
         // TODO: Use a specified CHR ROM input file.
-        // TODO: Make sure that the PRG ROM size limit isn't exceeded.
+        // TODO: Make sure that the PRG ROM size limit isn't exceeded. It must not overwrite the vector table.
 
         // PRG must be exactly 32k, and CHR must be exactly 8k.
         PadList(Prg, 32 * 1024);
         PadList(Chr, 8 * 1024);
 
-        // TODO: Change the interrupt vectors to point at appropriate user-defined functions.
         // Interrupts: nmi, reset, irq
-        Prg[0x7FFA] = 0x00;
-        Prg[0x7FFB] = 0x80;
-        Prg[0x7FFC] = 0x00;
-        Prg[0x7FFD] = 0x80;
-        Prg[0x7FFE] = 0x00;
-        Prg[0x7FFF] = 0x80;
+        int nmi = FindVectorFunction("nmi");
+        int reset = FindVectorFunction("reset");
+        int brk = FindVectorFunction("brk");
+        Prg[0x7FFA] = LowByte(nmi);
+        Prg[0x7FFB] = HighByte(nmi);
+        Prg[0x7FFC] = LowByte(reset);
+        Prg[0x7FFD] = HighByte(reset);
+        Prg[0x7FFE] = LowByte(brk);
+        Prg[0x7FFF] = HighByte(brk);
 
         using (BinaryWriter w = new BinaryWriter(new FileStream(filename, FileMode.Create)))
         {
@@ -114,5 +116,23 @@ partial class Compiler
     {
         if (list.Count > size) Program.Panic("ROM is too large");
         while (list.Count < size) list.Add(0);
+    }
+
+    int FindVectorFunction(string name)
+    {
+        Symbol sym;
+        if (FindSymbol(name, out sym))
+        {
+            // Vector functions must be functions that take no arguments and return nothing.
+            if (sym.Type.Tag != CTypeTag.Function) Program.Error("vectors must be functions");
+            if (sym.Type.Parameters.Count != 0) Program.Error("vectors cannot take arguments");
+            if (sym.Type.Subtype != CType.Void) Program.Error("vectors cannot return a value");
+            return sym.Value;
+        }
+        else
+        {
+            // TODO: Decide what to do if a vector-handling function is missing.
+            return 0;
+        }
     }
 }
