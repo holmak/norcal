@@ -38,7 +38,7 @@ partial class Compiler
                     addresses[i] = AllocGlobal(SizeOf(decl.Type.Parameters[i].Type));
                 }
 
-                DefineSymbol(SymbolKind.Constant, decl.Name, 0, decl.Type, addresses);
+                DefineSymbol(SymbolKind.Constant, SymbolScope.Global, decl.Name, 0, decl.Type, addresses);
             }
             else if (decl.Kind == DeclarationKind.Constant)
             {
@@ -47,7 +47,7 @@ partial class Compiler
                 {
                     Program.Error("expression must be constant");
                 }
-                DefineSymbol(SymbolKind.Constant, decl.Name, value, CType.UInt16, null);
+                DefineSymbol(SymbolKind.Constant, SymbolScope.Global, decl.Name, value, CType.UInt16, null);
             }
             else
             {
@@ -74,11 +74,14 @@ partial class Compiler
                 for (int i = 0; i < decl.Type.Parameters.Count; i++)
                 {
                     FunctionParameterInfo p = decl.Type.Parameters[i];
-                    DefineSymbol(SymbolKind.Local, p.Name, sym.ParamAddresses[i], p.Type, null);
+                    DefineSymbol(SymbolKind.Local, SymbolScope.Local, p.Name, sym.ParamAddresses[i], p.Type, null);
                 }
 
                 CompileExpression(decl.Body, DestinationDiscard, Continuation.Fallthrough);
                 Emit(Opcode.RTS);
+
+                // Delete any symbols that refer to local variables:
+                Symbols.RemoveAll(x => x.Scope == SymbolScope.Local);
             }
         }
 
@@ -462,7 +465,7 @@ partial class Compiler
     void DefineLocal(CType type, string name)
     {
         int address = AllocGlobal(SizeOf(type));
-        DefineSymbol(SymbolKind.Local, name, address, type, null);
+        DefineSymbol(SymbolKind.Local, SymbolScope.Local, name, address, type, null);
     }
 
     string MakeUniqueLabel()
@@ -490,13 +493,18 @@ partial class Compiler
         }
     }
 
-    void DefineSymbol(SymbolKind kind, string name, int value, CType type, int[] paramAddresses)
+    void DefineSymbol(SymbolKind kind, SymbolScope scope, string name, int value, CType type, int[] paramAddresses)
     {
-        // TODO: It is an error to define two things with the same name.
+        // It is an error to define two things with the same name.
+        if (Symbols.Any(x => x.Name == name))
+        {
+            Program.Error("symbols cannot be redefined: {0}", name);
+        }
 
         Symbols.Add(new Symbol
         {
             Kind = kind,
+            Scope = scope,
             Name = name,
             Value = value,
             Type = type,
@@ -555,10 +563,17 @@ enum SymbolKind
 class Symbol
 {
     public SymbolKind Kind;
+    public SymbolScope Scope;
     public string Name;
     public int Value;
     public CType Type;
     public int[] ParamAddresses;
+}
+
+enum SymbolScope
+{
+    Global,
+    Local,
 }
 
 class Fixup
