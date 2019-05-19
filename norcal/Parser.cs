@@ -554,7 +554,7 @@ partial class Parser
 
     void ParserError(string message)
     {
-        Program.Error("syntax error: " + message);
+        Program.Error("syntax error (line {0}, column {1}): {2}", TokenPos.Line, TokenPos.Column, message);
     }
 }
 
