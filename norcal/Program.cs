@@ -75,14 +75,16 @@ static class Program
         }
     }
 
-    public static void Error(string message)
+    public static void Error(string format, params object[] args)
     {
+        string message = string.Format(format, args);
         Console.Error.WriteLine(message);
         Environment.Exit(1);
     }
 
-    public static void Panic(string message)
+    public static void Panic(string format, params object[] args)
     {
+        string message = string.Format(format, args);
         Console.Error.WriteLine(message);
         Environment.Exit(1);
     }
