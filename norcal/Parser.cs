@@ -56,10 +56,24 @@ partial class Parser
         else
         {
             d.Kind = DeclarationKind.Function;
-            if (!TryParseType(out d.Type)) ParserError("expected a return type");
+            d.Type = new CType();
+            d.Type.Tag = CTypeTag.Function;
+            if (!TryParseType(out d.Type.Subtype)) ParserError("expected a return type");
             if (!TryParseAnyName(out d.Name)) ParserError("expected function name");
             if (!TryParse(TokenType.LPAREN)) ParserError("expected (");
-            if (!TryParse(TokenType.RPAREN)) ParserError("expected )");
+            d.Type.Parameters = new List<FunctionParameterInfo>();
+            if (!TryParse(TokenType.RPAREN))
+            {
+                while (true)
+                {
+                    FunctionParameterInfo p = new FunctionParameterInfo();
+                    if (!TryParseType(out p.Type)) ParserError("expected type for parameter");
+                    if (!TryParseAnyName(out p.Name)) ParserError("expected name for parameter");
+                    d.Type.Parameters.Add(p);
+                    if (TryParse(TokenType.RPAREN)) break;
+                    if (!TryParse(TokenType.COMMA)) ParserError("expected ,");
+                }
+            }
             if (!TryParse(TokenType.LBRACE)) ParserError("expected {");
             List<Expr> body = new List<Expr>();
             while (!TryParse(TokenType.RBRACE))
@@ -242,11 +256,27 @@ partial class Parser
     Expr ParseSuffixExpr()
     {
         Expr e = ParsePrimaryExpr();
-        while (TryParse(TokenType.LPAREN))
+        while (true)
         {
-            List<Expr> args = new List<Expr>();
-            if (!TryParse(TokenType.RPAREN)) ParserError("expected )");
-            e = Expr.MakeCall(e, args);
+            if (TryParse(TokenType.LPAREN))
+            {
+                List<Expr> args = new List<Expr>();
+                if (!TryParse(TokenType.RPAREN))
+                {
+                    while (true)
+                    {
+                        args.Add(ParseExpr());
+                        if (TryParse(TokenType.RPAREN)) break;
+                        if (!TryParse(TokenType.COMMA)) ParserError("expected ,");
+                    }
+                }
+                e = Expr.MakeCall(e, args);
+            }
+            else
+            {
+                // No more suffixes.
+                break;
+            }
         }
         return e;
     }
@@ -396,6 +426,7 @@ partial class Parser
         else if (TryRead(')')) NextType = TokenType.RPAREN;
         else if (TryRead('*')) NextType = TokenType.STAR;
         else if (TryRead('+')) NextType = TokenType.PLUS;
+        else if (TryRead(',')) NextType = TokenType.COMMA;
         else if (TryRead('-')) NextType = TokenType.MINUS;
         else if (TryRead('/'))
         {
@@ -572,6 +603,7 @@ enum TokenType
     RPAREN,
     STAR,
     PLUS,
+    COMMA,
     MINUS,
     SLASH,
     EQUALS,

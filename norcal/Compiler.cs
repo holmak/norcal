@@ -49,7 +49,7 @@ partial class Compiler
         }
     }
 
-    void DefineSymbol(SymbolKind kind, string name, int value, CType type)
+    void DefineSymbol(SymbolKind kind, string name, int value, CType type, int[] paramAddresses)
     {
         // TODO: It is an error to define two things with the same name.
 
@@ -59,6 +59,7 @@ partial class Compiler
             Name = name,
             Value = value,
             Type = type,
+            ParamAddresses = paramAddresses,
         });
     }
 
@@ -220,6 +221,12 @@ partial class Compiler
         }
     }
 
+    void DefineLocal(CType type, string name)
+    {
+        int address = AllocGlobal(SizeOf(type));
+        DefineSymbol(SymbolKind.Local, name, address, type, null);
+    }
+
     void CompileExpression(Expr e, int dest, Continuation cont)
     {
         int value;
@@ -289,8 +296,7 @@ partial class Compiler
             {
                 if (argCount != 1) Program.Panic("wrong number of args in local declaration");
                 if (args[0].Type != ExprType.Name) Program.Panic("invalid local declaration node");
-                int address = AllocGlobal(SizeOf(CType.UInt16));
-                DefineSymbol(SymbolKind.Local, args[0].Name, address, CType.UInt16);
+                DefineLocal(CType.UInt16, args[0].Name);
                 if (dest != DestinationDiscard) Program.Panic("cannot store value of expression of type 'void'");
                 if (cont.When != JumpCondition.Never) Program.Panic("cannot branch based on value of type 'void'");
             }
@@ -346,10 +352,6 @@ partial class Compiler
                 List<Expr> temps = new List<Expr>();
                 foreach (Expr arg in e.Args)
                 {
-                    // TODO: The comment below is no longer accurate:
-                    // When creating the list of "simple expressions", we can't reuse AST nodes, because
-                    // they form their own list. Instead, create a new copy of the expression,
-                    // unconnected to the rest of the AST.
                     int n;
                     Expr simpleArg;
                     if (EvaluateConstantExpression(arg, out n))
@@ -366,15 +368,27 @@ partial class Compiler
                     temps.Add(simpleArg);
                 }
 
-                // Copy all of the argument values from the temporaries into the function's call frame.
-                // TODO: Get the call frame address (and type information) from the function's type entry.
-                EmitComment("copy arguments to call frame");
-                int paramAddress = T0;
-                foreach (Expr temp in temps)
+                // Get the call frame address (and type information) from the function's type entry.
+                Symbol functionSym;
+                int[] paramAddresses;
+                if (FindSymbol(func, out functionSym))
                 {
-                    int paramSize = SizeOf(CType.UInt16);
-                    CompileExpression(temp, paramAddress, Continuation.Fallthrough);
-                    paramAddress += paramSize;
+                    paramAddresses = functionSym.ParamAddresses;
+                }
+                else
+                {
+                    // HACK: Many functions are currently just defined in the compiler, and they use
+                    // a fixed set of addresses for their arguments.
+                    // Even worse, they all assume that their parameters are word-sized.
+                    // Currently, none take more than two parameters.
+                    paramAddresses = new[] { T0, T2 };
+                }
+
+                // Copy all of the argument values from the temporaries into the function's call frame.
+                EmitComment("copy arguments to call frame");
+                for (int i = 0; i < temps.Count; i++)
+                {
+                    CompileExpression(temps[i], paramAddresses[i], Continuation.Fallthrough);
                 }
 
                 // For builtin operations, instead of jumping to a function, emit the code inline.
@@ -458,11 +472,14 @@ partial class Compiler
         {
             if (decl.Kind == DeclarationKind.Function)
             {
-                List<FunctionParameterInfo> parameters = new List<FunctionParameterInfo>();
-                // TODO: Allocate space for each parameter and store it in the symbol table.
-                // TODO: Make the parameters part of the function type.
-                CType type = CType.MakeFunction(decl.Name, parameters, decl.Type);
-                DefineSymbol(SymbolKind.Constant, decl.Name, 0, type);
+                // Allocate space for each parameter and store it in the symbol table.
+                int[] addresses = new int[decl.Type.Parameters.Count];
+                for (int i = 0; i < addresses.Length; i++)
+                {
+                    addresses[i] = AllocGlobal(SizeOf(decl.Type.Parameters[i].Type));
+                }
+                
+                DefineSymbol(SymbolKind.Constant, decl.Name, 0, decl.Type, addresses);
             }
             else if (decl.Kind == DeclarationKind.Constant)
             {
@@ -471,7 +488,7 @@ partial class Compiler
                 {
                     Program.Error("expression must be constant");
                 }
-                DefineSymbol(SymbolKind.Constant, decl.Name, value, CType.UInt16);
+                DefineSymbol(SymbolKind.Constant, decl.Name, value, CType.UInt16, null);
             }
             else
             {
@@ -493,6 +510,13 @@ partial class Compiler
                 Symbol sym;
                 if (!FindSymbol(decl.Name, out sym)) Program.Panic("a symbol should already be defined for this function.");
                 sym.Value = GetCurrentCodeAddress();
+
+                // Define each of the function's parameters as a local variable:
+                for (int i = 0; i < decl.Type.Parameters.Count; i++)
+                {
+                    FunctionParameterInfo p = decl.Type.Parameters[i];
+                    DefineSymbol(SymbolKind.Local, p.Name, sym.ParamAddresses[i], p.Type, null);
+                }
 
                 CompileExpression(decl.Body, DestinationDiscard, Continuation.Fallthrough);
                 Emit(Opcode.RTS);
@@ -534,6 +558,7 @@ class Symbol
     public string Name;
     public int Value;
     public CType Type;
+    public int[] ParamAddresses;
 }
 
 class Fixup
@@ -586,7 +611,7 @@ partial class CType
     public CTypeTag Tag;
     public CSimpleType SimpleType;
     public string Name;
-    public List<FunctionParameterInfo> FunctionParameters;
+    public List<FunctionParameterInfo> Parameters;
     public CType Subtype;
 }
 
@@ -628,7 +653,7 @@ partial class CType
         {
             Tag = CTypeTag.Function,
             Name = name,
-            FunctionParameters = parameters,
+            Parameters = parameters,
             Subtype = returnType,
         };
     }
