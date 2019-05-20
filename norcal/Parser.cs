@@ -53,6 +53,15 @@ partial class Parser
             d.Body = ParseExpr();
             if (!TryParse(TokenType.SEMICOLON)) ParserError("expected ;");
         }
+        else if (TryParseName("#define"))
+        {
+            // A preprocessor-style constant, for backward compatibility.
+            d.Kind = DeclarationKind.Constant;
+            // TODO: Infer a type for this constant.
+            d.Type = CType.UInt16;
+            if (!TryParseAnyName(out d.Name)) ParserError("expected a name");
+            d.Body = ParseExpr();
+        }
         else
         {
             d.Kind = DeclarationKind.Function;
@@ -427,6 +436,15 @@ partial class Parser
         // (Unprintable characters shouldn't be in the file, and whitespace was already skipped.)
         if (TryRead('\0')) NextType = TokenType.EOF;
         else if (GetNextChar() <= ' ') NextType = TokenType.INVALID;
+        else if (TryRead("#define"))
+        {
+            NextType = TokenType.NAME;
+            NextName = "#define";
+        }
+        else if (TryRead('#'))
+        {
+            SkipToNextLine();
+        }
         else if (TryRead('(')) NextType = TokenType.LPAREN;
         else if (TryRead(')')) NextType = TokenType.RPAREN;
         else if (TryRead('*')) NextType = TokenType.STAR;
@@ -435,23 +453,9 @@ partial class Parser
         else if (TryRead('-')) NextType = TokenType.MINUS;
         else if (TryRead('/'))
         {
-            if (TryRead('/'))
-            {
-                // This is a single-line comment:
-                while (true)
-                {
-                    char c = GetNextChar();
-                    if (c == '\n' || c == '\0') break;
-                    FetchChar();
-                }
-
-                // Fetch the token following this comment:
-                FetchToken();
-            }
-            else
-            {
-                NextType = TokenType.SLASH;
-            }
+            // Skip past single-line comments:
+            if (TryRead('/')) SkipToNextLine();
+            else NextType = TokenType.SLASH;
         }
         else if (TryRead(';')) NextType = TokenType.SEMICOLON;
         else if (TryRead('=')) NextType = TokenType.EQUALS;
@@ -497,6 +501,19 @@ partial class Parser
             if (c != ' ' && c != '\t' && c != '\r' && c != '\n') return;
             FetchChar();
         }
+    }
+
+    void SkipToNextLine()
+    {
+        while (true)
+        {
+            char c = GetNextChar();
+            if (c == '\n' || c == '\0') break;
+            FetchChar();
+        }
+
+        // Fetch the token following this line:
+        FetchToken();
     }
 
     static bool TryConvertInt(string name, out int integer)
@@ -586,6 +603,23 @@ partial class Parser
         {
             return false;
         }
+    }
+
+    bool TryRead(string s)
+    {
+        if (SafeSubstring(Input, Next, s.Length) == s)
+        {
+            Next += s.Length;
+            return true;
+        }
+        return false;
+    }
+
+    static string SafeSubstring(string s, int start, int length)
+    {
+        int maxLength = s.Length - start;
+        if (length > maxLength) length = maxLength;
+        return s.Substring(start, length);
     }
 
     void ParserError(string message)

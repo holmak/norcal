@@ -241,3 +241,20 @@ void brk()
     *OUT = 0x2211;
     *STOP = 0;
 }
+
+@ Preprocessor support
+@in
+@out 0x4433
+define OUT = 0x6000;
+define STOP = 0x6002;
+
+#include <stdlib.h>
+#include "data.h"
+#pragma pack(push, 8)
+#define ANSWER 0x4433
+
+void reset()
+{
+    *OUT = ANSWER;
+    *STOP = 0;
+}
