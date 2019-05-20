@@ -39,7 +39,7 @@ tests = []
 with open(TESTS_FILE, 'r') as f:
     test = Test()
     for line in f:
-        if line.startswith('#'):
+        if line.startswith('@'):
             # This marks the end of a test.
             # (But don't add a test with no input; this can happen at the
             # beginning of the file.)
@@ -47,11 +47,11 @@ with open(TESTS_FILE, 'r') as f:
                 tests.append(test)
                 test = Test()
         # Collect metadata for the upcoming test.
-        if line.startswith('# '):
+        if line.startswith('@ '):
             test.description = line[2:]
-        elif line.startswith('#in'):
+        elif line.startswith('@in'):
             test.input = parse_number_list(line[4:])
-        elif line.startswith('#out'):
+        elif line.startswith('@out'):
             test.expected_output = parse_number_list(line[5:])
         else:
             test.source += line
