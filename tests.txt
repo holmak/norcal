@@ -258,3 +258,20 @@ void reset()
     *OUT = ANSWER;
     *STOP = 0;
 }
+
+@ "static"
+@in
+@out
+define OUT = 0x6000;
+define STOP = 0x6002;
+
+// The "static" keyword is ignored.
+static void f()
+{
+    return 42;
+}
+
+void reset()
+{
+    *STOP = 0;
+}

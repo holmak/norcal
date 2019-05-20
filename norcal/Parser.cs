@@ -42,6 +42,9 @@ partial class Parser
 
     Declaration ParseDeclaration()
     {
+        // TODO: Items with static scope should not be visible outside their file.
+        bool isStatic = TryParseName("static");
+
         Declaration d = new Declaration();
         if (TryParseName("define"))
         {
