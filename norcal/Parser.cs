@@ -50,7 +50,7 @@ partial class Parser
         {
             d.Kind = DeclarationKind.Constant;
             // TODO: Parse a type name.
-            d.Type = CType.UInt16;
+            d.TypeName = "uint16_t";
             if (!TryParseAnyName(out d.Name)) ParserError("expected a name");
             if (!TryParse(TokenType.EQUALS)) ParserError("expected =");
             d.Body = ParseExpr();
@@ -61,27 +61,25 @@ partial class Parser
             // A preprocessor-style constant, for backward compatibility.
             d.Kind = DeclarationKind.Constant;
             // TODO: Infer a type for this constant.
-            d.Type = CType.UInt16;
+            d.TypeName = "uint16_t";
             if (!TryParseAnyName(out d.Name)) ParserError("expected a name");
             d.Body = ParseExpr();
         }
         else
         {
             d.Kind = DeclarationKind.Function;
-            d.Type = new CType();
-            d.Type.Tag = CTypeTag.Function;
-            if (!TryParseType(out d.Type.Subtype)) ParserError("expected a return type");
+            if (!TryParseType(out d.TypeName)) ParserError("expected a return type");
             if (!TryParseAnyName(out d.Name)) ParserError("expected function name");
             if (!TryParse(TokenType.LPAREN)) ParserError("expected (");
-            d.Type.Parameters = new List<FunctionParameterInfo>();
+            d.Fields = new List<NamedField>();
             if (!TryParse(TokenType.RPAREN))
             {
                 while (true)
                 {
-                    FunctionParameterInfo p = new FunctionParameterInfo();
-                    if (!TryParseType(out p.Type)) ParserError("expected type for parameter");
-                    if (!TryParseAnyName(out p.Name)) ParserError("expected name for parameter");
-                    d.Type.Parameters.Add(p);
+                    string typename, name;
+                    if (!TryParseType(out typename)) ParserError("expected type for parameter");
+                    if (!TryParseAnyName(out name)) ParserError("expected name for parameter");
+                    d.Fields.Add(new NamedField(typename, name));
                     if (TryParse(TokenType.RPAREN)) break;
                     if (!TryParse(TokenType.COMMA)) ParserError("expected ,");
                 }
@@ -100,8 +98,8 @@ partial class Parser
     Expr ParseStatement()
     {
         Expr stmt;
-        CType type;
-        if (TryParseType(out type))
+        string typename;
+        if (TryParseType(out typename))
         {
             // Declare a local variable:
             string localname;
@@ -111,6 +109,7 @@ partial class Parser
             if (TryParse(TokenType.EQUALS)) value = ParseExpr();
             else value = Expr.MakeInt(0);
             if (!TryParse(TokenType.SEMICOLON)) ParserError("expected ;");
+            // TODO: Include the type in local var declarations.
             stmt = MakeSequenceExpr(new List<Expr>
             {
                 Expr.MakeCall(Expr.MakeName("$local"), Expr.MakeName(localname)),
@@ -403,24 +402,34 @@ partial class Parser
         }
     }
 
-    bool TryParseType(out CType type)
+    bool TryParseType(out string typename)
     {
-        if (TryParseName("void"))
+        foreach (string n in BuiltinTypeNames)
         {
-            type = CType.Void;
+            if (TryParseName(n))
+            {
+                typename = n;
+                return true;
+            }
+        }
+
+        if (TryParseName("struct"))
+        {
+            string name;
+            if (!TryParseAnyName(out name)) ParserError("expected a struct type name");
+            typename = "struct " + name;
             return true;
         }
-        else if (TryParseName("uint16_t"))
-        {
-            type = CType.UInt16;
-            return true;
-        }
-        else
-        {
-            type = CType.Void;
-            return false;
-        }
+
+        typename = null;
+        return false;
     }
+
+    static string[] BuiltinTypeNames = new[]
+    {
+        "void",
+        "uint16_t",
+    };
 
     void FetchToken()
     {

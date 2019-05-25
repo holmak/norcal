@@ -214,9 +214,22 @@ enum DeclarationKind
 class Declaration
 {
     public DeclarationKind Kind;
-    public CType Type;
+    public string TypeName;
     public string Name;
     public Expr Body;
+    public List<NamedField> Fields;
+}
+
+class NamedField
+{
+    public string TypeName;
+    public string Name;
+
+    public NamedField(string typename, string name)
+    {
+        TypeName = typename;
+        Name = name;
+    }
 }
 
 enum Opcode
