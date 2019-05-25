@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -92,8 +93,19 @@ static class Program
     public static void NYI() => Panic("not yet implemented");
 }
 
+[DebuggerDisplay("{DebuggerDisplay,nq}")]
 partial class Expr
 {
+    string DebuggerDisplay
+    {
+        get
+        {
+            if (Type == ExprType.Int) return Int.ToString();
+            else if (Type == ExprType.Name) return Name;
+            else return string.Format("({0} ... )", Function.DebuggerDisplay);
+        }
+    }
+
     public static Expr MakeInt(int n)
     {
         Expr e = new Expr();
