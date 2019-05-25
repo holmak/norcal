@@ -463,6 +463,7 @@ partial class Parser
         else if (TryRead('+')) NextType = TokenType.PLUS;
         else if (TryRead(',')) NextType = TokenType.COMMA;
         else if (TryRead('-')) NextType = TokenType.MINUS;
+        else if (TryRead('.')) NextType = TokenType.PERIOD;
         else if (TryRead('/'))
         {
             // Skip past single-line comments:
@@ -656,6 +657,7 @@ enum TokenType
     PLUS,
     COMMA,
     MINUS,
+    PERIOD,
     SLASH,
     EQUALS,
     SEMICOLON,
