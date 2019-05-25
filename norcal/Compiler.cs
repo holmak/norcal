@@ -63,8 +63,6 @@ partial class Compiler
 
         // Second pass: Generate code for each function.
 
-        // TODO: The various vectors must jump to appropriate specially-named functions.
-
         foreach (Declaration decl in program)
         {
             if (decl.Kind == DeclarationKind.Function)
