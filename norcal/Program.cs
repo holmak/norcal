@@ -131,6 +131,8 @@ partial class Expr
         return e;
     }
 
+    public Expr Call(params Expr[] args) => MakeCall(this, args);
+
     public static Expr MakeCall(Expr func, Expr arg)
     {
         return MakeCall(func, new Expr[] { arg });
@@ -172,6 +174,12 @@ partial class Expr
             name = null;
             return false;
         }
+    }
+
+    public bool EqualsName(Expr other)
+    {
+        if (other.Type != ExprType.Name) throw new ArgumentException("Other value must be a name.");
+        return Type == ExprType.Name && other.Type == ExprType.Name && Name == other.Name;
     }
 
     public bool MatchUnaryCall(string function, out Expr arg)
@@ -230,6 +238,18 @@ class NamedField
         TypeName = typename;
         Name = name;
     }
+}
+
+/// <summary>
+/// Names of special functions, intrinsic functions, and special forms.
+/// </summary>
+static class Special
+{
+    public static readonly Expr Add = Expr.MakeName("$add");
+    public static readonly Expr AddressOf = Expr.MakeName("$addr_of");
+    public static readonly Expr Load = Expr.MakeName("load");
+    public static readonly Expr OffsetOf = Expr.MakeName("offset_of");
+    public static readonly Expr TypeOf = Expr.MakeName("type_of");
 }
 
 enum Opcode
