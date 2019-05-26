@@ -30,6 +30,7 @@ class Test:
         self.input = []
         self.expected_output = []
         self.actual_output = []
+        self.expect_error = False
 
 def parse_number_list(text):
     return [int(s, 0) for s in text.split()]
@@ -53,6 +54,8 @@ with open(TESTS_FILE, 'r') as f:
             test.input = parse_number_list(line[4:])
         elif line.startswith('@out'):
             test.expected_output = parse_number_list(line[5:])
+        elif line.startswith('@error'):
+            test.expect_error = True
         else:
             test.source += line
     # Add the final test:
@@ -89,9 +92,15 @@ for test in tests:
     process = run_process([COMPILER, SOURCE_FILE, IMAGE_FILE])
     if process == TIMED_OUT:
         test.actual_output = '(compiler timed out)'
+        test.passed = False
         continue
-    elif process.returncode != 0:
+    elif process.returncode == 1:
         test.actual_output = 'compiler error:\n' + process.stderr.decode('utf_8')
+        test.passed = test.expect_error
+        continue
+    elif process.returncode > 1:
+        test.actual_output = 'compiler panic:\n' + process.stderr.decode('utf_8')
+        test.passed = False
         continue
     test.disasm = read_text_file(DISASM_FILE)
     # Run:
@@ -110,7 +119,10 @@ for test in tests:
         test.actual_output = 'simulator error:\n' + process.stderr.decode('utf_8')
         continue
     test.actual_output = parse_number_list(process.stdout.decode('utf_8'))
-    test.passed = (test.actual_output == test.expected_output)
+    if test.expect_error:
+        test.passed = False
+    else:
+        test.passed = (test.actual_output == test.expected_output)
 
 #############################################################################
 # Create a report summarizing the test results.
@@ -212,7 +224,11 @@ with open(REPORT_FILE, 'w') as report:
         report.write('<td><details><summary>Show</summary><pre>' + pre(test.disasm) + '</pre></details></td>\n')
         report.write('<td><pre>' + pre_data(test.input) + '</pre></td>\n')
         report.write('<td><pre>' + pre_data(test.actual_output) + '</pre></td>\n')
-        report.write('<td><pre>' + pre_data(test.expected_output) + '</pre></td>\n')
+        if test.expect_error:
+            expected_output = pre('(error)')
+        else:
+            expected_output = pre_data(test.expected_output)
+        report.write('<td><pre>' + expected_output + '</pre></td>\n')
         report.write('</tr>\n')
     report.write(html_footer1)
     if first_error_id is not None:

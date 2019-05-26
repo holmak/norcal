@@ -87,7 +87,7 @@ static class Program
     {
         string message = string.Format(format, args);
         Console.Error.WriteLine(message);
-        Environment.Exit(1);
+        Environment.Exit(2);
     }
 
     public static void NYI() => Panic("not yet implemented");
