@@ -49,8 +49,7 @@ partial class Parser
         if (TryParseName("define"))
         {
             d.Kind = DeclarationKind.Constant;
-            // TODO: Parse a type name.
-            d.Type = CType.UInt16;
+            if (!TryParseType(out d.Type)) ParserError("expected a type");
             if (!TryParseAnyName(out d.Name)) ParserError("expected a name");
             if (!TryParse(TokenType.EQUALS)) ParserError("expected =");
             d.Body = ParseExpr();
@@ -408,18 +407,27 @@ partial class Parser
         if (TryParseName("void"))
         {
             type = CType.Void;
-            return true;
         }
         else if (TryParseName("uint16_t"))
         {
             type = CType.UInt16;
-            return true;
         }
         else
         {
             type = null;
             return false;
         }
+
+        while (TryParse(TokenType.STAR))
+        {
+            type = new CType
+            {
+                Tag = CTypeTag.Pointer,
+                Subtype = type,
+            };
+        }
+
+        return true;
     }
 
     void FetchToken()

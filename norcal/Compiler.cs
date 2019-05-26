@@ -630,7 +630,7 @@ struct Continuation
     public static readonly Continuation Fallthrough = new Continuation(JumpCondition.Never, null);
 }
 
-// CType = SimpleType | FunctionType (name, params, returnType) | ...
+// CType = SimpleType | FunctionType (name, params, returnType) | Pointer subtype
 partial class CType
 {
     public CTypeTag Tag;
@@ -644,6 +644,7 @@ enum CTypeTag
 {
     Simple,
     Function,
+    Pointer,
 }
 
 enum CSimpleType
