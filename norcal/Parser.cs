@@ -50,7 +50,7 @@ partial class Parser
         {
             d.Kind = DeclarationKind.Constant;
             // TODO: Parse a type name.
-            d.TypeName = "uint16_t";
+            d.Type = CType.UInt16;
             if (!TryParseAnyName(out d.Name)) ParserError("expected a name");
             if (!TryParse(TokenType.EQUALS)) ParserError("expected =");
             d.Body = ParseExpr();
@@ -61,14 +61,14 @@ partial class Parser
             // A preprocessor-style constant, for backward compatibility.
             d.Kind = DeclarationKind.Constant;
             // TODO: Infer a type for this constant.
-            d.TypeName = "uint16_t";
+            d.Type = CType.UInt16;
             if (!TryParseAnyName(out d.Name)) ParserError("expected a name");
             d.Body = ParseExpr();
         }
         else
         {
             d.Kind = DeclarationKind.Function;
-            if (!TryParseType(out d.TypeName)) ParserError("expected a return type");
+            if (!TryParseType(out d.Type)) ParserError("expected a return type");
             if (!TryParseAnyName(out d.Name)) ParserError("expected function name");
             if (!TryParse(TokenType.LPAREN)) ParserError("expected (");
             d.Fields = new List<NamedField>();
@@ -76,10 +76,11 @@ partial class Parser
             {
                 while (true)
                 {
-                    string typename, name;
-                    if (!TryParseType(out typename)) ParserError("expected type for parameter");
+                    CType type;
+                    string name;
+                    if (!TryParseType(out type)) ParserError("expected type for parameter");
                     if (!TryParseAnyName(out name)) ParserError("expected name for parameter");
-                    d.Fields.Add(new NamedField(typename, name));
+                    d.Fields.Add(new NamedField(type, name));
                     if (TryParse(TokenType.RPAREN)) break;
                     if (!TryParse(TokenType.COMMA)) ParserError("expected ,");
                 }
@@ -98,8 +99,8 @@ partial class Parser
     Expr ParseStatement()
     {
         Expr stmt;
-        string typename;
-        if (TryParseType(out typename))
+        CType type;
+        if (TryParseType(out type))
         {
             // Declare a local variable:
             string localname;
@@ -402,34 +403,24 @@ partial class Parser
         }
     }
 
-    bool TryParseType(out string typename)
+    bool TryParseType(out CType type)
     {
-        foreach (string n in BuiltinTypeNames)
+        if (TryParseName("void"))
         {
-            if (TryParseName(n))
-            {
-                typename = n;
-                return true;
-            }
-        }
-
-        if (TryParseName("struct"))
-        {
-            string name;
-            if (!TryParseAnyName(out name)) ParserError("expected a struct type name");
-            typename = "struct " + name;
+            type = CType.Void;
             return true;
         }
-
-        typename = null;
-        return false;
+        else if (TryParseName("uint16_t"))
+        {
+            type = CType.UInt16;
+            return true;
+        }
+        else
+        {
+            type = null;
+            return false;
+        }
     }
-
-    static string[] BuiltinTypeNames = new[]
-    {
-        "void",
-        "uint16_t",
-    };
 
     void FetchToken()
     {

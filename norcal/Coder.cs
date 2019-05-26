@@ -125,7 +125,7 @@ partial class Compiler
         {
             // Vector functions must be functions that take no arguments and return nothing.
             if (sym.Type.Tag != CTypeTag.Function) Program.Error("vectors must be functions");
-            if (sym.Type.ParameterTypes.Count != 0) Program.Error("vectors cannot take arguments");
+            if (sym.Type.ParameterTypes.Length != 0) Program.Error("vectors cannot take arguments");
             if (sym.Type.Subtype != CType.Void) Program.Error("vectors cannot return a value");
             return sym.Value;
         }

@@ -31,19 +31,18 @@ partial class Compiler
         {
             if (decl.Kind == DeclarationKind.Function)
             {
-                CType returnType = FindTypeByName(decl.TypeName);
-                List<CType> paramTypes = new List<CType>();
-
                 // Allocate space for each parameter and store it in the symbol table.
-                int[] addresses = new int[decl.Fields.Count];
-                for (int i = 0; i < addresses.Length; i++)
+                int paramCount = decl.Fields.Count;
+                CType[] paramTypes = new CType[paramCount];
+                int[] addresses = new int[paramCount];
+                for (int i = 0; i < paramCount; i++)
                 {
-                    CType type = FindTypeByName(decl.Fields[i].TypeName);
-                    paramTypes.Add(type);
+                    CType type = decl.Fields[i].Type;
+                    paramTypes[i] = type;
                     addresses[i] = AllocGlobal(SizeOf(type));
                 }
 
-                CType functionType = CType.MakeFunction(paramTypes, returnType);
+                CType functionType = CType.MakeFunction(paramTypes, decl.Type);
                 DefineSymbol(SymbolKind.Constant, SymbolScope.Global, decl.Name, 0, functionType, addresses);
             }
             else if (decl.Kind == DeclarationKind.Constant)
@@ -78,8 +77,7 @@ partial class Compiler
                 for (int i = 0; i < decl.Fields.Count; i++)
                 {
                     NamedField f = decl.Fields[i];
-                    CType type = FindTypeByName(f.TypeName);
-                    DefineSymbol(SymbolKind.Local, SymbolScope.Local, f.Name, sym.ParamAddresses[i], type, null);
+                    DefineSymbol(SymbolKind.Local, SymbolScope.Local, f.Name, sym.ParamAddresses[i], f.Type, null);
                 }
 
                 CompileExpression(decl.Body, DestinationDiscard, Continuation.Fallthrough);
@@ -539,17 +537,6 @@ partial class Compiler
         return false;
     }
 
-    CType FindTypeByName(string typename)
-    {
-        if (typename == "void") return CType.Void;
-        else if (typename == "uint16_t") return CType.UInt16;
-        else
-        {
-            Program.Error("type not defined: " + typename);
-            return null;
-        }
-    }
-
     // Allocate 'size' bytes in RAM and return the address.
     int AllocGlobal(int size)
     {
@@ -649,7 +636,7 @@ partial class CType
     public CTypeTag Tag;
     public CSimpleType SimpleType;
     public string Name;
-    public List<CType> ParameterTypes;
+    public CType[] ParameterTypes;
     public CType Subtype;
 }
 
@@ -679,7 +666,7 @@ partial class CType
         };
     }
 
-    public static CType MakeFunction(List<CType> parameterTypes, CType returnType)
+    public static CType MakeFunction(CType[] parameterTypes, CType returnType)
     {
         return new CType
         {

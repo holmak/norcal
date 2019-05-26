@@ -222,7 +222,7 @@ enum DeclarationKind
 class Declaration
 {
     public DeclarationKind Kind;
-    public string TypeName;
+    public CType Type;
     public string Name;
     public Expr Body;
     public List<NamedField> Fields;
@@ -230,12 +230,12 @@ class Declaration
 
 class NamedField
 {
-    public string TypeName;
+    public CType Type;
     public string Name;
 
-    public NamedField(string typename, string name)
+    public NamedField(CType type, string name)
     {
-        TypeName = typename;
+        Type = type;
         Name = name;
     }
 }
