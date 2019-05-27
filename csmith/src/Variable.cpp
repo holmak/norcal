@@ -971,9 +971,9 @@ Variable::hash(std::ostream& out) const
                 Output(out);
                 out << "), \"" << name << "\", print_hash_value);" << endl;
             } else {
-                out << "    *OUT = ";
+                out << "    OUT(";
                 Output(out);
-                out << ";" << endl;
+                out << ");" << endl;
             }
 		}
 		else {

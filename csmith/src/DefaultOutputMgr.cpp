@@ -210,6 +210,7 @@ DefaultOutputMgr::Output()
 		RandomOutputDefs();
 	}
 	else {
+		out << "#include \"common.h\"" << endl << endl;
 		OutputStructUnionDeclarations(out);
 		OutputGlobalVariables(out);
 		OutputForwardDeclarations(out);

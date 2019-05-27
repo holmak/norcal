@@ -130,7 +130,7 @@ void
 ExtensionMgr::OutputTail(ostream &out)
 {
 	if (ExtensionMgr::extension_ == NULL) {
-		out << "    *STOP = 0;" << endl;
+		out << "    STOP();" << endl;
 	}
 	else {
 		ExtensionMgr::extension_->OutputTail(out);
@@ -145,8 +145,8 @@ ExtensionMgr::OutputInit(std::ostream &out)
 			out << "int main (int argc, char* argv[])" << endl;
 		}
 		else {
-			out << "define OUT = 0x6000;" << endl;
-			out << "define STOP = 0x6002;" << endl;
+			//out << "define OUT = 0x6000;" << endl;
+			//out << "define STOP = 0x6002;" << endl;
 			out << "void reset()" << endl;
 		}
 		out << "{" << endl;

@@ -832,7 +832,7 @@ ArrayVariable::hash(std::ostream& out) const
 				out << "\"" << vname << field_names[j] << "\", print_hash_value);" << endl;
 			} else {
 				output_tab(out, indent);
-				out << "*OUT = " << vname << field_names[j] << ";";
+				out << "OUT(" << vname << field_names[j] << ");";
 				if (j < field_names.size() - 1)
 				{
 					out << endl;
