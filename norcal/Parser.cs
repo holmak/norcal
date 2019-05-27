@@ -90,7 +90,7 @@ partial class Parser
             {
                 body.Add(ParseStatement());
             }
-            d.Body = MakeSequenceExpr(body);
+            d.Body = Expr.MakeSequence(body.ToArray());
         }
         return d;
     }
@@ -110,9 +110,9 @@ partial class Parser
             else value = Expr.MakeInt(0);
             if (!TryParse(TokenType.SEMICOLON)) ParserError("expected ;");
             // TODO: Include the type in local var declarations.
-            stmt = MakeSequenceExpr(new List<Expr>
+            stmt = Expr.MakeSequence(new[]
             {
-                Expr.MakeCall(Expr.MakeName("$local"), Expr.MakeName(localname)),
+                Expr.MakeLocal(localname),
                 MakeAssignExpr(Expr.MakeName(localname), value),
             });
         }
@@ -129,17 +129,17 @@ partial class Parser
                 {
                     body.Add(ParseStatement());
                 }
-                then = MakeSequenceExpr(body);
+                then = Expr.MakeSequence(body.ToArray());
             }
             else
             {
                 then = ParseStatement();
             }
-            stmt = Expr.MakeCall(Expr.MakeName("$switch"), test, then);
+            stmt = Expr.MakeSwitch(test, then);
         }
         else if (TryParseName("return"))
         {
-            stmt = Expr.MakeCall(Expr.MakeName("$return"), ParseExpr());
+            stmt = Expr.MakeReturn(ParseExpr());
             if (!TryParse(TokenType.SEMICOLON)) ParserError("expected ;");
         }
         else
@@ -230,11 +230,11 @@ partial class Parser
         {
             if (TryParse(TokenType.PLUS))
             {
-                e = Expr.MakeCall(Expr.MakeName("$add"), e, ParseMultiplyExpr());
+                e = Expr.MakeCall("$add", e, ParseMultiplyExpr());
             }
             else if (TryParse(TokenType.MINUS))
             {
-                e = Expr.MakeCall(Expr.MakeName("$sub"), e, ParseMultiplyExpr());
+                e = Expr.MakeCall("$sub", e, ParseMultiplyExpr());
             }
             else
             {
@@ -260,7 +260,7 @@ partial class Parser
     {
         if (TryParse(TokenType.STAR))
         {
-            return Expr.MakeCall(Expr.MakeName("$load"), ParseSuffixExpr());
+            return Expr.MakeCall("$load", ParseSuffixExpr());
         }
         else
         {
@@ -286,7 +286,16 @@ partial class Parser
                         if (!TryParse(TokenType.COMMA)) ParserError("expected ,");
                     }
                 }
-                e = Expr.MakeCall(e, args);
+
+                string function;
+                if (e.MatchName(out function))
+                {
+                    e = Expr.MakeCall(function, args);
+                }
+                else
+                {
+                    ParserError("functions may only be called by name");
+                }
             }
             else
             {
@@ -323,11 +332,6 @@ partial class Parser
         }
     }
 
-    Expr MakeSequenceExpr(List<Expr> args)
-    {
-        return Expr.MakeCall(Expr.MakeName("$sequence"), args);
-    }
-
     Expr AddressOf(Expr e)
     {
         Expr inner;
@@ -337,13 +341,13 @@ partial class Parser
         }
         else
         {
-            return Expr.MakeCall(Expr.MakeName("$addr_of"), e);
+            return Expr.MakeAddressOf(e);
         }
     }
 
     Expr MakeAssignExpr(Expr dst, Expr src)
     {
-        return Expr.MakeCall(Expr.MakeName("$assign"), AddressOf(dst), src);
+        return Expr.MakeCall("$assign", AddressOf(dst), src);
     }
 
     bool TryParse(TokenType expected)

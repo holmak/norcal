@@ -65,14 +65,8 @@ static class Program
         }
         else
         {
-            Console.Write("(");
-            PrintExpr(e.Function);
-            Console.Write(" ");
-            for (int i = 0; i < e.Args.Length; i++)
-            {
-                PrintExpr(e.Args[i]);
-                Console.Write((i < e.Args.Length - 1) ? " " : ")");
-            }
+            // TODO: Reimplement the pretty-printing code.
+            Console.Write("(...)");
         }
     }
 
@@ -100,57 +94,115 @@ partial class Expr
     {
         get
         {
-            if (Type == ExprType.Int) return Int.ToString();
-            else if (Type == ExprType.Name) return Name;
-            else return string.Format("({0} ... )", Function.DebuggerDisplay);
+            switch (Tag)
+            {
+                case ExprTag.Int:
+                    return Int.ToString();
+                case ExprTag.Name:
+                    return Name;
+                case ExprTag.Call:
+                    return string.Format("({0} ...)", Name);
+                case ExprTag.Sequence:
+                    return string.Format("($sequence {0})", string.Join(" ", Args.Select(x => x.DebuggerDisplay)));
+                case ExprTag.Local:
+                    return string.Format("($local {0})", Name);
+                case ExprTag.AddressOf:
+                    return string.Format("($address_of {0})", Args[0].DebuggerDisplay);
+                case ExprTag.Switch:
+                    return string.Format("($switch ...)");
+                case ExprTag.Return:
+                    return string.Format("($return {0})", Args[0].DebuggerDisplay);
+                default:
+                    throw new NotImplementedException();
+            }
         }
     }
 
     public static Expr MakeInt(int n)
     {
-        Expr e = new Expr();
-        e.Type = ExprType.Int;
-        e.Int = n;
-        return e;
+        return new Expr
+        {
+            Tag = ExprTag.Int,
+            Int = n,
+        };
     }
 
     public static Expr MakeName(string name)
     {
-        Expr e = new Expr();
-        e.Type = ExprType.Name;
-        e.Name = name;
-        return e;
+        return new Expr
+        {
+            Tag = ExprTag.Name,
+            Name = name,
+        };
     }
 
-    public static Expr MakeCall(Expr function, IEnumerable<Expr> args)
+    public static Expr MakeSequence(Expr[] statements)
+    {
+        return new Expr
+        {
+            Tag = ExprTag.Sequence,
+            Args = statements,
+        };
+    }
+
+    public static Expr MakeLocal(string name)
+    {
+        return new Expr
+        {
+            Tag = ExprTag.Local,
+            Name = name,
+        };
+    }
+
+    public static Expr MakeAddressOf(Expr arg)
+    {
+        return new Expr
+        {
+            Tag = ExprTag.AddressOf,
+            Args = new[] { arg },
+        };
+    }
+
+    public static Expr MakeSwitch(Expr condition, Expr body)
+    {
+        return new Expr
+        {
+            Tag = ExprTag.Switch,
+            Args = new[] { condition, body },
+        };
+    }
+
+    public static Expr MakeReturn(Expr arg)
+    {
+        return new Expr
+        {
+            Tag = ExprTag.Return,
+            Args = new[] { arg },
+        };
+    }
+
+    public static Expr MakeCall(string function, IEnumerable<Expr> args)
     {
         Expr e = new Expr();
-        e.Type = ExprType.Call;
-        e.Function = function;
+        e.Tag = ExprTag.Call;
+        e.Name = function;
         e.Args = args.ToArray();
         return e;
     }
 
-    public Expr Call(params Expr[] args) => MakeCall(this, args);
-
-    public static Expr MakeCall(Expr func, Expr arg)
+    public static Expr MakeCall(string function, Expr arg)
     {
-        return MakeCall(func, new Expr[] { arg });
+        return MakeCall(function, new Expr[] { arg });
     }
 
-    public static Expr MakeCall(Expr func, Expr left, Expr right)
+    public static Expr MakeCall(string function, Expr left, Expr right)
     {
-        return MakeCall(func, new Expr[] { left, right });
-    }
-
-    public static Expr MakeLoad(int address)
-    {
-        return MakeCall(MakeName("$load"), MakeInt(address));
+        return MakeCall(function, new Expr[] { left, right });
     }
 
     public bool MatchInt(out int n)
     {
-        if (Type == ExprType.Int)
+        if (Tag == ExprTag.Int)
         {
             n = Int;
             return true;
@@ -164,7 +216,7 @@ partial class Expr
 
     public bool MatchName(out string name)
     {
-        if (Type == ExprType.Name)
+        if (Tag == ExprTag.Name)
         {
             name = Name;
             return true;
@@ -176,15 +228,9 @@ partial class Expr
         }
     }
 
-    public bool EqualsName(Expr other)
-    {
-        if (other.Type != ExprType.Name) throw new ArgumentException("Other value must be a name.");
-        return Type == ExprType.Name && other.Type == ExprType.Name && Name == other.Name;
-    }
-
     public bool MatchUnaryCall(string function, out Expr arg)
     {
-        if (Type == ExprType.Call && Function.Type == ExprType.Name && Function.Name == function && Args.Length == 1)
+        if (Tag == ExprTag.Call && Args.Length == 1 && Name == function)
         {
             arg = Args[0];
             return true;
@@ -197,19 +243,23 @@ partial class Expr
     }
 }
 
-enum ExprType
+enum ExprTag
 {
-    Int,
-    Name,
-    Call,
+    Int,        // number
+    Name,       // name
+    Sequence,   // args...
+    Local,      // name
+    AddressOf,  // arg
+    Switch,     // cond, body, repeat...
+    Return,     // arg
+    Call,       // name, args...
 }
 
 partial class Expr
 {
-    public ExprType Type;
+    public ExprTag Tag;
     public int Int;
     public string Name;
-    public Expr Function;
     public Expr[] Args;
 }
 
@@ -238,18 +288,6 @@ class NamedField
         Type = type;
         Name = name;
     }
-}
-
-/// <summary>
-/// Names of special functions, intrinsic functions, and special forms.
-/// </summary>
-static class Special
-{
-    public static readonly Expr Add = Expr.MakeName("$add");
-    public static readonly Expr AddressOf = Expr.MakeName("$addr_of");
-    public static readonly Expr Load = Expr.MakeName("load");
-    public static readonly Expr OffsetOf = Expr.MakeName("offset_of");
-    public static readonly Expr TypeOf = Expr.MakeName("type_of");
 }
 
 enum Opcode

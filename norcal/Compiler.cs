@@ -116,7 +116,7 @@ partial class Compiler
         {
             EmitLoadImmediate(value, dest, cont);
         }
-        else if (e.Type == ExprType.Name)
+        else if (e.Tag == ExprTag.Name)
         {
             Symbol sym;
             if (!FindSymbol(e.Name, out sym)) Program.Error("undefined symbol");
@@ -124,109 +124,100 @@ partial class Compiler
             int address = sym.Value;
             EmitLoad(address, dest, cont);
         }
-        else if (e.Type == ExprType.Call)
+        else if (e.Tag == ExprTag.Sequence)
         {
-            string func;
-            if (!e.Function.MatchName(out func)) Program.Panic("calling via function pointer is not yet implemented");
-            int argCount = e.Args.Length;
-            Expr[] args = e.Args;
+            for (int i = 0; i < e.Args.Length; i++)
+            {
+                Expr subexpr = e.Args[i];
+                EmitComment("begin new statement");
+                // Drop the result of each expression except the last.
+                bool isLast = (i == e.Args.Length - 1);
+                if (!isLast)
+                {
+                    CompileExpression(subexpr, DestinationDiscard, Continuation.Fallthrough);
+                }
+                else
+                {
+                    CompileExpression(subexpr, dest, cont);
+                }
+            }
+        }
+        else if (e.Tag == ExprTag.Local)
+        {
+            DefineLocal(CType.UInt16, e.Name);
+            if (dest != DestinationDiscard) Program.Panic("cannot store value of expression of type 'void'");
+            if (cont.When != JumpCondition.Never) Program.Panic("cannot branch based on value of type 'void'");
+        }
+        else if (e.Tag == ExprTag.AddressOf)
+        {
+            if (e.Args.Length != 1) Program.Panic("wrong number of args");
+            if (e.Args[0].Tag == ExprTag.Name)
+            {
+                Symbol sym;
+                if (!FindSymbol(e.Args[0].Name, out sym)) Program.Error("undefined symbol");
+                if (sym.Kind != SymbolKind.Local) Program.NYI();
+                int address = sym.Value;
+                EmitLoadImmediate(address, dest, cont);
+            }
+            else
+            {
+                Program.NYI();
+            }
+        }
+        else if (e.Tag == ExprTag.Switch)
+        {
+            if (e.Args.Length != 2) Program.Panic("wrong number of items in switch expression");
+            Expr test = e.Args[0];
+            Expr then = e.Args[1];
+            string end = MakeUniqueLabel();
 
-            // TODO: Make sure that operators and functions are passed the correct number and type of arguments.
+            // TODO: Handle any number of clauses. For each clause:
+            {
+                string nextClause = MakeUniqueLabel();
+                // If this clause's condition is false, try the next clause:
+                CompileExpression(test, DestinationDiscard, new Continuation(JumpCondition.IfFalse, nextClause));
+                // If the condition was true, execute the clause body:
+                CompileExpression(then, dest, cont);
+                // After executing the body of a clause, skip the rest of the clauses:
+                EmitJump(end);
+                EmitComment("end of switch clause");
+                FixReferencesTo(nextClause);
+            }
 
+            EmitComment("end of switch");
+            FixReferencesTo(end);
+        }
+        else if (e.Tag == ExprTag.Return)
+        {
+            if (e.Args.Length != 1) Program.Panic("wrong number of items in switch expression");
+            EmitComment("return");
+            CompileExpression(e.Args[0], DestinationAcc, Continuation.Fallthrough);
+            Emit(Opcode.RTS);
+        }
+        else if (e.Tag == ExprTag.Call)
+        {
             // Handle certain functions as "intrinsics"; otherwise use the general function call mechanism.
             int addr;
-            if (func == "$load" && EvaluateConstantExpression(args[0], out addr))
+            if (e.Name == "$load" && EvaluateConstantExpression(e.Args[0], out addr))
             {
                 EmitLoad(addr, dest, cont);
             }
-            else if (func == "$assign" && EvaluateConstantExpression(args[0], out addr))
+            else if (e.Name == "$assign" && EvaluateConstantExpression(e.Args[0], out addr))
             {
                 if (dest == DestinationDiscard)
                 {
                     EmitComment("assign to constant address");
                     // Let the sub-expression handle storing the data _and_ any conditional branch.
-                    CompileExpression(args[1], addr, cont);
+                    CompileExpression(e.Args[1], addr, cont);
                 }
                 else
                 {
                     EmitComment("assign to constant address, and produce the assigned value");
-                    CompileExpression(args[1], DestinationAcc, Continuation.Fallthrough);
+                    CompileExpression(e.Args[1], DestinationAcc, Continuation.Fallthrough);
                     EmitStoreAcc(addr);
                     EmitStoreAcc(dest);
                     EmitBranchOnAcc(cont);
                 }
-            }
-            else if (func == "$sequence")
-            {
-                for (int i = 0; i < args.Length; i++)
-                {
-                    Expr subexpr = args[i];
-                    EmitComment("begin new statement");
-                    // Drop the result of each expression except the last.
-                    bool isLast = (i == args.Length - 1);
-                    if (!isLast)
-                    {
-                        CompileExpression(subexpr, DestinationDiscard, Continuation.Fallthrough);
-                    }
-                    else
-                    {
-                        CompileExpression(subexpr, dest, cont);
-                    }
-                }
-            }
-            else if (func == "$local")
-            {
-                if (argCount != 1) Program.Panic("wrong number of args in local declaration");
-                if (args[0].Type != ExprType.Name) Program.Panic("invalid local declaration node");
-                DefineLocal(CType.UInt16, args[0].Name);
-                if (dest != DestinationDiscard) Program.Panic("cannot store value of expression of type 'void'");
-                if (cont.When != JumpCondition.Never) Program.Panic("cannot branch based on value of type 'void'");
-            }
-            else if (func == "$addr_of")
-            {
-                if (argCount != 1) Program.Panic("wrong number of args");
-                if (args[0].Type == ExprType.Name)
-                {
-                    Symbol sym;
-                    if (!FindSymbol(args[0].Name, out sym)) Program.Error("undefined symbol");
-                    if (sym.Kind != SymbolKind.Local) Program.NYI();
-                    int address = sym.Value;
-                    EmitLoadImmediate(address, dest, cont);
-                }
-                else
-                {
-                    Program.NYI();
-                }
-            }
-            else if (func == "$switch")
-            {
-                if (argCount != 2) Program.Panic("wrong number of items in switch expression");
-                Expr test = args[0];
-                Expr then = args[1];
-                string end = MakeUniqueLabel();
-
-                // TODO: Handle any number of clauses. For each clause:
-                {
-                    string nextClause = MakeUniqueLabel();
-                    // If this clause's condition is false, try the next clause:
-                    CompileExpression(test, DestinationDiscard, new Continuation(JumpCondition.IfFalse, nextClause));
-                    // If the condition was true, execute the clause body:
-                    CompileExpression(then, dest, cont);
-                    // After executing the body of a clause, skip the rest of the clauses:
-                    EmitJump(end);
-                    EmitComment("end of switch clause");
-                    FixReferencesTo(nextClause);
-                }
-
-                EmitComment("end of switch");
-                FixReferencesTo(end);
-            }
-            else if (func == "$return")
-            {
-                if (argCount != 1) Program.Panic("wrong number of items in switch expression");
-                EmitComment("return");
-                CompileExpression(args[0], DestinationAcc, Continuation.Fallthrough);
-                Emit(Opcode.RTS);
             }
             else
             {
@@ -252,7 +243,7 @@ partial class Compiler
                         int argSize = SizeOf(CType.UInt16);
                         int temp = AllocTemp(argSize);
                         CompileExpression(arg, temp, Continuation.Fallthrough);
-                        simpleArg = Expr.MakeLoad(temp);
+                        simpleArg = Expr.MakeCall("$load", Expr.MakeInt(temp));
                     }
                     temps.Add(simpleArg);
                 }
@@ -260,7 +251,7 @@ partial class Compiler
                 // Get the call frame address (and type information) from the function's type entry.
                 Symbol functionSym;
                 int[] paramAddresses;
-                if (FindSymbol(func, out functionSym))
+                if (FindSymbol(e.Name, out functionSym))
                 {
                     paramAddresses = functionSym.ParamAddresses;
                 }
@@ -281,10 +272,10 @@ partial class Compiler
                 }
 
                 // For builtin operations, instead of jumping to a function, emit the code inline.
-                EmitComment(func);
-                if (func == "$load")
+                EmitComment(e.Name);
+                if (e.Name == "$load")
                 {
-                    if (argCount != 1) Program.Panic("wrong number of arguments to unary operator");
+                    if (e.Args.Length != 1) Program.Panic("wrong number of arguments to unary operator");
                     // TODO: This would be more efficient if it loaded the high byte first.
                     Emit_U8(Opcode.LDY_IMM, 0);
                     Emit_U8(Opcode.LDA_ZP_Y_IND, T0);
@@ -294,9 +285,9 @@ partial class Compiler
                     Emit(Opcode.TAX);
                     Emit_U8(Opcode.LDA_ZP, T2);
                 }
-                else if (func == "$add")
+                else if (e.Name == "$add")
                 {
-                    if (argCount != 2) Program.Panic("wrong number of arguments to binary operator");
+                    if (e.Args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
                     Emit(Opcode.CLC);
                     Emit_U8(Opcode.LDA_ZP, T0);
                     Emit_U8(Opcode.ADC_ZP, T2);
@@ -306,9 +297,9 @@ partial class Compiler
                     Emit(Opcode.TAX);
                     Emit_U8(Opcode.LDA_ZP, T0);
                 }
-                else if (func == "$sub")
+                else if (e.Name == "$sub")
                 {
-                    if (argCount != 2) Program.Panic("wrong number of arguments to binary operator");
+                    if (e.Args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
                     Emit(Opcode.SEC);
                     Emit_U8(Opcode.LDA_ZP, T0);
                     Emit_U8(Opcode.SBC_ZP, T2);
@@ -318,9 +309,9 @@ partial class Compiler
                     Emit(Opcode.TAX);
                     Emit_U8(Opcode.LDA_ZP, T0);
                 }
-                else if (func == "$assign")
+                else if (e.Name == "$assign")
                 {
-                    if (argCount != 2) Program.Panic("wrong number of arguments to binary operator");
+                    if (e.Args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
                     Emit_U8(Opcode.LDY_IMM, 0);
                     Emit_U8(Opcode.LDA_ZP, T2);
                     Emit_U8(Opcode.STA_ZP_Y_IND, T0);
@@ -333,11 +324,11 @@ partial class Compiler
                     // Check to see whether this function is defined:
                     // (It probably won't have as address assigned yet, but we can make sure it exists.)
                     Symbol sym;
-                    if (!FindSymbol(func, out sym)) Program.Error("function not defined: " + func);
+                    if (!FindSymbol(e.Name, out sym)) Program.Error("function not defined: " + e.Name);
 
                     // JSR to the function:
                     Emit_U16(Opcode.JSR, 0);
-                    Fixups.Add(new Fixup(FixupKind.Absolute, GetCurrentCodeAddress() - 2, func));
+                    Fixups.Add(new Fixup(FixupKind.Absolute, GetCurrentCodeAddress() - 2, e.Name));
                 }
 
                 // The return value is placed in the accumulator.
@@ -362,7 +353,7 @@ partial class Compiler
         {
             return true;
         }
-        else if (e.Type == ExprType.Name)
+        else if (e.Tag == ExprTag.Name)
         {
             Symbol sym;
             if (!FindSymbol(e.Name, out sym)) Program.Error("undefined symbol: {0}", e.Name);
@@ -548,12 +539,12 @@ partial class Compiler
 
     void BeginTempScope()
     {
-        // TODO
+        // TODO: Implement temporaries.
     }
 
     void EndTempScope()
     {
-        // TODO
+        // TODO: Implement temporaries.
     }
 
     // TODO: Temporary variables can be freed when the current temp scope ends.
