@@ -151,11 +151,12 @@ partial class Compiler
         else if (e.Tag == ExprTag.AddressOf)
         {
             if (e.Args.Length != 1) Program.Panic("wrong number of args");
-            if (e.Args[0].Tag == ExprTag.Name)
+            Expr arg = e.Args[0];
+            if (arg.Tag == ExprTag.Name)
             {
                 Symbol sym;
-                if (!FindSymbol(e.Args[0].Name, out sym)) Program.Error("undefined symbol");
-                if (sym.Kind != SymbolKind.Local) Program.NYI();
+                if (!FindSymbol(arg.Name, out sym)) Program.Error("undefined symbol");
+                if (sym.Kind != SymbolKind.Local) Program.Error("target of assignment must be a variable: " + arg.Name);
                 int address = sym.Value;
                 EmitLoadImmediate(address, dest, cont);
             }
