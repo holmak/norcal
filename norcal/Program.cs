@@ -102,6 +102,8 @@ partial class Expr
                     return Name;
                 case ExprTag.Call:
                     return string.Format("({0} ...)", Name);
+                case ExprTag.Scope:
+                    return string.Format("($scope {0})", Args[0].DebuggerDisplay);
                 case ExprTag.Sequence:
                     return string.Format("($sequence {0})", string.Join(" ", Args.Select(x => x.DebuggerDisplay)));
                 case ExprTag.Local:
@@ -133,6 +135,15 @@ partial class Expr
         {
             Tag = ExprTag.Name,
             Name = name,
+        };
+    }
+
+    public static Expr MakeScope(Expr arg)
+    {
+        return new Expr
+        {
+            Tag = ExprTag.Scope,
+            Args = new[] { arg },
         };
     }
 
@@ -247,6 +258,7 @@ enum ExprTag
 {
     Int,        // number
     Name,       // name
+    Scope,      // args...
     Sequence,   // args...
     Local,      // name
     AddressOf,  // arg

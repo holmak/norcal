@@ -275,3 +275,44 @@ void reset()
 {
     *STOP = 0;
 }
+
+@ Typechecking pointers
+@in
+@out 0x1122
+define uint16_t *OUT = 0x6000;
+define uint16_t *STOP = 0x6002;
+
+void reset()
+{
+    uint16_t number = 0x1122;
+    *OUT = number;
+    *STOP = 0;
+}
+
+@ Typechecking pointers
+@in
+@out
+@error
+define uint16_t *OUT = 0x6000;
+define uint16_t *STOP = 0x6002;
+
+void reset()
+{
+    uint16_t *ptr = 0x3344;
+    *OUT = ptr;
+    *STOP = 0;
+}
+
+@ Assigning to constant
+@in
+@out
+@error
+define uint16_t *OUT = 0x6000;
+define uint16_t *STOP = 0x6002;
+
+void reset()
+{
+    uint16_t *ptr = 0x3344;
+    OUT = ptr;
+    *STOP = 0;
+}

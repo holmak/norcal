@@ -73,6 +73,8 @@ partial class Compiler
                 if (!FindSymbol(decl.Name, out sym)) Program.Panic("a symbol should already be defined for this function.");
                 sym.Value = GetCurrentCodeAddress();
 
+                BeginScope();
+
                 // Define each of the function's parameters as a local variable:
                 for (int i = 0; i < decl.Fields.Count; i++)
                 {
@@ -80,11 +82,12 @@ partial class Compiler
                     DefineSymbol(SymbolKind.Local, SymbolScope.Local, f.Name, sym.ParamAddresses[i], f.Type, null);
                 }
 
-                CompileExpression(decl.Body, DestinationDiscard, Continuation.Fallthrough);
+                Expr body = decl.Body;
+                CheckTypes(body);
+                CompileExpression(body, DestinationDiscard, Continuation.Fallthrough);
                 Emit(Opcode.RTS);
 
-                // Delete any symbols that refer to local variables:
-                Symbols.RemoveAll(x => x.Scope == SymbolScope.Local);
+                EndScope();
             }
         }
 
@@ -109,6 +112,148 @@ partial class Compiler
         if (Fixups.Any(x => x.Kind != FixupKind.None)) Program.Panic("some fixups remain");
     }
 
+    void CheckTypes(Expr e)
+    {
+        // TODO: Typecheck each subexpression.
+
+        if (e.Tag == ExprTag.Int)
+        {
+            // NOP
+        }
+        else if (e.Tag == ExprTag.Name)
+        {
+            // NOP
+        }
+        else if (e.Tag == ExprTag.Scope)
+        {
+            BeginScope();
+            Expr arg = e.Args[0];
+            CheckTypes(arg);
+            EndScope();
+        }
+        else if (e.Tag == ExprTag.Sequence)
+        {
+            foreach (Expr sub in e.Args) CheckTypes(sub);
+        }
+        else if (e.Tag == ExprTag.Local)
+        {
+            DefineSymbol(SymbolKind.Local, SymbolScope.Local, e.Name, 0, CType.UInt16, null);
+        }
+        else if (e.Tag == ExprTag.AddressOf)
+        {
+            Expr arg = e.Args[0];
+            CheckTypes(arg);
+            CType type = TypeOf(arg);
+            if (type.Tag != CTypeTag.Pointer) Program.Error("this expression has no address");
+        }
+        else if (e.Tag == ExprTag.Switch)
+        {
+            foreach (Expr sub in e.Args) CheckTypes(sub);
+            // TODO: Each condition must have type "uint8_t".
+            // TODO: Each then-clause must have the same type.
+        }
+        else if (e.Tag == ExprTag.Return)
+        {
+            Expr arg = e.Args[0];
+            CheckTypes(arg);
+            CType actual = TypeOf(arg);
+            // TODO: Get the current function's declared return type.
+            CType expected = CType.UInt16;
+            if (!TypesEqual(actual, expected)) Program.Error("incorrect return type");
+        }
+        else if (e.Tag == ExprTag.Call)
+        {
+            // TODO: Replace type-generic functions with specific functions before typechecking.
+            if (!e.Name.StartsWith("$"))
+            {
+                Symbol sym;
+                if (!FindSymbol(e.Name, out sym)) Program.Error("symbol not defined: {0}", e.Name);
+                if (sym.Type.Tag != CTypeTag.Function) Program.Error("symbol is not a function: {0}", e.Name);
+
+                if (sym.Type.ParameterTypes.Length != e.Args.Length) Program.Error("wrong number of arguments to function: {0}", e.Name);
+
+                // TODO: Check that the actual and expected parameter types match.
+                for (int i = 0; i < e.Args.Length; i++)
+                {
+                    Expr arg = e.Args[i];
+                    CheckTypes(arg);
+                    if (!TypesEqual(TypeOf(arg), sym.Type.ParameterTypes[i])) Program.Error("argument to function has wrong type");
+                }
+            }
+        }
+        else
+        {
+            Program.Panic("type checker: unhandled case");
+        }
+    }
+
+    CType TypeOf(Expr e)
+    {
+        if (e.Tag == ExprTag.Int)
+        {
+            return CType.UInt16;
+        }
+        else if (e.Tag == ExprTag.Name)
+        {
+            Symbol sym;
+            if (!FindSymbol(e.Name, out sym)) Program.Error("symbol not defined: {0}", e.Name);
+            return sym.Type;
+        }
+        else if (e.Tag == ExprTag.Scope)
+        {
+            Expr arg = e.Args[0];
+            return TypeOf(arg);
+        }
+        else if (e.Tag == ExprTag.Sequence)
+        {
+            if (e.Args.Length > 0) return TypeOf(e.Args.Last());
+            else return CType.Void;
+        }
+        else if (e.Tag == ExprTag.Local)
+        {
+            return CType.Void;
+        }
+        else if (e.Tag == ExprTag.AddressOf)
+        {
+            Expr arg = e.Args[0];
+            CType type = TypeOf(arg);
+            if (type.Tag != CTypeTag.Pointer) Program.Error("this expression has no address");
+            return type.Subtype;
+        }
+        else if (e.Tag == ExprTag.Switch)
+        {
+            // TODO: Figure out the type.
+            return CType.Void;
+        }
+        else if (e.Tag == ExprTag.Return)
+        {
+            return CType.Void;
+        }
+        else if (e.Tag == ExprTag.Call)
+        {
+            Symbol sym;
+            if (!FindSymbol(e.Name, out sym)) Program.Error("symbol not defined: {0}", e.Name);
+            if (sym.Type.Tag != CTypeTag.Function) Program.Error("symbol is not a function: {0}", e.Name);
+            return sym.Type;
+        }
+        else
+        {
+            Program.Panic("type of: unhandled case");
+            return null;
+        }
+    }
+
+    static bool TypesEqual(CType a, CType b)
+    {
+        if (a.Tag != b.Tag) return false;
+        else if (a.Tag == CTypeTag.Simple) return a.SimpleType == b.SimpleType;
+        else
+        {
+            Program.NYI();
+            return false;
+        }
+    }
+
     void CompileExpression(Expr e, int dest, Continuation cont)
     {
         int value;
@@ -123,6 +268,12 @@ partial class Compiler
             if (sym.Kind != SymbolKind.Local) Program.NYI();
             int address = sym.Value;
             EmitLoad(address, dest, cont);
+        }
+        else if (e.Tag == ExprTag.Scope)
+        {
+            BeginScope();
+            CompileExpression(e.Args[0], dest, cont);
+            EndScope();
         }
         else if (e.Tag == ExprTag.Sequence)
         {
@@ -548,6 +699,16 @@ partial class Compiler
         // TODO: Implement temporaries.
     }
 
+    void BeginScope()
+    {
+        // TODO: Implement lexical scope.
+    }
+
+    void EndScope()
+    {
+        Symbols.RemoveAll(x => x.Scope == SymbolScope.Local);
+    }
+
     // TODO: Temporary variables can be freed when the current temp scope ends.
     int AllocTemp(int size)
     {
@@ -557,7 +718,6 @@ partial class Compiler
 
 enum SymbolKind
 {
-    None = 0,
     Constant,
     Local,
 }
@@ -670,5 +830,22 @@ partial class CType
         };
     }
 
-    // TODO: Implement equality testing.
+    public static CType MakePointer(CType subtype)
+    {
+        return new CType
+        {
+            Tag = CTypeTag.Pointer,
+            Subtype = subtype,
+        };
+    }
+
+    public override bool Equals(object obj)
+    {
+        throw new NotSupportedException();
+    }
+
+    public override int GetHashCode()
+    {
+        throw new NotSupportedException();
+    }
 }

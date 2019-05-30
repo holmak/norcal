@@ -90,7 +90,7 @@ partial class Parser
             {
                 body.Add(ParseStatement());
             }
-            d.Body = Expr.MakeSequence(body.ToArray());
+            d.Body = Expr.MakeScope(Expr.MakeSequence(body.ToArray()));
         }
         return d;
     }
