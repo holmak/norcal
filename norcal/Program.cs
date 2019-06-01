@@ -51,23 +51,7 @@ static class Program
 
     static void PrintExpr(Expr e)
     {
-        int n;
-        string name;
-        if (e.MatchInt(out n))
-        {
-            // Guess whether the number should be printed in hex or in decimal:
-            string format = (n < 512) ? "{0}" : "{0:X}";
-            Console.Write(format, n);
-        }
-        else if (e.MatchName(out name))
-        {
-            Console.Write(name);
-        }
-        else
-        {
-            // TODO: Reimplement the pretty-printing code.
-            Console.Write("(...)");
-        }
+        Console.Write(e.Show());
     }
 
     public static void Error(string format, params object[] args)
@@ -90,33 +74,32 @@ static class Program
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 partial class Expr
 {
-    string DebuggerDisplay
+    string DebuggerDisplay => Show();
+
+    public string Show()
     {
-        get
+        switch (Tag)
         {
-            switch (Tag)
-            {
-                case ExprTag.Int:
-                    return Int.ToString();
-                case ExprTag.Name:
-                    return Name;
-                case ExprTag.Call:
-                    return string.Format("({0} ...)", Name);
-                case ExprTag.Scope:
-                    return string.Format("($scope {0})", Args[0].DebuggerDisplay);
-                case ExprTag.Sequence:
-                    return string.Format("($sequence {0})", string.Join(" ", Args.Select(x => x.DebuggerDisplay)));
-                case ExprTag.Local:
-                    return string.Format("($local {0})", Name);
-                case ExprTag.AddressOf:
-                    return string.Format("($address_of {0})", Args[0].DebuggerDisplay);
-                case ExprTag.Switch:
-                    return string.Format("($switch ...)");
-                case ExprTag.Return:
-                    return string.Format("($return {0})", Args[0].DebuggerDisplay);
-                default:
-                    throw new NotImplementedException();
-            }
+            case ExprTag.Int:
+                return Int.ToString((Int < 512) ? "G" : "X");
+            case ExprTag.Name:
+                return Name;
+            case ExprTag.Call:
+                return string.Format("({0} {1})", Name, string.Join(" ", Args.Select(x => x.Show())));
+            case ExprTag.Scope:
+                return string.Format("($scope {0})", Args[0].Show());
+            case ExprTag.Sequence:
+                return string.Format("($sequence {0})", string.Join(" ", Args.Select(x => x.DebuggerDisplay)));
+            case ExprTag.Local:
+                return string.Format("($local {0})", Name);
+            case ExprTag.AddressOf:
+                return string.Format("($address_of {0})", Args[0].Show());
+            case ExprTag.Switch:
+                return string.Format("($switch {0})", string.Join(" ", Args.Select(x => x.Show())));
+            case ExprTag.Return:
+                return string.Format("($return {0})", Args[0].Show());
+            default:
+                throw new NotImplementedException();
         }
     }
 
