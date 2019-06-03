@@ -9,7 +9,7 @@ partial class Compiler
 {
     int RamNext = RamStart;
     int NextLabelNumber = 0;
-    List<Symbol> Symbols = new List<Symbol>();
+    LexicalScope CurrentScope = new LexicalScope();
     List<Fixup> Fixups = new List<Fixup>();
 
     static readonly int RamStart = 0x300;
@@ -44,7 +44,7 @@ partial class Compiler
                 }
 
                 CType functionType = CType.MakeFunction(paramTypes, decl.Type);
-                DefineSymbol(SymbolKind.Constant, SymbolScope.Global, decl.Name, 0, functionType, addresses);
+                DefineSymbol(SymbolKind.Constant, decl.Name, 0, functionType, addresses);
             }
             else if (decl.Kind == DeclarationKind.Constant)
             {
@@ -53,7 +53,7 @@ partial class Compiler
                 {
                     Program.Error("expression must be constant");
                 }
-                DefineSymbol(SymbolKind.Constant, SymbolScope.Global, decl.Name, value, CType.UInt16, null);
+                DefineSymbol(SymbolKind.Constant, decl.Name, value, CType.UInt16, null);
             }
             else
             {
@@ -80,7 +80,7 @@ partial class Compiler
                 for (int i = 0; i < decl.Fields.Count; i++)
                 {
                     NamedField f = decl.Fields[i];
-                    DefineSymbol(SymbolKind.Local, SymbolScope.Local, f.Name, sym.ParamAddresses[i], f.Type, null);
+                    DefineSymbol(SymbolKind.Local, f.Name, sym.ParamAddresses[i], f.Type, null);
                 }
 
                 Expr body = decl.Body;
@@ -138,7 +138,7 @@ partial class Compiler
         }
         else if (e.Tag == ExprTag.Local)
         {
-            DefineSymbol(SymbolKind.Local, SymbolScope.Local, e.Name, 0, CType.UInt16, null);
+            DefineSymbol(SymbolKind.Local, e.Name, 0, CType.UInt16, null);
         }
         else if (e.Tag == ExprTag.AddressOf)
         {
@@ -619,7 +619,7 @@ partial class Compiler
     void DefineLocal(CType type, string name)
     {
         int address = AllocGlobal(SizeOf(type));
-        DefineSymbol(SymbolKind.Local, SymbolScope.Local, name, address, type, null);
+        DefineSymbol(SymbolKind.Local, name, address, type, null);
     }
 
     string MakeUniqueLabel()
@@ -647,18 +647,17 @@ partial class Compiler
         }
     }
 
-    void DefineSymbol(SymbolKind kind, SymbolScope scope, string name, int value, CType type, int[] paramAddresses)
+    void DefineSymbol(SymbolKind kind, string name, int value, CType type, int[] paramAddresses)
     {
-        // It is an error to define two things with the same name.
-        if (Symbols.Any(x => x.Name == name))
+        // It is an error to define two things with the same name in the same scope.
+        if (CurrentScope.Symbols.Any(x => x.Name == name))
         {
             Program.Error("symbols cannot be redefined: {0}", name);
         }
 
-        Symbols.Add(new Symbol
+        CurrentScope.Symbols.Add(new Symbol
         {
             Kind = kind,
-            Scope = scope,
             Name = name,
             Value = value,
             Type = type,
@@ -668,12 +667,16 @@ partial class Compiler
 
     bool FindSymbol(string name, out Symbol found)
     {
-        foreach (Symbol sym in Symbols)
+        // Inspect all scopes, starting from the innermost.
+        for (LexicalScope scope = CurrentScope; scope != null; scope = scope.Outer)
         {
-            if (sym.Name == name)
+            foreach (Symbol sym in scope.Symbols)
             {
-                found = sym;
-                return true;
+                if (sym.Name == name)
+                {
+                    found = sym;
+                    return true;
+                }
             }
         }
 
@@ -702,12 +705,14 @@ partial class Compiler
 
     void BeginScope()
     {
-        // TODO: Implement lexical scope.
+        LexicalScope outer = CurrentScope;
+        CurrentScope = new LexicalScope();
+        CurrentScope.Outer = outer;
     }
 
     void EndScope()
     {
-        Symbols.RemoveAll(x => x.Scope == SymbolScope.Local);
+        CurrentScope = CurrentScope.Outer;
     }
 
     // TODO: Temporary variables can be freed when the current temp scope ends.
@@ -727,17 +732,10 @@ enum SymbolKind
 class Symbol
 {
     public SymbolKind Kind;
-    public SymbolScope Scope;
     public string Name;
     public int Value;
     public CType Type;
     public int[] ParamAddresses;
-}
-
-enum SymbolScope
-{
-    Global,
-    Local,
 }
 
 class Fixup
@@ -850,4 +848,10 @@ partial class CType
     {
         throw new NotSupportedException();
     }
+}
+
+class LexicalScope
+{
+    public LexicalScope Outer;
+    public List<Symbol> Symbols = new List<Symbol>();
 }
