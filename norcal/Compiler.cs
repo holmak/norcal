@@ -232,10 +232,18 @@ partial class Compiler
         }
         else if (e.Tag == ExprTag.Call)
         {
-            Symbol sym;
-            if (!FindSymbol(e.Name, out sym)) Program.Error("symbol not defined: {0}", e.Name);
-            if (sym.Type.Tag != CTypeTag.Function) Program.Error("symbol is not a function: {0}", e.Name);
-            return sym.Type;
+            // TODO: Replace type-generic functions with specific functions before typechecking.
+            if (!e.Name.StartsWith("$"))
+            {
+                Symbol sym;
+                if (!FindSymbol(e.Name, out sym)) Program.Error("symbol not defined: {0}", e.Name);
+                if (sym.Type.Tag != CTypeTag.Function) Program.Error("symbol is not a function: {0}", e.Name);
+                return sym.Type;
+            }
+            else
+            {
+                return CType.UInt16;
+            }
         }
         else
         {
