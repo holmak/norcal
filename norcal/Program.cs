@@ -285,6 +285,17 @@ class NamedField
     }
 }
 
+/// <summary>
+/// Names of special builtin functions.
+/// </summary>
+static class Builtins
+{
+    public static readonly string AddGeneric = "$add";
+    public static readonly string SubtractGeneric = "$sub";
+    public static readonly string LoadGeneric = "$load";
+    public static readonly string StoreGeneric = "$store";
+}
+
 enum Opcode
 {
     ORA_ZP       = 0x05,

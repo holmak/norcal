@@ -359,11 +359,11 @@ partial class Compiler
         {
             // Handle certain functions as "intrinsics"; otherwise use the general function call mechanism.
             int addr;
-            if (e.Name == "$load" && EvaluateConstantExpression(e.Args[0], out addr))
+            if (e.Name == Builtins.LoadGeneric && EvaluateConstantExpression(e.Args[0], out addr))
             {
                 EmitLoad(addr, dest, cont);
             }
-            else if (e.Name == "$assign" && EvaluateConstantExpression(e.Args[0], out addr))
+            else if (e.Name == Builtins.StoreGeneric && EvaluateConstantExpression(e.Args[0], out addr))
             {
                 if (dest == DestinationDiscard)
                 {
@@ -404,7 +404,7 @@ partial class Compiler
                         int argSize = SizeOf(CType.UInt16);
                         int temp = AllocTemp(argSize);
                         CompileExpression(arg, temp, Continuation.Fallthrough);
-                        simpleArg = Expr.MakeCall("$load", Expr.MakeInt(temp));
+                        simpleArg = Expr.MakeCall(Builtins.LoadGeneric, Expr.MakeInt(temp));
                     }
                     temps.Add(simpleArg);
                 }
@@ -434,7 +434,7 @@ partial class Compiler
 
                 // For builtin operations, instead of jumping to a function, emit the code inline.
                 EmitComment(e.Name);
-                if (e.Name == "$load")
+                if (e.Name == Builtins.LoadGeneric)
                 {
                     if (e.Args.Length != 1) Program.Panic("wrong number of arguments to unary operator");
                     // TODO: This would be more efficient if it loaded the high byte first.
@@ -446,7 +446,7 @@ partial class Compiler
                     Emit(Opcode.TAX);
                     Emit_U8(Opcode.LDA_ZP, T2);
                 }
-                else if (e.Name == "$add")
+                else if (e.Name == Builtins.AddGeneric)
                 {
                     if (e.Args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
                     Emit(Opcode.CLC);
@@ -458,7 +458,7 @@ partial class Compiler
                     Emit(Opcode.TAX);
                     Emit_U8(Opcode.LDA_ZP, T0);
                 }
-                else if (e.Name == "$sub")
+                else if (e.Name == Builtins.SubtractGeneric)
                 {
                     if (e.Args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
                     Emit(Opcode.SEC);
@@ -470,7 +470,7 @@ partial class Compiler
                     Emit(Opcode.TAX);
                     Emit_U8(Opcode.LDA_ZP, T0);
                 }
-                else if (e.Name == "$assign")
+                else if (e.Name == Builtins.StoreGeneric)
                 {
                     if (e.Args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
                     Emit_U8(Opcode.LDY_IMM, 0);

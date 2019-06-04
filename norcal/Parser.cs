@@ -230,11 +230,11 @@ partial class Parser
         {
             if (TryParse(TokenType.PLUS))
             {
-                e = Expr.MakeCall("$add", e, ParseMultiplyExpr());
+                e = Expr.MakeCall(Builtins.AddGeneric, e, ParseMultiplyExpr());
             }
             else if (TryParse(TokenType.MINUS))
             {
-                e = Expr.MakeCall("$sub", e, ParseMultiplyExpr());
+                e = Expr.MakeCall(Builtins.SubtractGeneric, e, ParseMultiplyExpr());
             }
             else
             {
@@ -260,7 +260,7 @@ partial class Parser
     {
         if (TryParse(TokenType.STAR))
         {
-            return Expr.MakeCall("$load", ParseSuffixExpr());
+            return Expr.MakeCall(Builtins.LoadGeneric, ParseSuffixExpr());
         }
         else
         {
@@ -335,7 +335,7 @@ partial class Parser
     Expr AddressOf(Expr e)
     {
         Expr inner;
-        if (e.MatchUnaryCall("$load", out inner))
+        if (e.MatchUnaryCall(Builtins.LoadGeneric, out inner))
         {
             return inner;
         }
@@ -347,7 +347,7 @@ partial class Parser
 
     Expr MakeAssignExpr(Expr dst, Expr src)
     {
-        return Expr.MakeCall("$assign", AddressOf(dst), src);
+        return Expr.MakeCall(Builtins.StoreGeneric, AddressOf(dst), src);
     }
 
     bool TryParse(TokenType expected)
