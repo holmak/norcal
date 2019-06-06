@@ -53,7 +53,7 @@ partial class Compiler
                 {
                     Program.Error("expression must be constant");
                 }
-                DefineSymbol(SymbolKind.Constant, decl.Name, value, CType.UInt16, null);
+                DefineSymbol(SymbolKind.Constant, decl.Name, value, decl.Type, null);
             }
             else
             {
