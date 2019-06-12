@@ -139,11 +139,12 @@ partial class Expr
         };
     }
 
-    public static Expr MakeLocal(string name)
+    public static Expr MakeLocal(CType declaredType, string name)
     {
         return new Expr
         {
             Tag = ExprTag.Local,
+            DeclaredType = declaredType,
             Name = name,
         };
     }
@@ -157,12 +158,14 @@ partial class Expr
         };
     }
 
-    public static Expr MakeSwitch(Expr condition, Expr body)
+    public static Expr MakeSwitch(Expr condition, Expr body) => MakeSwitch(new[] { condition, body });
+
+    public static Expr MakeSwitch(Expr[] args)
     {
         return new Expr
         {
             Tag = ExprTag.Switch,
-            Args = new[] { condition, body },
+            Args = args,
         };
     }
 
@@ -255,6 +258,7 @@ partial class Expr
     public ExprTag Tag;
     public int Int;
     public string Name;
+    public CType DeclaredType;
     public Expr[] Args;
 }
 
@@ -290,10 +294,14 @@ class NamedField
 /// </summary>
 static class Builtins
 {
-    public static readonly string AddGeneric = "$add";
-    public static readonly string SubtractGeneric = "$sub";
-    public static readonly string LoadGeneric = "$load";
-    public static readonly string StoreGeneric = "$store";
+    public static readonly string AddGeneric = "$add_gen";
+    public static readonly string AddU16 = "$add_u16";
+    public static readonly string SubtractGeneric = "$sub_gen";
+    public static readonly string SubtractU16 = "$sub_u16";
+    public static readonly string LoadGeneric = "$load_gen";
+    public static readonly string LoadU16 = "$load_u16";
+    public static readonly string StoreGeneric = "$store_gen";
+    public static readonly string StoreU16 = "$store_u16";
 }
 
 enum Opcode

@@ -189,7 +189,7 @@ void reset()
     *STOP = 0;
 }
 
-void f(uint16_t arg)
+uint16_t f(uint16_t arg)
 {
     arg = arg + arg;
     return arg + 1;
@@ -208,12 +208,12 @@ void reset()
     *STOP = 0;
 }
 
-void f(uint16_t arg)
+uint16_t f(uint16_t arg)
 {
     return arg + arg + 1;
 }
 
-void g(uint16_t arg)
+uint16_t g(uint16_t arg)
 {
     return arg + arg;
 }

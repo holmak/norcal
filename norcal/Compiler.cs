@@ -27,6 +27,18 @@ partial class Compiler
 
     public void CompileProgram(List<Declaration> program)
     {
+        // HACK: Many functions are currently just defined in the compiler, and they use
+        // a fixed set of addresses for their arguments.
+        // Even worse, they all assume that their parameters are word-sized.
+        // Currently, none take more than two parameters.
+        int[] builtinParamAddresses = new[] { T0, T2 };
+
+        // Define the types of the builtin functions:
+        DefineSymbol(SymbolKind.Constant, Builtins.LoadU16, 0, CType.MakeFunction(new[] { CType.MakePointer(CType.UInt16) }, CType.UInt16), builtinParamAddresses);
+        DefineSymbol(SymbolKind.Constant, Builtins.StoreU16, 0, CType.MakeFunction(new[] { CType.MakePointer(CType.UInt16), CType.UInt16 }, CType.UInt16), builtinParamAddresses);
+        DefineSymbol(SymbolKind.Constant, Builtins.AddU16, 0, CType.MakeFunction(new[] { CType.UInt16, CType.UInt16 }, CType.UInt16), builtinParamAddresses);
+        DefineSymbol(SymbolKind.Constant, Builtins.SubtractU16, 0, CType.MakeFunction(new[] { CType.UInt16, CType.UInt16 }, CType.UInt16), builtinParamAddresses);
+
         // First pass: Read all declarations to get type information and global symbols.
         foreach (Declaration decl in program)
         {
@@ -84,6 +96,7 @@ partial class Compiler
                 }
 
                 Expr body = decl.Body;
+                body = ReplaceGenericFunctions(body);
                 CheckTypes(body);
                 CompileExpression(body, DestinationDiscard, Continuation.Fallthrough);
                 Emit(Opcode.RTS);
@@ -113,10 +126,105 @@ partial class Compiler
         if (Fixups.Any(x => x.Kind != FixupKind.None)) Program.Panic("some fixups remain");
     }
 
+    Expr ReplaceGenericFunctions(Expr e)
+    {
+        if (e.Tag == ExprTag.Int)
+        {
+            return e;
+        }
+        else if (e.Tag == ExprTag.Name)
+        {
+            return e;
+        }
+        else if (e.Tag == ExprTag.Scope)
+        {
+            BeginScope();
+            Expr arg = e.Args[0];
+            e = ReplaceGenericFunctions(arg);
+            EndScope();
+            return Expr.MakeScope(e);
+        }
+        else if (e.Tag == ExprTag.Sequence)
+        {
+            return Expr.MakeSequence(e.Args.Select(ReplaceGenericFunctions).ToArray());
+        }
+        else if (e.Tag == ExprTag.Local)
+        {
+            DefineSymbol(SymbolKind.Local, e.Name, 0, e.DeclaredType, null);
+            return e;
+        }
+        else if (e.Tag == ExprTag.AddressOf)
+        {
+            Expr arg = e.Args[0];
+            return Expr.MakeAddressOf(ReplaceGenericFunctions(arg));
+        }
+        else if (e.Tag == ExprTag.Switch)
+        {
+            return Expr.MakeSwitch(e.Args.Select(ReplaceGenericFunctions).ToArray());
+        }
+        else if (e.Tag == ExprTag.Return)
+        {
+            Expr arg = e.Args[0];
+            return ReplaceGenericFunctions(arg);
+        }
+        else if (e.Tag == ExprTag.Call)
+        {
+            Expr[] args = e.Args.Select(ReplaceGenericFunctions).ToArray();
+            if (e.Name == Builtins.LoadGeneric)
+            {
+                CType addressType = TypeOf(args[0]);
+                if (addressType.Tag != CTypeTag.Pointer) Program.Error("load address must have pointer type");
+                CType returnType = addressType.Subtype;
+                string specificName = null;
+                if (TypesEqual(returnType, CType.UInt16)) specificName = Builtins.LoadU16;
+                else Program.NYI();
+                return Expr.MakeCall(specificName, args);
+            }
+            if (e.Name == Builtins.StoreGeneric)
+            {
+                CType addressType = TypeOf(args[0]);
+                CType valueType = TypeOf(args[1]);
+                if (addressType.Tag != CTypeTag.Pointer) Program.Error("store address must have pointer type");
+                if (!TypesEqual(addressType.Subtype, valueType)) Program.Error("types in assignment must match");
+                string specificName = null;
+                if (TypesEqual(valueType, CType.UInt16)) specificName = Builtins.StoreU16;
+                else Program.NYI();
+                return Expr.MakeCall(specificName, args);
+            }
+            if (e.Name == Builtins.AddGeneric)
+            {
+                CType leftType = TypeOf(args[0]);
+                CType rightType = TypeOf(args[1]);
+                if (!TypesEqual(leftType, rightType)) Program.Error("types in binary expression must match");
+                string specificName = null;
+                if (TypesEqual(leftType, CType.UInt16)) specificName = Builtins.AddU16;
+                else Program.NYI();
+                return Expr.MakeCall(specificName, args);
+            }
+            if (e.Name == Builtins.SubtractGeneric)
+            {
+                CType leftType = TypeOf(args[0]);
+                CType rightType = TypeOf(args[1]);
+                if (!TypesEqual(leftType, rightType)) Program.Error("types in binary expression must match");
+                string specificName = null;
+                if (TypesEqual(leftType, CType.UInt16)) specificName = Builtins.SubtractU16;
+                else Program.NYI();
+                return Expr.MakeCall(specificName, args);
+            }
+            else
+            {
+                return Expr.MakeCall(e.Name, args);
+            }
+        }
+        else
+        {
+            Program.Panic("unhandled case");
+            return null;
+        }
+    }
+
     void CheckTypes(Expr e)
     {
-        // TODO: Typecheck each subexpression.
-
         if (e.Tag == ExprTag.Int)
         {
             // NOP
@@ -138,14 +246,16 @@ partial class Compiler
         }
         else if (e.Tag == ExprTag.Local)
         {
-            DefineSymbol(SymbolKind.Local, e.Name, 0, CType.UInt16, null);
+            DefineSymbol(SymbolKind.Local, e.Name, 0, e.DeclaredType, null);
         }
         else if (e.Tag == ExprTag.AddressOf)
         {
             Expr arg = e.Args[0];
             CheckTypes(arg);
-            CType type = TypeOf(arg);
-            if (type.Tag != CTypeTag.Pointer) Program.Error("this expression has no address");
+            if (arg.Tag != ExprTag.Name) Program.NYI();
+            Symbol sym;
+            if (!FindSymbol(arg.Name, out sym)) Program.Error("symbol not defined: {0}", arg.Name);
+            if (sym.Kind != SymbolKind.Local) Program.Error("cannot take address of a constant: {0}", arg.Name);
         }
         else if (e.Tag == ExprTag.Switch)
         {
@@ -164,22 +274,17 @@ partial class Compiler
         }
         else if (e.Tag == ExprTag.Call)
         {
-            // TODO: Replace type-generic functions with specific functions before typechecking.
-            if (!e.Name.StartsWith("$"))
+            Symbol sym;
+            if (!FindSymbol(e.Name, out sym)) Program.Error("symbol not defined: {0}", e.Name);
+            if (sym.Type.Tag != CTypeTag.Function) Program.Error("symbol is not a function: {0}", e.Name);
+            if (sym.Type.ParameterTypes.Length != e.Args.Length) Program.Error("wrong number of arguments to function: {0}", e.Name);
+            // Check that each of the actual and expected parameter types match:
+            for (int i = 0; i < e.Args.Length; i++)
             {
-                Symbol sym;
-                if (!FindSymbol(e.Name, out sym)) Program.Error("symbol not defined: {0}", e.Name);
-                if (sym.Type.Tag != CTypeTag.Function) Program.Error("symbol is not a function: {0}", e.Name);
-
-                if (sym.Type.ParameterTypes.Length != e.Args.Length) Program.Error("wrong number of arguments to function: {0}", e.Name);
-
-                // TODO: Check that the actual and expected parameter types match.
-                for (int i = 0; i < e.Args.Length; i++)
-                {
-                    Expr arg = e.Args[i];
-                    CheckTypes(arg);
-                    if (!TypesEqual(TypeOf(arg), sym.Type.ParameterTypes[i])) Program.Error("argument to function has wrong type");
-                }
+                Expr arg = e.Args[i];
+                CheckTypes(arg);
+                CType argType = TypeOf(arg);
+                if (!TypesEqual(argType, sym.Type.ParameterTypes[i])) Program.Error("argument to function has wrong type");
             }
         }
         else
@@ -217,9 +322,8 @@ partial class Compiler
         else if (e.Tag == ExprTag.AddressOf)
         {
             Expr arg = e.Args[0];
-            CType type = TypeOf(arg);
-            if (type.Tag != CTypeTag.Pointer) Program.Error("this expression has no address");
-            return type.Subtype;
+            CType subtype = TypeOf(arg);
+            return CType.MakePointer(subtype);
         }
         else if (e.Tag == ExprTag.Switch)
         {
@@ -232,18 +336,11 @@ partial class Compiler
         }
         else if (e.Tag == ExprTag.Call)
         {
-            // TODO: Replace type-generic functions with specific functions before typechecking.
-            if (!e.Name.StartsWith("$"))
-            {
-                Symbol sym;
-                if (!FindSymbol(e.Name, out sym)) Program.Error("symbol not defined: {0}", e.Name);
-                if (sym.Type.Tag != CTypeTag.Function) Program.Error("symbol is not a function: {0}", e.Name);
-                return sym.Type;
-            }
-            else
-            {
-                return CType.UInt16;
-            }
+            Symbol sym;
+            if (!FindSymbol(e.Name, out sym)) Program.Error("symbol not defined: {0}", e.Name);
+            if (sym.Type.Tag != CTypeTag.Function) Program.Error("symbol is not a function: {0}", e.Name);
+            // The type of a function call expression is the function's return type:
+            return sym.Type.Subtype;
         }
         else
         {
@@ -256,6 +353,7 @@ partial class Compiler
     {
         if (a.Tag != b.Tag) return false;
         else if (a.Tag == CTypeTag.Simple) return a.SimpleType == b.SimpleType;
+        else if (a.Tag == CTypeTag.Pointer) return TypesEqual(a.Subtype, b.Subtype);
         else
         {
             Program.NYI();
@@ -304,7 +402,7 @@ partial class Compiler
         }
         else if (e.Tag == ExprTag.Local)
         {
-            DefineLocal(CType.UInt16, e.Name);
+            DefineLocal(e.DeclaredType, e.Name);
             if (dest != DestinationDiscard) Program.Panic("cannot store value of expression of type 'void'");
             if (cont.When != JumpCondition.Never) Program.Panic("cannot branch based on value of type 'void'");
         }
@@ -359,11 +457,11 @@ partial class Compiler
         {
             // Handle certain functions as "intrinsics"; otherwise use the general function call mechanism.
             int addr;
-            if (e.Name == Builtins.LoadGeneric && EvaluateConstantExpression(e.Args[0], out addr))
+            if (e.Name == Builtins.LoadU16 && EvaluateConstantExpression(e.Args[0], out addr))
             {
                 EmitLoad(addr, dest, cont);
             }
-            else if (e.Name == Builtins.StoreGeneric && EvaluateConstantExpression(e.Args[0], out addr))
+            else if (e.Name == Builtins.StoreU16 && EvaluateConstantExpression(e.Args[0], out addr))
             {
                 if (dest == DestinationDiscard)
                 {
@@ -401,29 +499,19 @@ partial class Compiler
                     }
                     else
                     {
+                        // TODO: Use the declared argument types of the function.
                         int argSize = SizeOf(CType.UInt16);
                         int temp = AllocTemp(argSize);
                         CompileExpression(arg, temp, Continuation.Fallthrough);
-                        simpleArg = Expr.MakeCall(Builtins.LoadGeneric, Expr.MakeInt(temp));
+                        simpleArg = Expr.MakeCall(Builtins.LoadU16, Expr.MakeInt(temp));
                     }
                     temps.Add(simpleArg);
                 }
 
                 // Get the call frame address (and type information) from the function's type entry.
                 Symbol functionSym;
-                int[] paramAddresses;
-                if (FindSymbol(e.Name, out functionSym))
-                {
-                    paramAddresses = functionSym.ParamAddresses;
-                }
-                else
-                {
-                    // HACK: Many functions are currently just defined in the compiler, and they use
-                    // a fixed set of addresses for their arguments.
-                    // Even worse, they all assume that their parameters are word-sized.
-                    // Currently, none take more than two parameters.
-                    paramAddresses = new[] { T0, T2 };
-                }
+                if (!FindSymbol(e.Name, out functionSym)) Program.Error("function is not defined: " + e.Name);
+                int[] paramAddresses = functionSym.ParamAddresses;
 
                 // Copy all of the argument values from the temporaries into the function's call frame.
                 EmitComment("copy arguments to call frame");
@@ -434,7 +522,7 @@ partial class Compiler
 
                 // For builtin operations, instead of jumping to a function, emit the code inline.
                 EmitComment(e.Name);
-                if (e.Name == Builtins.LoadGeneric)
+                if (e.Name == Builtins.LoadU16)
                 {
                     if (e.Args.Length != 1) Program.Panic("wrong number of arguments to unary operator");
                     // TODO: This would be more efficient if it loaded the high byte first.
@@ -446,7 +534,7 @@ partial class Compiler
                     Emit(Opcode.TAX);
                     Emit_U8(Opcode.LDA_ZP, T2);
                 }
-                else if (e.Name == Builtins.AddGeneric)
+                else if (e.Name == Builtins.AddU16)
                 {
                     if (e.Args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
                     Emit(Opcode.CLC);
@@ -458,7 +546,7 @@ partial class Compiler
                     Emit(Opcode.TAX);
                     Emit_U8(Opcode.LDA_ZP, T0);
                 }
-                else if (e.Name == Builtins.SubtractGeneric)
+                else if (e.Name == Builtins.SubtractU16)
                 {
                     if (e.Args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
                     Emit(Opcode.SEC);
@@ -470,7 +558,7 @@ partial class Compiler
                     Emit(Opcode.TAX);
                     Emit_U8(Opcode.LDA_ZP, T0);
                 }
-                else if (e.Name == Builtins.StoreGeneric)
+                else if (e.Name == Builtins.StoreU16)
                 {
                     if (e.Args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
                     Emit_U8(Opcode.LDY_IMM, 0);
@@ -736,7 +824,7 @@ enum SymbolKind
     Local,
 }
 
-[DebuggerDisplay("{Kind} {Name} = 0x{Value,h}")]
+[DebuggerDisplay("{Kind} {Name} = 0x{Value,h} ({Type.Show(),nq})")]
 class Symbol
 {
     public SymbolKind Kind;
@@ -813,6 +901,7 @@ enum CSimpleType
     UInt16,
 }
 
+[DebuggerDisplay("{Show(),nq}")]
 partial class CType
 {
     public static readonly CType Void = MakeSimple(CSimpleType.Void);
@@ -855,6 +944,18 @@ partial class CType
     public override int GetHashCode()
     {
         throw new NotSupportedException();
+    }
+
+    public string Show()
+    {
+        if (Tag == CTypeTag.Simple) return SimpleType.ToString();
+        else if (Tag == CTypeTag.Pointer) return "pointer to " + Subtype.Show();
+        else if (Tag == CTypeTag.Function)
+        {
+            var paramTypes = ParameterTypes.Select(x => x.Show());
+            return string.Format("function({0}) {1}", string.Join(", ", paramTypes), Subtype.Show());
+        }
+        else throw new NotImplementedException();
     }
 }
 

@@ -109,10 +109,9 @@ partial class Parser
             if (TryParse(TokenType.EQUALS)) value = ParseExpr();
             else value = Expr.MakeInt(0);
             if (!TryParse(TokenType.SEMICOLON)) ParserError("expected ;");
-            // TODO: Include the type in local var declarations.
             stmt = Expr.MakeSequence(new[]
             {
-                Expr.MakeLocal(localname),
+                Expr.MakeLocal(type, localname),
                 MakeAssignExpr(Expr.MakeName(localname), value),
             });
         }
