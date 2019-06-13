@@ -180,7 +180,7 @@ partial class Compiler
                 else Program.NYI();
                 return Expr.MakeCall(specificName, args);
             }
-            if (e.Name == Builtins.StoreGeneric)
+            else if (e.Name == Builtins.StoreGeneric)
             {
                 CType addressType = TypeOf(args[0]);
                 CType valueType = TypeOf(args[1]);
@@ -191,7 +191,7 @@ partial class Compiler
                 else Program.NYI();
                 return Expr.MakeCall(specificName, args);
             }
-            if (e.Name == Builtins.AddGeneric)
+            else if (e.Name == Builtins.AddGeneric)
             {
                 CType leftType = TypeOf(args[0]);
                 CType rightType = TypeOf(args[1]);
@@ -201,7 +201,7 @@ partial class Compiler
                 else Program.NYI();
                 return Expr.MakeCall(specificName, args);
             }
-            if (e.Name == Builtins.SubtractGeneric)
+            else if (e.Name == Builtins.SubtractGeneric)
             {
                 CType leftType = TypeOf(args[0]);
                 CType rightType = TypeOf(args[1]);
