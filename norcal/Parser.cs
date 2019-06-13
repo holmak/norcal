@@ -119,6 +119,7 @@ partial class Parser
         {
             if (!TryParse(TokenType.LPAREN)) ParserError("expected (");
             Expr test = ParseExpr();
+            test = Expr.MakeCall(Builtins.BoolFromGeneric, test);
             if (!TryParse(TokenType.RPAREN)) ParserError("expected )");
             Expr then;
             if (TryParse(TokenType.LBRACE))
@@ -410,6 +411,10 @@ partial class Parser
         if (TryParseName("void"))
         {
             type = CType.Void;
+        }
+        else if (TryParseName("uint8_t"))
+        {
+            type = CType.UInt8;
         }
         else if (TryParseName("uint16_t"))
         {

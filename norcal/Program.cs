@@ -302,6 +302,8 @@ static class Builtins
     public static readonly string LoadU16 = "$load_u16";
     public static readonly string StoreGeneric = "$store_gen";
     public static readonly string StoreU16 = "$store_u16";
+    public static readonly string BoolFromGeneric = "$bool_from_gen";
+    public static readonly string BoolFromU16 = "$bool_from_u16";
 }
 
 enum Opcode

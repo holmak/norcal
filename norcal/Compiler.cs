@@ -38,6 +38,7 @@ partial class Compiler
         DefineSymbol(SymbolKind.Constant, Builtins.StoreU16, 0, CType.MakeFunction(new[] { CType.MakePointer(CType.UInt16), CType.UInt16 }, CType.UInt16), builtinParamAddresses);
         DefineSymbol(SymbolKind.Constant, Builtins.AddU16, 0, CType.MakeFunction(new[] { CType.UInt16, CType.UInt16 }, CType.UInt16), builtinParamAddresses);
         DefineSymbol(SymbolKind.Constant, Builtins.SubtractU16, 0, CType.MakeFunction(new[] { CType.UInt16, CType.UInt16 }, CType.UInt16), builtinParamAddresses);
+        DefineSymbol(SymbolKind.Constant, Builtins.BoolFromU16, 0, CType.MakeFunction(new[] { CType.UInt16 }, CType.UInt8), builtinParamAddresses);
 
         // First pass: Read all declarations to get type information and global symbols.
         foreach (Declaration decl in program)
@@ -208,6 +209,14 @@ partial class Compiler
                 if (!TypesEqual(leftType, rightType)) Program.Error("types in binary expression must match");
                 string specificName = null;
                 if (TypesEqual(leftType, CType.UInt16)) specificName = Builtins.SubtractU16;
+                else Program.NYI();
+                return Expr.MakeCall(specificName, args);
+            }
+            else if (e.Name == Builtins.BoolFromGeneric)
+            {
+                CType argType = TypeOf(args[0]);
+                string specificName = null;
+                if (TypesEqual(argType, CType.UInt16)) specificName = Builtins.BoolFromU16;
                 else Program.NYI();
                 return Expr.MakeCall(specificName, args);
             }
@@ -568,6 +577,12 @@ partial class Compiler
                     Emit_U8(Opcode.LDA_ZP, T3);
                     Emit_U8(Opcode.STA_ZP_Y_IND, T0);
                 }
+                else if (e.Name == Builtins.BoolFromU16)
+                {
+                    if (e.Args.Length != 1) Program.Panic("wrong number of arguments to unary operator");
+                    Emit_U8(Opcode.LDA_ZP, T0);
+                    Emit_U8(Opcode.ORA_ZP, T1);
+                }
                 else
                 {
                     // Check to see whether this function is defined:
@@ -898,6 +913,7 @@ enum CTypeTag
 enum CSimpleType
 {
     Void,
+    UInt8,
     UInt16,
 }
 
@@ -905,6 +921,7 @@ enum CSimpleType
 partial class CType
 {
     public static readonly CType Void = MakeSimple(CSimpleType.Void);
+    public static readonly CType UInt8 = MakeSimple(CSimpleType.UInt8);
     public static readonly CType UInt16 = MakeSimple(CSimpleType.UInt16);
 
     public static CType MakeSimple(CSimpleType simple)
