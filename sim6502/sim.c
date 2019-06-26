@@ -12,9 +12,10 @@
 #define RAM_SIZE 0x0800
 #define ROM_SIZE 0x8000
 #define ROM_BASE (0x10000 - ROM_SIZE)
-#define DEBUG_PORT_LOW 0x6000
-#define DEBUG_PORT_HIGH 0x6001
-#define STOP_PORT 0x6002
+#define STOP_PORT 0x6000
+#define DEBUG_PORT_LOW 0x6002
+#define DEBUG_PORT_HIGH 0x6003
+#define DEBUG_PORT_BYTE 0x6004
 
 static bool run;
 static uint8_t ram[RAM_SIZE];
@@ -34,6 +35,7 @@ uint8_t read6502(uint16_t address)
     if (address < RAM_SIZE) return ram[address];
     else if (address == DEBUG_PORT_LOW) return next_input();
     else if (address == DEBUG_PORT_HIGH) return next_input();
+    else if (address == DEBUG_PORT_BYTE) return next_input();
     else if (address >= ROM_BASE) return rom[address - ROM_BASE];
     else return 0xEE;
 }
@@ -41,9 +43,10 @@ uint8_t read6502(uint16_t address)
 void write6502(uint16_t address, uint8_t value)
 {
     if (address < RAM_SIZE) ram[address] = value;
+    else if (address == STOP_PORT) run = false;
     else if (address == DEBUG_PORT_LOW) outputLow = value;
     else if (address == DEBUG_PORT_HIGH) printf("%d ", (value << 8) | outputLow);
-    else if (address == STOP_PORT) run = false;
+    else if (address == DEBUG_PORT_BYTE) printf("%d ", value);
     else if (address >= ROM_BASE) rom[address - ROM_BASE] = value;
 }
 
