@@ -538,7 +538,6 @@ partial class Compiler
                 {
                     Expr arg = e.Args[i];
                     CType argType = paramTypes[i];
-                    string loadFuncForType = Builtins.LoadU16;
 
                     int n;
                     CType ignored;
