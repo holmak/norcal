@@ -493,7 +493,7 @@ partial class Compiler
 
                 EmitLoad(addr, type, dest, cont);
             }
-            else if (e.Name == Builtins.StoreU16 && EvaluateConstantExpression(e.Args[0], out addr, out type))
+            else if ((e.Name == Builtins.StoreU8 || e.Name == Builtins.StoreU16) && EvaluateConstantExpression(e.Args[0], out addr, out type))
             {
                 // This case is not essential, but generates better code.
 
