@@ -34,11 +34,13 @@ partial class Compiler
         int[] builtinParamAddresses = new[] { T0, T2 };
 
         // Define the types of the builtin functions:
-        DefineSymbol(SymbolKind.Constant, Builtins.LoadU16, 0, CType.MakeFunction(new[] { CType.MakePointer(CType.UInt16) }, CType.UInt16), builtinParamAddresses);
-        DefineSymbol(SymbolKind.Constant, Builtins.StoreU16, 0, CType.MakeFunction(new[] { CType.MakePointer(CType.UInt16), CType.UInt16 }, CType.UInt16), builtinParamAddresses);
-        DefineSymbol(SymbolKind.Constant, Builtins.AddU16, 0, CType.MakeFunction(new[] { CType.UInt16, CType.UInt16 }, CType.UInt16), builtinParamAddresses);
-        DefineSymbol(SymbolKind.Constant, Builtins.SubtractU16, 0, CType.MakeFunction(new[] { CType.UInt16, CType.UInt16 }, CType.UInt16), builtinParamAddresses);
-        DefineSymbol(SymbolKind.Constant, Builtins.BoolFromU16, 0, CType.MakeFunction(new[] { CType.UInt16 }, CType.UInt8), builtinParamAddresses);
+        DefineSymbol(SymbolKind.Constant, Builtins.LoadU8, 0, CType.MakeFunction(new[] { CType.MakePointer(CType.UInt8) }, CType.UInt8), BuiltinParamAddresses(1));
+        DefineSymbol(SymbolKind.Constant, Builtins.LoadU16, 0, CType.MakeFunction(new[] { CType.MakePointer(CType.UInt16) }, CType.UInt16), BuiltinParamAddresses(1));
+        DefineSymbol(SymbolKind.Constant, Builtins.StoreU8, 0, CType.MakeFunction(new[] { CType.MakePointer(CType.UInt8), CType.UInt8 }, CType.UInt8), BuiltinParamAddresses(2));
+        DefineSymbol(SymbolKind.Constant, Builtins.StoreU16, 0, CType.MakeFunction(new[] { CType.MakePointer(CType.UInt16), CType.UInt16 }, CType.UInt16), BuiltinParamAddresses(2));
+        DefineSymbol(SymbolKind.Constant, Builtins.AddU16, 0, CType.MakeFunction(new[] { CType.UInt16, CType.UInt16 }, CType.UInt16), BuiltinParamAddresses(2));
+        DefineSymbol(SymbolKind.Constant, Builtins.SubtractU16, 0, CType.MakeFunction(new[] { CType.UInt16, CType.UInt16 }, CType.UInt16), BuiltinParamAddresses(2));
+        DefineSymbol(SymbolKind.Constant, Builtins.BoolFromU16, 0, CType.MakeFunction(new[] { CType.UInt16 }, CType.UInt8), BuiltinParamAddresses(1));
 
         // First pass: Read all declarations to get type information and global symbols.
         foreach (Declaration decl in program)
@@ -61,8 +63,10 @@ partial class Compiler
             }
             else if (decl.Kind == DeclarationKind.Constant)
             {
+                // TODO: Make sure the declared type matches the actual type.
+                CType type;
                 int value;
-                if (!EvaluateConstantExpression(decl.Body, out value))
+                if (!EvaluateConstantExpression(decl.Body, out value, out type))
                 {
                     Program.Error("expression must be constant");
                 }
@@ -184,11 +188,26 @@ partial class Compiler
             else if (e.Name == Builtins.StoreGeneric)
             {
                 CType addressType = TypeOf(args[0]);
-                CType valueType = TypeOf(args[1]);
                 if (addressType.Tag != CTypeTag.Pointer) Program.Error("store address must have pointer type");
-                if (!TypesEqual(addressType.Subtype, valueType)) Program.Error("types in assignment must match");
+                CType expectedTypeOfValue = addressType.Subtype;
+
+                // If the second argument is an integer literal with the wrong declared type, change its type
+                // to match the required type -- after making sure the value is small enough to fit.
+                Expr rhs = args[1];
+                if (TypesEqual(expectedTypeOfValue, CType.UInt8) && rhs.Tag == ExprTag.Int)
+                {
+                    int value = rhs.Int;
+                    if (value >= sbyte.MinValue && value <= sbyte.MaxValue)
+                    {
+                        rhs.DeclaredType = CType.UInt8;
+                    }
+                }
+
+                CType actualType = TypeOf(rhs);
+                if (!TypesEqual(expectedTypeOfValue, actualType)) Program.Error("types in assignment must match");
                 string specificName = null;
-                if (TypesEqual(valueType, CType.UInt16)) specificName = Builtins.StoreU16;
+                if (TypesEqual(actualType, CType.UInt8)) specificName = Builtins.StoreU8;
+                else if (TypesEqual(actualType, CType.UInt16)) specificName = Builtins.StoreU16;
                 else Program.NYI();
                 return Expr.MakeCall(specificName, args);
             }
@@ -306,7 +325,7 @@ partial class Compiler
     {
         if (e.Tag == ExprTag.Int)
         {
-            return CType.UInt16;
+            return e.DeclaredType;
         }
         else if (e.Tag == ExprTag.Name)
         {
@@ -373,9 +392,10 @@ partial class Compiler
     void CompileExpression(Expr e, int dest, Continuation cont)
     {
         int value;
-        if (EvaluateConstantExpression(e, out value))
+        CType type;
+        if (EvaluateConstantExpression(e, out value, out type))
         {
-            EmitLoadImmediate(value, dest, cont);
+            EmitLoadImmediate(value, type, dest, cont);
         }
         else if (e.Tag == ExprTag.Name)
         {
@@ -383,7 +403,7 @@ partial class Compiler
             if (!FindSymbol(e.Name, out sym)) Program.Error("undefined symbol");
             if (sym.Kind != SymbolKind.Local) Program.NYI();
             int address = sym.Value;
-            EmitLoad(address, dest, cont);
+            EmitLoad(address, sym.Type, dest, cont);
         }
         else if (e.Tag == ExprTag.Scope)
         {
@@ -425,7 +445,7 @@ partial class Compiler
                 if (!FindSymbol(arg.Name, out sym)) Program.Error("undefined symbol");
                 if (sym.Kind != SymbolKind.Local) Program.Error("target of assignment must be a variable: " + arg.Name);
                 int address = sym.Value;
-                EmitLoadImmediate(address, dest, cont);
+                EmitLoadImmediate(address, CType.MakePointer(TypeOf(arg)), dest, cont);
             }
             else
             {
@@ -464,14 +484,19 @@ partial class Compiler
         }
         else if (e.Tag == ExprTag.Call)
         {
-            // Handle certain functions as "intrinsics"; otherwise use the general function call mechanism.
             int addr;
-            if (e.Name == Builtins.LoadU16 && EvaluateConstantExpression(e.Args[0], out addr))
+            if ((e.Name == Builtins.LoadU8 || e.Name == Builtins.LoadU16) && EvaluateConstantExpression(e.Args[0], out addr, out type))
             {
-                EmitLoad(addr, dest, cont);
+                // Loads from constant addresses must be optimized, because this pattern is used to copy data from
+                // temporary variables into call frames; we can't generate a call to "load_***" in the middle of
+                // generating some other call.
+
+                EmitLoad(addr, type, dest, cont);
             }
-            else if (e.Name == Builtins.StoreU16 && EvaluateConstantExpression(e.Args[0], out addr))
+            else if (e.Name == Builtins.StoreU16 && EvaluateConstantExpression(e.Args[0], out addr, out type))
             {
+                // This case is not essential, but generates better code.
+
                 if (dest == DestinationDiscard)
                 {
                     EmitComment("assign to constant address");
@@ -482,14 +507,25 @@ partial class Compiler
                 {
                     EmitComment("assign to constant address, and produce the assigned value");
                     CompileExpression(e.Args[1], DestinationAcc, Continuation.Fallthrough);
-                    EmitStoreAcc(addr);
-                    EmitStoreAcc(dest);
+                    EmitStoreAcc(type, addr);
+                    EmitStoreAcc(type, dest);
                     EmitBranchOnAcc(cont);
                 }
             }
             else
             {
-                // This is a non-intrinsic function call.
+                // This is the general-purpose way of calling functions.
+
+                Symbol functionSym;
+                if (!FindSymbol(e.Name, out functionSym)) Program.Error("function is not defined: " + e.Name);
+
+                // Get the call frame address (and type information) from the function's type entry.
+                if (functionSym.Type.Tag != CTypeTag.Function) Program.Error("only functions can be called: " + e.Name);
+                CType[] paramTypes = functionSym.Type.ParameterTypes;
+                int[] paramAddresses = functionSym.ParamAddresses;
+
+                if (paramTypes.Length != paramAddresses.Length) Program.Panic("in function symbol, the number of types doesn't match the number of argument locations: " + e.Name);
+                if (e.Args.Length != paramTypes.Length) Program.Error("wrong number of arguments to function: " + e.Name);
 
                 BeginTempScope();
 
@@ -498,29 +534,28 @@ partial class Compiler
                 // Optimization: Sufficiently simple arguments (such as literal ints) can skip this
                 //   step and be written directly into the call frame.
                 List<Expr> temps = new List<Expr>();
-                foreach (Expr arg in e.Args)
+                for (int i = 0; i < paramTypes.Length; i++)
                 {
+                    Expr arg = e.Args[i];
+                    CType argType = paramTypes[i];
+                    string loadFuncForType = Builtins.LoadU16;
+
                     int n;
+                    CType ignored;
                     Expr simpleArg;
-                    if (EvaluateConstantExpression(arg, out n))
+                    if (EvaluateConstantExpression(arg, out n, out ignored))
                     {
-                        simpleArg = Expr.MakeInt(n);
+                        simpleArg = Expr.MakeInt(n, argType);
                     }
                     else
                     {
-                        // TODO: Use the declared argument types of the function.
-                        int argSize = SizeOf(CType.UInt16);
+                        int argSize = SizeOf(argType);
                         int temp = AllocTemp(argSize);
                         CompileExpression(arg, temp, Continuation.Fallthrough);
-                        simpleArg = Expr.MakeCall(Builtins.LoadU16, Expr.MakeInt(temp));
+                        simpleArg = Expr.MakeCall(GetLoadFunctionForType(argType), Expr.MakeInt(temp, argType));
                     }
                     temps.Add(simpleArg);
                 }
-
-                // Get the call frame address (and type information) from the function's type entry.
-                Symbol functionSym;
-                if (!FindSymbol(e.Name, out functionSym)) Program.Error("function is not defined: " + e.Name);
-                int[] paramAddresses = functionSym.ParamAddresses;
 
                 // Copy all of the argument values from the temporaries into the function's call frame.
                 EmitComment("copy arguments to call frame");
@@ -577,6 +612,13 @@ partial class Compiler
                     Emit_U8(Opcode.LDA_ZP, T3);
                     Emit_U8(Opcode.STA_ZP_Y_IND, T0);
                 }
+                else if (e.Name == Builtins.StoreU8)
+                {
+                    if (e.Args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
+                    Emit_U8(Opcode.LDY_IMM, 0);
+                    Emit_U8(Opcode.LDA_ZP, T2);
+                    Emit_U8(Opcode.STA_ZP_Y_IND, T0);
+                }
                 else if (e.Name == Builtins.BoolFromU16)
                 {
                     if (e.Args.Length != 1) Program.Panic("wrong number of arguments to unary operator");
@@ -597,7 +639,8 @@ partial class Compiler
 
                 // The return value is placed in the accumulator.
 
-                EmitStoreAcc(dest);
+                // TODO: Use the appropriate return type.
+                EmitStoreAcc(CType.UInt16, dest);
                 EmitBranchOnAcc(cont);
 
                 EndTempScope();
@@ -610,11 +653,13 @@ partial class Compiler
     }
 
     // Return true if the expression was constant, and therefore able to be evaluated.
-    bool EvaluateConstantExpression(Expr e, out int value)
+    bool EvaluateConstantExpression(Expr e, out int value, out CType type)
     {
         // TODO: Evaluate more complex constant expressions, too.
-        if (e.MatchInt(out value))
+        if (e.Tag == ExprTag.Int)
         {
+            value = e.Int;
+            type = e.DeclaredType;
             return true;
         }
         else if (e.Tag == ExprTag.Name)
@@ -626,11 +671,13 @@ partial class Compiler
             {
                 // TODO: Make sure the constant value is not too big.
                 value = sym.Value;
+                type = sym.Type;
                 return true;
             }
         }
 
         value = 0;
+        type = null;
         return false;
     }
 
@@ -642,9 +689,10 @@ partial class Compiler
         Fixups.Add(new Fixup(FixupKind.Absolute, fixupAddress, target));
     }
 
-    void EmitLoadImmediate(int imm, int dest, Continuation cont)
+    void EmitLoadImmediate(int imm, CType type, int dest, Continuation cont)
     {
         EmitComment("load immediate");
+        int width = SizeOf(type);
         if (dest == DestinationDiscard)
         {
             // NOP
@@ -652,14 +700,17 @@ partial class Compiler
         else if (dest == DestinationAcc)
         {
             Emit_U8(Opcode.LDA_IMM, LowByte(imm));
-            Emit_U8(Opcode.LDX_IMM, HighByte(imm));
+            if (width == 2) Emit_U8(Opcode.LDX_IMM, HighByte(imm));
         }
         else
         {
             Emit_U8(Opcode.LDA_IMM, LowByte(imm));
-            Emit_U8(Opcode.LDX_IMM, HighByte(imm));
             Emit_U16(Opcode.STA_ABS, dest);
-            Emit_U16(Opcode.STX_ABS, dest + 1);
+            if (width == 2)
+            {
+                Emit_U8(Opcode.LDX_IMM, HighByte(imm));
+                Emit_U16(Opcode.STX_ABS, dest + 1);
+            }
         }
 
         if ((cont.When == JumpCondition.IfTrue && imm != 0) ||
@@ -669,8 +720,9 @@ partial class Compiler
         }
     }
 
-    void EmitStoreAcc(int dest)
+    void EmitStoreAcc(CType type, int dest)
     {
+        int width = SizeOf(type);
         if (dest == DestinationDiscard || dest == DestinationAcc)
         {
             // NOP
@@ -678,7 +730,7 @@ partial class Compiler
         else
         {
             Emit_U16(Opcode.STA_ABS, dest);
-            Emit_U16(Opcode.STX_ABS, dest + 1);
+            if (width == 2) Emit_U16(Opcode.STX_ABS, dest + 1);
         }
     }
 
@@ -696,12 +748,13 @@ partial class Compiler
         }
     }
 
-    void EmitLoad(int address, int dest, Continuation cont)
+    void EmitLoad(int address, CType type, int dest, Continuation cont)
     {
+        int width = SizeOf(type);
         // Even if the value is unused, always read the address; it might be a hardware register.
         Emit_U16(Opcode.LDA_ABS, address);
-        Emit_U16(Opcode.LDX_ABS, address + 1);
-        EmitStoreAcc(dest);
+        if (width == 2) Emit_U16(Opcode.LDX_ABS, address + 1);
+        EmitStoreAcc(type, dest);
         EmitBranchOnAcc(cont);
     }
 
@@ -750,12 +803,27 @@ partial class Compiler
 
     static int SizeOf(CType type)
     {
-        if (type.Tag == CTypeTag.Simple && type.SimpleType == CSimpleType.UInt16) return 2;
-        else
+        if (type.Tag == CTypeTag.Simple)
         {
-            Program.NYI();
-            return 1;
+            if (type.SimpleType == CSimpleType.UInt8) return 1;
+            else if (type.SimpleType == CSimpleType.UInt16) return 2;
         }
+        else if (type.Tag == CTypeTag.Pointer)
+        {
+            return 2;
+        }
+
+        Program.NYI();
+        return 1;
+    }
+
+    static string GetLoadFunctionForType(CType type)
+    {
+        int width = SizeOf(type);
+        if (width == 1) return Builtins.LoadU8;
+        else if (width == 2) return Builtins.LoadU16;
+        Program.NYI();
+        return null;
     }
 
     void DefineSymbol(SymbolKind kind, string name, int value, CType type, int[] paramAddresses)
@@ -830,6 +898,15 @@ partial class Compiler
     int AllocTemp(int size)
     {
         return AllocGlobal(size);
+    }
+
+    // TODO: This is a hack, used to define builtin functions.
+    int[] BuiltinParamAddresses(int count)
+    {
+        if (count == 1) return new[] { T0 };
+        else if (count == 2) return new[] { T0, T2 };
+        Program.Panic("unhandled case");
+        return null;
     }
 }
 

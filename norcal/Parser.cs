@@ -107,7 +107,7 @@ partial class Parser
             // If no initial value is specified, initialize to zero.
             Expr value;
             if (TryParse(TokenType.EQUALS)) value = ParseExpr();
-            else value = Expr.MakeInt(0);
+            else value = Expr.MakeInt(0, CType.UInt16);
             if (!TryParse(TokenType.SEMICOLON)) ParserError("expected ;");
             stmt = Expr.MakeSequence(new[]
             {
@@ -313,7 +313,7 @@ partial class Parser
         string name;
         if (TryParseInt(out n))
         {
-            return Expr.MakeInt(n);
+            return Expr.MakeInt(n, CType.UInt16);
         }
         else if (TryParseAnyName(out name))
         {
