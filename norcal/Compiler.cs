@@ -34,18 +34,18 @@ partial class Compiler
         int[] builtinParamAddresses = new[] { T0, T2 };
 
         // Define the types of the builtin functions:
-        DefineSymbol(SymbolKind.Constant, Builtins.LoadU8, 0, CType.MakeFunction(new[] { CType.MakePointer(CType.UInt8) }, CType.UInt8), BuiltinParamAddresses(1));
-        DefineSymbol(SymbolKind.Constant, Builtins.LoadU16, 0, CType.MakeFunction(new[] { CType.MakePointer(CType.UInt16) }, CType.UInt16), BuiltinParamAddresses(1));
-        DefineSymbol(SymbolKind.Constant, Builtins.StoreU8, 0, CType.MakeFunction(new[] { CType.MakePointer(CType.UInt8), CType.UInt8 }, CType.UInt8), BuiltinParamAddresses(2));
-        DefineSymbol(SymbolKind.Constant, Builtins.StoreU16, 0, CType.MakeFunction(new[] { CType.MakePointer(CType.UInt16), CType.UInt16 }, CType.UInt16), BuiltinParamAddresses(2));
-        DefineSymbol(SymbolKind.Constant, Builtins.AddU16, 0, CType.MakeFunction(new[] { CType.UInt16, CType.UInt16 }, CType.UInt16), BuiltinParamAddresses(2));
-        DefineSymbol(SymbolKind.Constant, Builtins.SubtractU16, 0, CType.MakeFunction(new[] { CType.UInt16, CType.UInt16 }, CType.UInt16), BuiltinParamAddresses(2));
-        DefineSymbol(SymbolKind.Constant, Builtins.BoolFromU16, 0, CType.MakeFunction(new[] { CType.UInt16 }, CType.UInt8), BuiltinParamAddresses(1));
+        DefineSymbol(SymbolTag.Constant, Builtins.LoadU8, 0, CType.MakeFunction(new[] { CType.MakePointer(CType.UInt8) }, CType.UInt8), BuiltinParamAddresses(1));
+        DefineSymbol(SymbolTag.Constant, Builtins.LoadU16, 0, CType.MakeFunction(new[] { CType.MakePointer(CType.UInt16) }, CType.UInt16), BuiltinParamAddresses(1));
+        DefineSymbol(SymbolTag.Constant, Builtins.StoreU8, 0, CType.MakeFunction(new[] { CType.MakePointer(CType.UInt8), CType.UInt8 }, CType.UInt8), BuiltinParamAddresses(2));
+        DefineSymbol(SymbolTag.Constant, Builtins.StoreU16, 0, CType.MakeFunction(new[] { CType.MakePointer(CType.UInt16), CType.UInt16 }, CType.UInt16), BuiltinParamAddresses(2));
+        DefineSymbol(SymbolTag.Constant, Builtins.AddU16, 0, CType.MakeFunction(new[] { CType.UInt16, CType.UInt16 }, CType.UInt16), BuiltinParamAddresses(2));
+        DefineSymbol(SymbolTag.Constant, Builtins.SubtractU16, 0, CType.MakeFunction(new[] { CType.UInt16, CType.UInt16 }, CType.UInt16), BuiltinParamAddresses(2));
+        DefineSymbol(SymbolTag.Constant, Builtins.BoolFromU16, 0, CType.MakeFunction(new[] { CType.UInt16 }, CType.UInt8), BuiltinParamAddresses(1));
 
         // First pass: Read all declarations to get type information and global symbols.
         foreach (Declaration decl in program)
         {
-            if (decl.Kind == DeclarationKind.Function)
+            if (decl.Tag == DeclarationTag.Function)
             {
                 // Allocate space for each parameter and store it in the symbol table.
                 int paramCount = decl.Fields.Count;
@@ -59,9 +59,9 @@ partial class Compiler
                 }
 
                 CType functionType = CType.MakeFunction(paramTypes, decl.Type);
-                DefineSymbol(SymbolKind.Constant, decl.Name, 0, functionType, addresses);
+                DefineSymbol(SymbolTag.Constant, decl.Name, 0, functionType, addresses);
             }
-            else if (decl.Kind == DeclarationKind.Constant)
+            else if (decl.Tag == DeclarationTag.Constant)
             {
                 // TODO: Make sure the declared type matches the actual type.
                 CType type;
@@ -70,7 +70,7 @@ partial class Compiler
                 {
                     Program.Error("expression must be constant");
                 }
-                DefineSymbol(SymbolKind.Constant, decl.Name, value, decl.Type, null);
+                DefineSymbol(SymbolTag.Constant, decl.Name, value, decl.Type, null);
             }
             else
             {
@@ -82,7 +82,7 @@ partial class Compiler
 
         foreach (Declaration decl in program)
         {
-            if (decl.Kind == DeclarationKind.Function)
+            if (decl.Tag == DeclarationTag.Function)
             {
                 EmitComment("define function " + decl.Name);
 
@@ -97,7 +97,7 @@ partial class Compiler
                 for (int i = 0; i < decl.Fields.Count; i++)
                 {
                     NamedField f = decl.Fields[i];
-                    DefineSymbol(SymbolKind.Local, f.Name, sym.ParamAddresses[i], f.Type, null);
+                    DefineSymbol(SymbolTag.Local, f.Name, sym.ParamAddresses[i], f.Type, null);
                 }
 
                 Expr body = decl.Body;
@@ -113,22 +113,22 @@ partial class Compiler
         // Fix references to functions:
         foreach (Fixup fixup in Fixups)
         {
-            if (fixup.Kind != FixupKind.None)
+            if (fixup.Tag != FixupTag.None)
             {
                 Symbol sym;
                 if (!FindSymbol(fixup.Target, out sym)) Program.Error("function not defined: " + fixup.Target);
                 int target = sym.Value;
 
-                if (fixup.Kind == FixupKind.Absolute)
+                if (fixup.Tag == FixupTag.Absolute)
                 {
                     EmitFix_U16(fixup.Location, target);
-                    fixup.Kind = FixupKind.None;
+                    fixup.Tag = FixupTag.None;
                 }
             }
         }
 
         // All fixups should now be fixed.
-        if (Fixups.Any(x => x.Kind != FixupKind.None)) Program.Panic("some fixups remain");
+        if (Fixups.Any(x => x.Tag != FixupTag.None)) Program.Panic("some fixups remain");
     }
 
     Expr ReplaceGenericFunctions(Expr e)
@@ -155,7 +155,7 @@ partial class Compiler
         }
         else if (e.Tag == ExprTag.Local)
         {
-            DefineSymbol(SymbolKind.Local, e.Name, 0, e.DeclaredType, null);
+            DefineSymbol(SymbolTag.Local, e.Name, 0, e.DeclaredType, null);
             return e;
         }
         else if (e.Tag == ExprTag.AddressOf)
@@ -274,7 +274,7 @@ partial class Compiler
         }
         else if (e.Tag == ExprTag.Local)
         {
-            DefineSymbol(SymbolKind.Local, e.Name, 0, e.DeclaredType, null);
+            DefineSymbol(SymbolTag.Local, e.Name, 0, e.DeclaredType, null);
         }
         else if (e.Tag == ExprTag.AddressOf)
         {
@@ -283,7 +283,7 @@ partial class Compiler
             if (arg.Tag != ExprTag.Name) Program.NYI();
             Symbol sym;
             if (!FindSymbol(arg.Name, out sym)) Program.Error("symbol not defined: {0}", arg.Name);
-            if (sym.Kind != SymbolKind.Local) Program.Error("cannot take address of a constant: {0}", arg.Name);
+            if (sym.Tag != SymbolTag.Local) Program.Error("cannot take address of a constant: {0}", arg.Name);
         }
         else if (e.Tag == ExprTag.Switch)
         {
@@ -401,7 +401,7 @@ partial class Compiler
         {
             Symbol sym;
             if (!FindSymbol(e.Name, out sym)) Program.Error("undefined symbol");
-            if (sym.Kind != SymbolKind.Local) Program.NYI();
+            if (sym.Tag != SymbolTag.Local) Program.NYI();
             int address = sym.Value;
             EmitLoad(address, sym.Type, dest, cont);
         }
@@ -443,7 +443,7 @@ partial class Compiler
             {
                 Symbol sym;
                 if (!FindSymbol(arg.Name, out sym)) Program.Error("undefined symbol");
-                if (sym.Kind != SymbolKind.Local) Program.Error("target of assignment must be a variable: " + arg.Name);
+                if (sym.Tag != SymbolTag.Local) Program.Error("target of assignment must be a variable: " + arg.Name);
                 int address = sym.Value;
                 EmitLoadImmediate(address, CType.MakePointer(TypeOf(arg)), dest, cont);
             }
@@ -633,7 +633,7 @@ partial class Compiler
 
                     // JSR to the function:
                     Emit_U16(Opcode.JSR, 0);
-                    Fixups.Add(new Fixup(FixupKind.Absolute, GetCurrentCodeAddress() - 2, e.Name));
+                    Fixups.Add(new Fixup(FixupTag.Absolute, GetCurrentCodeAddress() - 2, e.Name));
                 }
 
                 // The return value is placed in the accumulator.
@@ -666,7 +666,7 @@ partial class Compiler
             Symbol sym;
             if (!FindSymbol(e.Name, out sym)) Program.Error("undefined symbol: {0}", e.Name);
 
-            if (sym.Kind == SymbolKind.Constant)
+            if (sym.Tag == SymbolTag.Constant)
             {
                 // TODO: Make sure the constant value is not too big.
                 value = sym.Value;
@@ -685,7 +685,7 @@ partial class Compiler
     {
         Emit_U16(Opcode.JMP_ABS, 0);
         int fixupAddress = GetCurrentCodeAddress() - 2;
-        Fixups.Add(new Fixup(FixupKind.Absolute, fixupAddress, target));
+        Fixups.Add(new Fixup(FixupTag.Absolute, fixupAddress, target));
     }
 
     void EmitLoadImmediate(int imm, CType type, int dest, Continuation cont)
@@ -743,7 +743,7 @@ partial class Compiler
             Opcode op = (cont.When == JumpCondition.IfTrue) ? Opcode.BNE : Opcode.BEQ;
             Emit_U8(op, 0);
             int fixupAddress = GetCurrentCodeAddress() - 1;
-            Fixups.Add(new Fixup(FixupKind.Relative, fixupAddress, cont.Target));
+            Fixups.Add(new Fixup(FixupTag.Relative, fixupAddress, cont.Target));
         }
     }
 
@@ -765,15 +765,15 @@ partial class Compiler
         {
             if (fixup.Target == label)
             {
-                if (fixup.Kind == FixupKind.Relative)
+                if (fixup.Tag == FixupTag.Relative)
                 {
                     EmitFix_S8(fixup.Location, target);
-                    fixup.Kind = FixupKind.None;
+                    fixup.Tag = FixupTag.None;
                 }
-                else if (fixup.Kind == FixupKind.Absolute)
+                else if (fixup.Tag == FixupTag.Absolute)
                 {
                     EmitFix_U16(fixup.Location, target);
-                    fixup.Kind = FixupKind.None;
+                    fixup.Tag = FixupTag.None;
                 }
             }
         }
@@ -782,7 +782,7 @@ partial class Compiler
     void DefineLocal(CType type, string name)
     {
         int address = AllocGlobal(SizeOf(type));
-        DefineSymbol(SymbolKind.Local, name, address, type, null);
+        DefineSymbol(SymbolTag.Local, name, address, type, null);
     }
 
     string MakeUniqueLabel()
@@ -825,7 +825,7 @@ partial class Compiler
         return null;
     }
 
-    void DefineSymbol(SymbolKind kind, string name, int value, CType type, int[] paramAddresses)
+    void DefineSymbol(SymbolTag tag, string name, int value, CType type, int[] paramAddresses)
     {
         // It is an error to define two things with the same name in the same scope.
         if (CurrentScope.Symbols.Any(x => x.Name == name))
@@ -835,7 +835,7 @@ partial class Compiler
 
         CurrentScope.Symbols.Add(new Symbol
         {
-            Kind = kind,
+            Tag = tag,
             Name = name,
             Value = value,
             Type = type,
@@ -909,37 +909,37 @@ partial class Compiler
     }
 }
 
-enum SymbolKind
-{
-    Constant,
-    Local,
-}
-
-[DebuggerDisplay("{Kind} {Name} = 0x{Value,h} ({Type.Show(),nq})")]
+[DebuggerDisplay("{Tag} {Name} = 0x{Value,h} ({Type.Show(),nq})")]
 class Symbol
 {
-    public SymbolKind Kind;
+    public SymbolTag Tag;
     public string Name;
     public int Value;
     public CType Type;
     public int[] ParamAddresses;
 }
 
+enum SymbolTag
+{
+    Constant,
+    Local,
+}
+
 class Fixup
 {
-    public FixupKind Kind;
+    public FixupTag Tag;
     public readonly int Location;
     public readonly string Target;
 
-    public Fixup(FixupKind kind, int location, string target)
+    public Fixup(FixupTag tag, int location, string target)
     {
-        Kind = kind;
+        Tag = tag;
         Location = location;
         Target = target;
     }
 }
 
-enum FixupKind
+enum FixupTag
 {
     None,
     Relative,

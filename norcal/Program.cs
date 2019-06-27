@@ -30,13 +30,13 @@ static class Program
     {
         foreach (Declaration decl in program)
         {
-            if (decl.Kind == DeclarationKind.Function)
+            if (decl.Tag == DeclarationTag.Function)
             {
                 Console.Write("{0}()\n    ", decl.Name);
                 PrintExpr(decl.Body);
                 Console.Write("\n\n");
             }
-            else if (decl.Kind == DeclarationKind.Constant)
+            else if (decl.Tag == DeclarationTag.Constant)
             {
                 Console.Write("define {0} = ", decl.Name);
                 PrintExpr(decl.Body);
@@ -263,19 +263,19 @@ partial class Expr
     public Expr[] Args;
 }
 
-enum DeclarationKind
-{
-    Function,
-    Constant,
-}
-
 class Declaration
 {
-    public DeclarationKind Kind;
+    public DeclarationTag Tag;
     public CType Type;
     public string Name;
     public Expr Body;
     public List<NamedField> Fields;
+}
+
+enum DeclarationTag
+{
+    Function,
+    Constant,
 }
 
 class NamedField

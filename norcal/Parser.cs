@@ -48,7 +48,7 @@ partial class Parser
         Declaration d = new Declaration();
         if (TryParseName("define"))
         {
-            d.Kind = DeclarationKind.Constant;
+            d.Tag = DeclarationTag.Constant;
             if (!TryParseType(out d.Type)) ParserError("expected a type");
             if (!TryParseAnyName(out d.Name)) ParserError("expected a name");
             if (!TryParse(TokenType.EQUALS)) ParserError("expected =");
@@ -58,7 +58,7 @@ partial class Parser
         else if (TryParseName("#define"))
         {
             // A preprocessor-style constant, for backward compatibility.
-            d.Kind = DeclarationKind.Constant;
+            d.Tag = DeclarationTag.Constant;
             // TODO: Infer a type for this constant.
             d.Type = CType.UInt16;
             if (!TryParseAnyName(out d.Name)) ParserError("expected a name");
@@ -66,7 +66,7 @@ partial class Parser
         }
         else
         {
-            d.Kind = DeclarationKind.Function;
+            d.Tag = DeclarationTag.Function;
             if (!TryParseType(out d.Type)) ParserError("expected a return type");
             if (!TryParseAnyName(out d.Name)) ParserError("expected function name");
             if (!TryParse(TokenType.LPAREN)) ParserError("expected (");
