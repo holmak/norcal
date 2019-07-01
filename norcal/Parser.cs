@@ -66,31 +66,40 @@ partial class Parser
         }
         else
         {
-            d.Tag = DeclarationTag.Function;
-            if (!TryParseType(out d.Type)) ParserError("expected a return type");
-            if (!TryParseAnyName(out d.Name)) ParserError("expected function name");
-            if (!TryParse(TokenType.LPAREN)) ParserError("expected (");
-            d.Fields = new List<NamedField>();
-            if (!TryParse(TokenType.RPAREN))
+            if (!TryParseType(out d.Type)) ParserError("expected a type");
+            if (!TryParseAnyName(out d.Name)) ParserError("expected a name");
+
+            if (TryParse(TokenType.LPAREN))
             {
-                while (true)
+                d.Tag = DeclarationTag.Function;
+                d.Fields = new List<NamedField>();
+                if (!TryParse(TokenType.RPAREN))
                 {
-                    CType type;
-                    string name;
-                    if (!TryParseType(out type)) ParserError("expected type for parameter");
-                    if (!TryParseAnyName(out name)) ParserError("expected name for parameter");
-                    d.Fields.Add(new NamedField(type, name));
-                    if (TryParse(TokenType.RPAREN)) break;
-                    if (!TryParse(TokenType.COMMA)) ParserError("expected ,");
+                    while (true)
+                    {
+                        CType type;
+                        string name;
+                        if (!TryParseType(out type)) ParserError("expected type for parameter");
+                        if (!TryParseAnyName(out name)) ParserError("expected name for parameter");
+                        d.Fields.Add(new NamedField(type, name));
+                        if (TryParse(TokenType.RPAREN)) break;
+                        if (!TryParse(TokenType.COMMA)) ParserError("expected ,");
+                    }
                 }
+                if (!TryParse(TokenType.LBRACE)) ParserError("expected {");
+                List<Expr> body = new List<Expr>();
+                while (!TryParse(TokenType.RBRACE))
+                {
+                    body.Add(ParseStatement());
+                }
+                d.Body = Expr.MakeScope(Expr.MakeSequence(body.ToArray()));
             }
-            if (!TryParse(TokenType.LBRACE)) ParserError("expected {");
-            List<Expr> body = new List<Expr>();
-            while (!TryParse(TokenType.RBRACE))
+            else
             {
-                body.Add(ParseStatement());
+                d.Tag = DeclarationTag.Variable;
+                if (TryParse(TokenType.EQUALS)) ParserError("global variables cannot be initialized");
+                if (!TryParse(TokenType.SEMICOLON)) ParserError("expected ;");
             }
-            d.Body = Expr.MakeScope(Expr.MakeSequence(body.ToArray()));
         }
         return d;
     }

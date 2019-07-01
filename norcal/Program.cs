@@ -42,6 +42,11 @@ static class Program
                 PrintExpr(decl.Body);
                 Console.Write("\n\n");
             }
+            else if (decl.Tag == DeclarationTag.Variable)
+            {
+                Console.Write("var {0};\n\n", decl.Name);
+                Console.Write("\n\n");
+            }
             else
             {
                 Panic("unhandled declaration type");
@@ -276,6 +281,7 @@ enum DeclarationTag
 {
     Function,
     Constant,
+    Variable,
 }
 
 class NamedField
@@ -296,8 +302,10 @@ class NamedField
 static class Builtins
 {
     public static readonly string AddGeneric = "$add_gen";
+    public static readonly string AddU8 = "$add_u8";
     public static readonly string AddU16 = "$add_u16";
     public static readonly string SubtractGeneric = "$sub_gen";
+    public static readonly string SubtractU8 = "$sub_u8";
     public static readonly string SubtractU16 = "$sub_u16";
     public static readonly string LoadGeneric = "$load_gen";
     public static readonly string LoadU8 = "$load_u8";

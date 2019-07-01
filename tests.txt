@@ -309,6 +309,27 @@ void reset()
     *STOP = 0;
 }
 
+@ Choosing types of literals
+@in
+@out 0x92 0x7456
+define uint8_t *STOP = 0x6000;
+define uint16_t *OUT = 0x6002;
+define uint8_t *OUTB = 0x6004;
+
+static uint8_t small;
+static uint16_t large;
+
+void reset()
+{
+    small = 0x12;
+    large = 0x3456;
+    small = small + 0x80;
+    large = large + 0x4000;
+    *OUTB = small;
+    *OUT = large;
+    *STOP = 0;
+}
+
 @ Typechecking pointers
 @in
 @out 0x1122
@@ -350,5 +371,41 @@ void reset()
 {
     uint16_t *ptr = 0x3344;
     OUT = ptr;
+    *STOP = 0;
+}
+
+@ Global variables
+@in
+@out
+@error
+define uint8_t *STOP = 0x6000;
+define uint16_t *OUT = 0x6002;
+define uint8_t *OUTB = 0x6004;
+
+static uint8_t small = 2;
+
+void reset()
+{
+    *STOP = 0;
+}
+
+@ Global variables
+@in
+@out 0x24 0x68AC
+define uint8_t *STOP = 0x6000;
+define uint16_t *OUT = 0x6002;
+define uint8_t *OUTB = 0x6004;
+
+static uint8_t small;
+static uint16_t large;
+
+void reset()
+{
+    small = 0x12;
+    large = 0x3456;
+    small = small + small;
+    large = large + large;
+    *OUTB = small;
+    *OUT = large;
     *STOP = 0;
 }

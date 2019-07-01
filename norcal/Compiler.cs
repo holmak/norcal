@@ -38,7 +38,9 @@ partial class Compiler
         DefineSymbol(SymbolTag.Constant, Builtins.LoadU16, 0, CType.MakeFunction(new[] { CType.MakePointer(CType.UInt16) }, CType.UInt16), BuiltinParamAddresses(1));
         DefineSymbol(SymbolTag.Constant, Builtins.StoreU8, 0, CType.MakeFunction(new[] { CType.MakePointer(CType.UInt8), CType.UInt8 }, CType.UInt8), BuiltinParamAddresses(2));
         DefineSymbol(SymbolTag.Constant, Builtins.StoreU16, 0, CType.MakeFunction(new[] { CType.MakePointer(CType.UInt16), CType.UInt16 }, CType.UInt16), BuiltinParamAddresses(2));
+        DefineSymbol(SymbolTag.Constant, Builtins.AddU8, 0, CType.MakeFunction(new[] { CType.UInt8, CType.UInt8 }, CType.UInt8), BuiltinParamAddresses(2));
         DefineSymbol(SymbolTag.Constant, Builtins.AddU16, 0, CType.MakeFunction(new[] { CType.UInt16, CType.UInt16 }, CType.UInt16), BuiltinParamAddresses(2));
+        DefineSymbol(SymbolTag.Constant, Builtins.SubtractU8, 0, CType.MakeFunction(new[] { CType.UInt8, CType.UInt8 }, CType.UInt8), BuiltinParamAddresses(2));
         DefineSymbol(SymbolTag.Constant, Builtins.SubtractU16, 0, CType.MakeFunction(new[] { CType.UInt16, CType.UInt16 }, CType.UInt16), BuiltinParamAddresses(2));
         DefineSymbol(SymbolTag.Constant, Builtins.BoolFromU16, 0, CType.MakeFunction(new[] { CType.UInt16 }, CType.UInt8), BuiltinParamAddresses(1));
 
@@ -72,6 +74,10 @@ partial class Compiler
                 }
                 DefineSymbol(SymbolTag.Constant, decl.Name, value, decl.Type, null);
             }
+            else if (decl.Tag == DeclarationTag.Variable)
+            {
+                DefineVariable(decl.Type, decl.Name);
+            }
             else
             {
                 Program.Panic("unhandled declaration type");
@@ -97,7 +103,7 @@ partial class Compiler
                 for (int i = 0; i < decl.Fields.Count; i++)
                 {
                     NamedField f = decl.Fields[i];
-                    DefineSymbol(SymbolTag.Local, f.Name, sym.ParamAddresses[i], f.Type, null);
+                    DefineSymbol(SymbolTag.Variable, f.Name, sym.ParamAddresses[i], f.Type, null);
                 }
 
                 Expr body = decl.Body;
@@ -155,7 +161,7 @@ partial class Compiler
         }
         else if (e.Tag == ExprTag.Local)
         {
-            DefineSymbol(SymbolTag.Local, e.Name, 0, e.DeclaredType, null);
+            DefineSymbol(SymbolTag.Variable, e.Name, 0, e.DeclaredType, null);
             return e;
         }
         else if (e.Tag == ExprTag.AddressOf)
@@ -190,21 +196,11 @@ partial class Compiler
                 CType addressType = TypeOf(args[0]);
                 if (addressType.Tag != CTypeTag.Pointer) Program.Error("store address must have pointer type");
                 CType expectedTypeOfValue = addressType.Subtype;
-
-                // If the second argument is an integer literal with the wrong declared type, change its type
-                // to match the required type -- after making sure the value is small enough to fit.
                 Expr rhs = args[1];
-                if (TypesEqual(expectedTypeOfValue, CType.UInt8) && rhs.Tag == ExprTag.Int)
-                {
-                    int value = rhs.Int;
-                    if (value >= sbyte.MinValue && value <= sbyte.MaxValue)
-                    {
-                        rhs.DeclaredType = CType.UInt8;
-                    }
-                }
-
+                ChangeTypeIfPossible(rhs, expectedTypeOfValue);
                 CType actualType = TypeOf(rhs);
                 if (!TypesEqual(expectedTypeOfValue, actualType)) Program.Error("types in assignment must match");
+
                 string specificName = null;
                 if (TypesEqual(actualType, CType.UInt8)) specificName = Builtins.StoreU8;
                 else if (TypesEqual(actualType, CType.UInt16)) specificName = Builtins.StoreU16;
@@ -214,20 +210,26 @@ partial class Compiler
             else if (e.Name == Builtins.AddGeneric)
             {
                 CType leftType = TypeOf(args[0]);
+                ChangeTypeIfPossible(args[1], leftType);
                 CType rightType = TypeOf(args[1]);
                 if (!TypesEqual(leftType, rightType)) Program.Error("types in binary expression must match");
+
                 string specificName = null;
-                if (TypesEqual(leftType, CType.UInt16)) specificName = Builtins.AddU16;
+                if (TypesEqual(leftType, CType.UInt8)) specificName = Builtins.AddU8;
+                else if (TypesEqual(leftType, CType.UInt16)) specificName = Builtins.AddU16;
                 else Program.NYI();
                 return Expr.MakeCall(specificName, args);
             }
             else if (e.Name == Builtins.SubtractGeneric)
             {
                 CType leftType = TypeOf(args[0]);
+                ChangeTypeIfPossible(args[1], leftType);
                 CType rightType = TypeOf(args[1]);
                 if (!TypesEqual(leftType, rightType)) Program.Error("types in binary expression must match");
+
                 string specificName = null;
-                if (TypesEqual(leftType, CType.UInt16)) specificName = Builtins.SubtractU16;
+                if (TypesEqual(leftType, CType.UInt8)) specificName = Builtins.SubtractU8;
+                else if (TypesEqual(leftType, CType.UInt16)) specificName = Builtins.SubtractU16;
                 else Program.NYI();
                 return Expr.MakeCall(specificName, args);
             }
@@ -248,6 +250,23 @@ partial class Compiler
         {
             Program.Panic("unhandled case");
             return null;
+        }
+    }
+
+    /// <summary>
+    /// It is possible to interpret some expressions, such as integer literals, as any of several types.
+    /// If possible, change the type of the given expression to the expected type.
+    /// </summary>
+    void ChangeTypeIfPossible(Expr e, CType expected)
+    {
+        // Make sure the actual value is small enough to fit.
+        if (TypesEqual(expected, CType.UInt8) && e.Tag == ExprTag.Int)
+        {
+            int value = e.Int;
+            if (value >= 0 && value <= byte.MaxValue)
+            {
+                e.DeclaredType = CType.UInt8;
+            }
         }
     }
 
@@ -274,7 +293,7 @@ partial class Compiler
         }
         else if (e.Tag == ExprTag.Local)
         {
-            DefineSymbol(SymbolTag.Local, e.Name, 0, e.DeclaredType, null);
+            DefineSymbol(SymbolTag.Variable, e.Name, 0, e.DeclaredType, null);
         }
         else if (e.Tag == ExprTag.AddressOf)
         {
@@ -283,7 +302,7 @@ partial class Compiler
             if (arg.Tag != ExprTag.Name) Program.NYI();
             Symbol sym;
             if (!FindSymbol(arg.Name, out sym)) Program.Error("symbol not defined: {0}", arg.Name);
-            if (sym.Tag != SymbolTag.Local) Program.Error("cannot take address of a constant: {0}", arg.Name);
+            if (sym.Tag != SymbolTag.Variable) Program.Error("cannot take address of a constant: {0}", arg.Name);
         }
         else if (e.Tag == ExprTag.Switch)
         {
@@ -401,7 +420,7 @@ partial class Compiler
         {
             Symbol sym;
             if (!FindSymbol(e.Name, out sym)) Program.Error("undefined symbol");
-            if (sym.Tag != SymbolTag.Local) Program.NYI();
+            if (sym.Tag != SymbolTag.Variable) Program.NYI();
             int address = sym.Value;
             EmitLoad(address, sym.Type, dest, cont);
         }
@@ -431,7 +450,7 @@ partial class Compiler
         }
         else if (e.Tag == ExprTag.Local)
         {
-            DefineLocal(e.DeclaredType, e.Name);
+            DefineVariable(e.DeclaredType, e.Name);
             if (dest != DestinationDiscard) Program.Panic("cannot store value of expression of type 'void'");
             if (cont.When != JumpCondition.Never) Program.Panic("cannot branch based on value of type 'void'");
         }
@@ -443,7 +462,7 @@ partial class Compiler
             {
                 Symbol sym;
                 if (!FindSymbol(arg.Name, out sym)) Program.Error("undefined symbol");
-                if (sym.Tag != SymbolTag.Local) Program.Error("target of assignment must be a variable: " + arg.Name);
+                if (sym.Tag != SymbolTag.Variable) Program.Error("target of assignment must be a variable: " + arg.Name);
                 int address = sym.Value;
                 EmitLoadImmediate(address, CType.MakePointer(TypeOf(arg)), dest, cont);
             }
@@ -577,6 +596,13 @@ partial class Compiler
                     Emit(Opcode.TAX);
                     Emit_U8(Opcode.LDA_ZP, T2);
                 }
+                else if (e.Name == Builtins.AddU8)
+                {
+                    if (e.Args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
+                    Emit(Opcode.CLC);
+                    Emit_U8(Opcode.LDA_ZP, T0);
+                    Emit_U8(Opcode.ADC_ZP, T2);
+                }
                 else if (e.Name == Builtins.AddU16)
                 {
                     if (e.Args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
@@ -588,6 +614,13 @@ partial class Compiler
                     Emit_U8(Opcode.ADC_ZP, T3);
                     Emit(Opcode.TAX);
                     Emit_U8(Opcode.LDA_ZP, T0);
+                }
+                else if (e.Name == Builtins.SubtractU8)
+                {
+                    if (e.Args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
+                    Emit(Opcode.SEC);
+                    Emit_U8(Opcode.LDA_ZP, T0);
+                    Emit_U8(Opcode.SBC_ZP, T2);
                 }
                 else if (e.Name == Builtins.SubtractU16)
                 {
@@ -779,10 +812,10 @@ partial class Compiler
         }
     }
 
-    void DefineLocal(CType type, string name)
+    void DefineVariable(CType type, string name)
     {
         int address = AllocGlobal(SizeOf(type));
-        DefineSymbol(SymbolTag.Local, name, address, type, null);
+        DefineSymbol(SymbolTag.Variable, name, address, type, null);
     }
 
     string MakeUniqueLabel()
@@ -922,7 +955,7 @@ class Symbol
 enum SymbolTag
 {
     Constant,
-    Local,
+    Variable,
 }
 
 class Fixup
