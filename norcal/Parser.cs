@@ -130,20 +130,7 @@ partial class Parser
             Expr test = ParseExpr();
             test = Expr.MakeCall(Builtins.BoolFromGeneric, test);
             if (!TryParse(TokenType.RPAREN)) ParserError("expected )");
-            Expr then;
-            if (TryParse(TokenType.LBRACE))
-            {
-                List<Expr> body = new List<Expr>();
-                while (!TryParse(TokenType.RBRACE))
-                {
-                    body.Add(ParseStatement());
-                }
-                then = Expr.MakeSequence(body.ToArray());
-            }
-            else
-            {
-                then = ParseStatement();
-            }
+            Expr then = ParseStatementBlock();
             stmt = Expr.MakeSwitch(test, then);
         }
         else if (TryParseName("return"))
@@ -158,6 +145,24 @@ partial class Parser
             if (!TryParse(TokenType.SEMICOLON)) ParserError("expected ;");
         }
         return stmt;
+    }
+
+    Expr ParseStatementBlock()
+    {
+        // A block can be a single statement, or a series of statements surrounded by braces.
+        if (TryParse(TokenType.LBRACE))
+        {
+            List<Expr> body = new List<Expr>();
+            while (!TryParse(TokenType.RBRACE))
+            {
+                body.Add(ParseStatement());
+            }
+            return Expr.MakeSequence(body.ToArray());
+        }
+        else
+        {
+            return ParseStatement();
+        }
     }
 
     Expr ParseExpr()
