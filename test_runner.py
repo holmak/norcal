@@ -137,6 +137,7 @@ table {
     border-collapse: collapse;
 }
 th, td {
+    vertical-align: top;
     border: 0.15em solid #CCC;
     font-size: 10pt;
     padding: 0.25em;
