@@ -819,13 +819,13 @@ partial class Compiler
 
     void EmitStoreAcc(CType type, int dest)
     {
-        int width = SizeOf(type);
         if (dest == DestinationDiscard || dest == DestinationAcc)
         {
             // NOP
         }
         else
         {
+            int width = SizeOf(type);
             Emit_U16(Opcode.STA_ABS, dest);
             if (width == 2) Emit_U16(Opcode.STX_ABS, dest + 1);
         }
