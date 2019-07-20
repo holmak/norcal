@@ -101,6 +101,8 @@ partial class Expr
                 return string.Format("($address_of {0})", Args[0].Show());
             case ExprTag.Switch:
                 return string.Format("($switch {0})", string.Join(" ", Args.Select(x => x.Show())));
+            case ExprTag.For:
+                return string.Format("($for {0})", string.Join(" ", Args.Select(x => x.Show())));
             case ExprTag.Return:
                 return string.Format("($return {0})", Args[0].Show());
             default:
@@ -172,6 +174,15 @@ partial class Expr
         {
             Tag = ExprTag.Switch,
             Args = args,
+        };
+    }
+
+    public static Expr MakeFor(Expr initialization, Expr condition, Expr induction, Expr body)
+    {
+        return new Expr
+        {
+            Tag = ExprTag.For,
+            Args = new[] { initialization, condition, induction, body },
         };
     }
 
@@ -255,6 +266,7 @@ enum ExprTag
     Local,      // name
     AddressOf,  // arg
     Switch,     // cond, body, repeat...
+    For,        // init, cond, next, body
     Return,     // arg
     Call,       // name, args...
 }
@@ -315,6 +327,9 @@ static class Builtins
     public static readonly string StoreU16 = "$store_u16";
     public static readonly string BoolFromGeneric = "$bool_from_gen";
     public static readonly string BoolFromU16 = "$bool_from_u16";
+    public static readonly string PredecrementGeneric = "$predecr_gen";
+    public static readonly string PredecrementU8 = "$predecr_u8";
+    public static readonly string PredecrementU16 = "$predecr_u16";
 }
 
 enum Opcode

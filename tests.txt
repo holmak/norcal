@@ -409,3 +409,19 @@ void reset()
     *OUT = large;
     *STOP = 0;
 }
+
+@ for loops
+@in
+@out 5 4 3 2 1
+define uint8_t *STOP = 0x6000;
+define uint16_t *OUT = 0x6002;
+define uint8_t *OUTB = 0x6004;
+
+void reset()
+{
+    for (uint8_t i = 5; i; i = i - 1)
+    {
+        *OUTB = i;
+    }
+    *STOP = 0;
+}

@@ -125,11 +125,9 @@ partial class Compiler
                 if (!FindSymbol(fixup.Target, out sym)) Program.Error("function not defined: " + fixup.Target);
                 int target = sym.Value;
 
-                if (fixup.Tag == FixupTag.Absolute)
-                {
-                    EmitFix_U16(fixup.Location, target);
-                    fixup.Tag = FixupTag.None;
-                }
+                if (fixup.Tag != FixupTag.Absolute) Program.Panic("function fixups should always be absolute");
+                EmitFix_U16(fixup.Location, target);
+                fixup.Tag = FixupTag.None;
             }
         }
 
@@ -172,6 +170,14 @@ partial class Compiler
         else if (e.Tag == ExprTag.Switch)
         {
             return Expr.MakeSwitch(e.Args.Select(ReplaceGenericFunctions).ToArray());
+        }
+        else if (e.Tag == ExprTag.For)
+        {
+            return Expr.MakeFor(
+                ReplaceGenericFunctions(e.Args[0]),
+                ReplaceGenericFunctions(e.Args[1]),
+                ReplaceGenericFunctions(e.Args[2]),
+                ReplaceGenericFunctions(e.Args[3]));
         }
         else if (e.Tag == ExprTag.Return)
         {
@@ -310,6 +316,11 @@ partial class Compiler
             // TODO: Each condition must have type "uint8_t".
             // TODO: Each then-clause must have the same type.
         }
+        else if (e.Tag == ExprTag.For)
+        {
+            foreach (Expr sub in e.Args) CheckTypes(sub);
+            // TODO: Are there any other rules?
+        }
         else if (e.Tag == ExprTag.Return)
         {
             Expr arg = e.Args[0];
@@ -375,6 +386,10 @@ partial class Compiler
         else if (e.Tag == ExprTag.Switch)
         {
             // TODO: Figure out the type.
+            return CType.Void;
+        }
+        else if (e.Tag == ExprTag.For)
+        {
             return CType.Void;
         }
         else if (e.Tag == ExprTag.Return)
@@ -493,6 +508,30 @@ partial class Compiler
 
             EmitComment("end of switch");
             FixReferencesTo(end);
+        }
+        else if (e.Tag == ExprTag.For)
+        {
+            if (e.Args.Length != 4) Program.Panic("wrong number of items in for expression");
+            Expr init = e.Args[0];
+            Expr test = e.Args[1];
+            Expr induction = e.Args[2];
+            Expr body = e.Args[3];
+            string bottom = MakeUniqueLabel();
+
+            EmitComment("for loop (prologue)");
+            BeginScope();
+            CompileExpression(init, DestinationDiscard, Continuation.Fallthrough);
+            EmitComment("for loop");
+            int top = GetCurrentCodeAddress();
+            CompileExpression(test, DestinationDiscard, new Continuation(JumpCondition.IfFalse, bottom));
+            CompileExpression(body, DestinationDiscard, Continuation.Fallthrough);
+            CompileExpression(induction, DestinationDiscard, Continuation.Fallthrough);
+            EmitJump(top);
+            EndScope();
+            EmitComment("for loop (end)");
+            FixReferencesTo(bottom);
+
+            if (cont.When != JumpCondition.Never) Program.NYI();
         }
         else if (e.Tag == ExprTag.Return)
         {
@@ -713,12 +752,16 @@ partial class Compiler
         return false;
     }
 
-    // Jump unconditionally.
-    void EmitJump(string target)
+    void EmitJump(int target)
+    {
+        Emit_U16(Opcode.JMP_ABS, target);
+    }
+
+    void EmitJump(string label)
     {
         Emit_U16(Opcode.JMP_ABS, 0);
         int fixupAddress = GetCurrentCodeAddress() - 2;
-        Fixups.Add(new Fixup(FixupTag.Absolute, fixupAddress, target));
+        Fixups.Add(new Fixup(FixupTag.Absolute, fixupAddress, label));
     }
 
     void EmitLoadImmediate(int imm, CType type, int dest, Continuation cont)

@@ -90,7 +90,7 @@ partial class Parser
                 List<Expr> body = new List<Expr>();
                 while (!TryParse(TokenType.RBRACE))
                 {
-                    body.Add(ParseStatement());
+                    body.Add(ParseStatement(true));
                 }
                 d.Body = Expr.MakeScope(Expr.MakeSequence(body.ToArray()));
             }
@@ -104,7 +104,8 @@ partial class Parser
         return d;
     }
 
-    Expr ParseStatement()
+    // If false, only allow statements that would fit in a "for" initializer.
+    Expr ParseStatement(bool allowLong)
     {
         Expr stmt;
         CType type;
@@ -126,6 +127,7 @@ partial class Parser
         }
         else if (TryParseName("if"))
         {
+            if (!allowLong) Error_NotAllowedInFor();
             if (!TryParse(TokenType.LPAREN)) ParserError("expected (");
             Expr test = ParseExpr();
             test = Expr.MakeCall(Builtins.BoolFromGeneric, test);
@@ -133,8 +135,21 @@ partial class Parser
             Expr then = ParseStatementBlock();
             stmt = Expr.MakeSwitch(test, then);
         }
+        else if (TryParseName("for"))
+        {
+            if (!allowLong) Error_NotAllowedInFor();
+            if (!TryParse(TokenType.LPAREN)) ParserError("expected (");
+            Expr init = ParseStatement(false);
+            Expr test = ParseExpr();
+            if (!TryParse(TokenType.SEMICOLON)) ParserError("expected ;");
+            Expr next = ParseExpr();
+            if (!TryParse(TokenType.RPAREN)) ParserError("expected )");
+            Expr body = ParseStatementBlock();
+            stmt = Expr.MakeFor(init, test, next, body);
+        }
         else if (TryParseName("return"))
         {
+            if (!allowLong) Error_NotAllowedInFor();
             stmt = Expr.MakeReturn(ParseExpr());
             if (!TryParse(TokenType.SEMICOLON)) ParserError("expected ;");
         }
@@ -147,6 +162,11 @@ partial class Parser
         return stmt;
     }
 
+    void Error_NotAllowedInFor()
+    {
+        ParserError("complex statements are not allowed in for initializers");
+    }
+
     Expr ParseStatementBlock()
     {
         // A block can be a single statement, or a series of statements surrounded by braces.
@@ -155,13 +175,13 @@ partial class Parser
             List<Expr> body = new List<Expr>();
             while (!TryParse(TokenType.RBRACE))
             {
-                body.Add(ParseStatement());
+                body.Add(ParseStatement(true));
             }
             return Expr.MakeSequence(body.ToArray());
         }
         else
         {
-            return ParseStatement();
+            return ParseStatement(true);
         }
     }
 
