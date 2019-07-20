@@ -605,6 +605,11 @@ partial class Compiler
                     {
                         simpleArg = Expr.MakeInt(n, argType);
                     }
+                    else if (arg.Tag == ExprTag.Name)
+                    {
+                        // An identifier is simple enough that it doesn't need to be loaded into a temporary.
+                        simpleArg = arg;
+                    }
                     else
                     {
                         EmitComment("prepare call: create temporary for argument " + i);
