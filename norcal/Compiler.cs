@@ -748,6 +748,22 @@ partial class Compiler
                 return true;
             }
         }
+        else if (e.Tag == ExprTag.AddressOf)
+        {
+            Expr arg = e.Args[0];
+            if (arg.Tag == ExprTag.Name)
+            {
+                Symbol sym;
+                if (!FindSymbol(arg.Name, out sym)) Program.Error("undefined symbol: {0}", e.Name);
+
+                if (sym.Tag == SymbolTag.Variable)
+                {
+                    value = sym.Value;
+                    type = CType.MakePointer(sym.Type);
+                    return true;
+                }
+            }
+        }
 
         value = 0;
         type = null;
