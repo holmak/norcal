@@ -586,6 +586,7 @@ partial class Compiler
                 if (e.Args.Length != paramTypes.Length) Program.Error("wrong number of arguments to function: " + e.Name);
 
                 BeginTempScope();
+                EmitComment("prepare call: function " + e.Name);
 
                 // Evaluate the arguments and store the results in temporary variables.
                 // TODO: (optimization) The first arg doesn't have to be simplified, since we haven't started assembling a call frame yet.
@@ -606,6 +607,7 @@ partial class Compiler
                     }
                     else
                     {
+                        EmitComment("prepare call: create temporary for argument " + i);
                         int argSize = SizeOf(argType);
                         int temp = AllocTemp(argSize);
                         CompileExpression(arg, temp, Continuation.Fallthrough);
@@ -615,14 +617,14 @@ partial class Compiler
                 }
 
                 // Copy all of the argument values from the temporaries into the function's call frame.
-                EmitComment("copy arguments to call frame");
                 for (int i = 0; i < temps.Count; i++)
                 {
+                    EmitComment("prepare call: load argument " + i);
                     CompileExpression(temps[i], paramAddresses[i], Continuation.Fallthrough);
                 }
 
                 // For builtin operations, instead of jumping to a function, emit the code inline.
-                EmitComment(e.Name);
+                EmitComment("function body: " + e.Name);
                 if (e.Name == Builtins.LoadU16)
                 {
                     if (e.Args.Length != 1) Program.Panic("wrong number of arguments to unary operator");
@@ -766,7 +768,6 @@ partial class Compiler
 
     void EmitLoadImmediate(int imm, CType type, int dest, Continuation cont)
     {
-        EmitComment("load immediate");
         int width = SizeOf(type);
         if (dest == DestinationDiscard)
         {
