@@ -712,8 +712,8 @@ partial class Compiler
 
                 // The return value is placed in the accumulator.
 
-                // TODO: Use the appropriate return type.
-                EmitStoreAcc(CType.UInt16, dest);
+                CType functionReturnType = functionSym.Type.Subtype;
+                EmitStoreAcc(functionReturnType, dest);
                 EmitBranchOnAcc(cont);
 
                 EndTempScope();
