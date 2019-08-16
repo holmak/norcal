@@ -1,19 +1,20 @@
 import os
 import subprocess
 
+joinpaths = os.path.join
+
 # Configuration
 TEST_DIR = 'test_files'
-TESTS_FILE = '../tests.txt'
-SOURCE_FILE = 'source.c'
-IMAGE_FILE = 'program.nes'
-INPUT_FILE = 'input.bin'
-REPORT_FILE = 'results.html'
-DISASM_FILE = 'dis.s'
-COMPILER = '../norcal/bin/Debug/norcal.exe'
-SIMULATOR = '../sim6502/x64/Debug/sim6502.exe'
+TESTS_FILE = 'tests.txt'
+SOURCE_FILE = joinpaths(TEST_DIR, 'source.c')
+IMAGE_FILE = joinpaths(TEST_DIR, 'program.nes')
+INPUT_FILE = joinpaths(TEST_DIR, 'input.bin')
+REPORT_FILE = joinpaths(TEST_DIR, 'results.html')
+DISASM_FILE = joinpaths(TEST_DIR, 'dis.s')
+COMPILER = 'norcal/bin/Debug/norcal.exe'
+SIMULATOR = 'sim6502/x64/Debug/sim6502.exe'
 
 os.makedirs(TEST_DIR, exist_ok=True)
-os.chdir(TEST_DIR)
 
 def read_text_file(path):
     with open(path, 'r') as f:
