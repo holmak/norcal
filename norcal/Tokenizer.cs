@@ -16,7 +16,31 @@ class Tokenizer
     {
         Tokenizer tokenizer = new Tokenizer();
         tokenizer.Input = File.ReadAllText(filename);
-        return tokenizer.Tokenize();
+        List<Token> tokens = tokenizer.Tokenize();
+        List<Token> preprocessed = new List<Token>();
+
+        // Replace #include directives with the content of the specified file:
+        for (int i = 0; i < tokens.Count; i++)
+        {
+            if (tokens[i].Tag == TokenType.NAME && tokens[i].Name == "#include")
+            {
+                i += 1;
+                if (i >= tokens.Count) Error(tokens[i].Position, "expected filename after #include");
+                Token next = tokens[i];
+                if (next.Tag != TokenType.STRING) Error(tokens[i].Position, "argument to #include must be a string");
+                string includedFilename = next.Name;
+                List<Token> includedTokens = TokenizeFile(includedFilename);
+                // Remove the final EOF token:
+                includedTokens.RemoveAt(includedTokens.Count - 1);
+                preprocessed.AddRange(includedTokens);
+            }
+            else
+            {
+                preprocessed.Add(tokens[i]);
+            }
+        }
+
+        return preprocessed;
     }
 
     public List<Token> Tokenize()
@@ -42,10 +66,34 @@ class Tokenizer
             // (Unprintable characters shouldn't be in the file, and whitespace was already skipped.)
             if (TryRead('\0')) tag = TokenType.EOF;
             else if (GetNextChar() <= ' ') tag = TokenType.INVALID;
+            else if (TryRead('!')) Program.NYI();
+            else if (TryRead('"'))
+            {
+                tag = TokenType.STRING;
+                tokenName = "";
+                while (true)
+                {
+                    char c = GetNextChar();
+                    if (c == '\0') Error(InputPos, "unexpected end of file in string");
+                    if (c == '\n') Error(InputPos, "unexpected end of line in string");
+                    if (c == '"')
+                    {
+                        FetchChar();
+                        break;
+                    }
+                    tokenName += c;
+                    FetchChar();
+                }
+            }
             else if (TryRead("#define"))
             {
                 tag = TokenType.NAME;
                 tokenName = "#define";
+            }
+            else if (TryRead("#include"))
+            {
+                tag = TokenType.NAME;
+                tokenName = "#include";
             }
             else if (TryRead('#'))
             {
@@ -204,10 +252,10 @@ class Tokenizer
         return (Next < Input.Length) ? Input[Next] : '\0';
     }
 
-    int FetchChar()
+    void FetchChar()
     {
         if (Next < Input.Length) Next++;
-        int c = GetNextChar();
+        char c = GetNextChar();
         if (c == '\n')
         {
             InputPos.Line++;
@@ -217,7 +265,6 @@ class Tokenizer
         {
             InputPos.Column++;
         }
-        return c;
     }
 
     bool TryRead(char c)
@@ -268,6 +315,7 @@ struct Token
     {
         if (Tag == TokenType.INT) return Int.ToString();
         else if (Tag == TokenType.NAME) return Name;
+        else if (Tag == TokenType.STRING) return string.Format("\"{0}\"", Name);
         else return Tag.ToString();
     }
 }
@@ -292,6 +340,7 @@ enum TokenType
 
     INT,
     NAME,
+    STRING,
 }
 
 struct FilePosition
