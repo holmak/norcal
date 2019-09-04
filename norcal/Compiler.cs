@@ -187,64 +187,83 @@ partial class Compiler
         else if (e.Tag == ExprTag.Call)
         {
             Expr[] args = e.Args.Select(ReplaceGenericFunctions).ToArray();
+
             if (e.Name == Builtins.LoadGeneric)
             {
-                CType addressType = TypeOf(args[0]);
+                Expr source = args[0];
+
+                CType addressType = TypeOf(source);
                 if (addressType.Tag != CTypeTag.Pointer) Program.Error("load address must have pointer type");
                 CType returnType = addressType.Subtype;
+
                 string specificName = null;
                 if (TypesEqual(returnType, CType.UInt16)) specificName = Builtins.LoadU16;
                 else Program.NYI();
-                return Expr.MakeCall(specificName, args);
+
+                return Expr.MakeCall(specificName, source);
             }
             else if (e.Name == Builtins.StoreGeneric)
             {
-                CType addressType = TypeOf(args[0]);
+                Expr left = args[0];
+                Expr right = args[1];
+                CType leftType = TypeOf(left);
+
+                CType addressType = TypeOf(left);
                 if (addressType.Tag != CTypeTag.Pointer) Program.Error("store address must have pointer type");
                 CType expectedTypeOfValue = addressType.Subtype;
-                Expr rhs = args[1];
-                ChangeTypeIfPossible(rhs, expectedTypeOfValue);
-                CType actualType = TypeOf(rhs);
+
+                right = ChangeTypeIfPossible(right, expectedTypeOfValue);
+                CType actualType = TypeOf(right);
                 if (!TypesEqual(expectedTypeOfValue, actualType)) Program.Error("types in assignment must match");
 
                 string specificName = null;
                 if (TypesEqual(actualType, CType.UInt8)) specificName = Builtins.StoreU8;
                 else if (TypesEqual(actualType, CType.UInt16)) specificName = Builtins.StoreU16;
                 else Program.NYI();
-                return Expr.MakeCall(specificName, args);
+
+                return Expr.MakeCall(specificName, left, right);
             }
             else if (e.Name == Builtins.AddGeneric)
             {
-                CType leftType = TypeOf(args[0]);
-                ChangeTypeIfPossible(args[1], leftType);
-                CType rightType = TypeOf(args[1]);
-                if (!TypesEqual(leftType, rightType)) Program.Error("types in binary expression must match");
+                Expr left = args[0];
+                Expr right = args[1];
+                CType leftType = TypeOf(left);
+
+                right = ChangeTypeIfPossible(right, leftType);
+                if (!TypesEqual(leftType, TypeOf(right))) Program.Error("types in binary expression must match");
 
                 string specificName = null;
                 if (TypesEqual(leftType, CType.UInt8)) specificName = Builtins.AddU8;
                 else if (TypesEqual(leftType, CType.UInt16)) specificName = Builtins.AddU16;
                 else Program.NYI();
-                return Expr.MakeCall(specificName, args);
+
+                return Expr.MakeCall(specificName, left, right);
             }
             else if (e.Name == Builtins.SubtractGeneric)
             {
-                CType leftType = TypeOf(args[0]);
-                ChangeTypeIfPossible(args[1], leftType);
-                CType rightType = TypeOf(args[1]);
-                if (!TypesEqual(leftType, rightType)) Program.Error("types in binary expression must match");
+                Expr left = args[0];
+                Expr right = args[1];
+                CType leftType = TypeOf(left);
+
+                right = ChangeTypeIfPossible(args[1], leftType);
+                if (!TypesEqual(leftType, TypeOf(right))) Program.Error("types in binary expression must match");
 
                 string specificName = null;
                 if (TypesEqual(leftType, CType.UInt8)) specificName = Builtins.SubtractU8;
                 else if (TypesEqual(leftType, CType.UInt16)) specificName = Builtins.SubtractU16;
                 else Program.NYI();
-                return Expr.MakeCall(specificName, args);
+
+                return Expr.MakeCall(specificName, left, right);
             }
             else if (e.Name == Builtins.BoolFromGeneric)
             {
-                CType argType = TypeOf(args[0]);
+                Expr source = args[0];
+                CType sourceType = TypeOf(source);
+
                 string specificName = null;
-                if (TypesEqual(argType, CType.UInt16)) specificName = Builtins.BoolFromU16;
+                if (TypesEqual(sourceType, CType.UInt16)) specificName = Builtins.BoolFromU16;
                 else Program.NYI();
+
                 return Expr.MakeCall(specificName, args);
             }
             else
@@ -263,7 +282,7 @@ partial class Compiler
     /// It is possible to interpret some expressions, such as integer literals, as any of several types.
     /// If possible, change the type of the given expression to the expected type.
     /// </summary>
-    void ChangeTypeIfPossible(Expr e, CType expected)
+    Expr ChangeTypeIfPossible(Expr e, CType expected)
     {
         // Make sure the actual value is small enough to fit.
         if (TypesEqual(expected, CType.UInt8) && e.Tag == ExprTag.Int)
@@ -271,9 +290,11 @@ partial class Compiler
             int value = e.Int;
             if (value >= 0 && value <= byte.MaxValue)
             {
-                e.DeclaredType = CType.UInt8;
+                return Expr.MakeInt(value, CType.UInt8);
             }
         }
+
+        return e;
     }
 
     void CheckTypes(Expr e)
