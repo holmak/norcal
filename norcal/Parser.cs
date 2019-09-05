@@ -105,16 +105,21 @@ partial class Parser
             // Declare a local variable:
             string localname;
             if (!TryParseAnyName(out localname)) ParserError("expected variable name");
-            // If no initial value is specified, initialize to zero.
-            Expr value;
-            if (TryParse(TokenType.EQUALS)) value = ParseExpr();
-            else value = Expr.MakeInt(0, CType.UInt16);
-            if (!TryParse(TokenType.SEMICOLON)) ParserError("expected ;");
-            stmt = Expr.MakeSequence(new[]
+            // Optionally, an initial value can be assigned:
+            if (TryParse(TokenType.EQUALS))
             {
-                Expr.MakeLocal(type, localname),
-                MakeAssignExpr(Expr.MakeName(localname), value),
-            });
+                Expr value = ParseExpr();
+                stmt = Expr.MakeSequence(new[]
+                {
+                    Expr.MakeLocal(type, localname),
+                    MakeAssignExpr(Expr.MakeName(localname), value),
+                });
+            }
+            else
+            {
+                stmt = Expr.MakeLocal(type, localname);
+            }
+            if (!TryParse(TokenType.SEMICOLON)) ParserError("expected ;");
         }
         else if (TryParseName("if"))
         {
