@@ -55,6 +55,27 @@ partial class Parser
             if (!TryParseAnyName(out d.Name)) ParserError("expected a name");
             d.Body = ParseExpr();
         }
+        else if (TryParseName("struct"))
+        {
+            d.Tag = DeclarationTag.Struct;
+            if (!TryParseAnyName(out d.Name)) ParserError("expected a name");
+            if (!TryParse(TokenType.LBRACE)) ParserError("expected {");
+            d.Fields = new List<NamedField>();
+            while (!TryParse(TokenType.RBRACE))
+            {
+                string fieldName;
+                CType fieldType;
+                if (!TryParseType(out fieldType)) ParserError("expected a type");
+                if (!TryParseAnyName(out fieldName)) ParserError("expected a name");
+                d.Fields.Add(new NamedField(fieldType, fieldName));
+                while (TryParse(TokenType.COMMA))
+                {
+                    if (!TryParseAnyName(out fieldName)) ParserError("expected a name");
+                    d.Fields.Add(new NamedField(fieldType, fieldName));
+                }
+                if (!TryParse(TokenType.SEMICOLON)) ParserError("expected ;");
+            }
+        }
         else
         {
             if (!TryParseType(out d.Type)) ParserError("expected a type");
@@ -327,6 +348,16 @@ partial class Parser
                     ParserError("functions may only be called by name");
                 }
             }
+            else if (TryParse(TokenType.PERIOD))
+            {
+                string fieldName;
+                if (!TryParseAnyName(out fieldName)) ParserError("expected a field name");
+                e = Expr.MakeCall(Builtins.LoadGeneric,
+                    Expr.MakeStructCast(e, fieldName,
+                        Expr.MakeCall(Builtins.AddU8Ptr,
+                            Expr.MakeCast(CType.UInt8Ptr, Expr.MakeAddressOf(e)),
+                            Expr.MakeOffsetOf(e, fieldName))));
+            }
             else
             {
                 // No more suffixes.
@@ -467,6 +498,12 @@ partial class Parser
         else if (TryParseName("uint16_t"))
         {
             type = CType.UInt16;
+        }
+        else if (TryParseName("struct"))
+        {
+            string name;
+            if (!TryParseAnyName(out name)) ParserError("expected a name");
+            type = CType.MakeStruct(name);
         }
         else
         {

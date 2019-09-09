@@ -11,6 +11,7 @@ partial class Compiler
     int NextLabelNumber = 0;
     LexicalScope CurrentScope = new LexicalScope();
     List<Fixup> Fixups = new List<Fixup>();
+    Dictionary<string, CStructInfo> StructTypes = new Dictionary<string, CStructInfo>();
 
     static readonly int RamStart = 0x300;
     static readonly int RamEnd = 0x800;
@@ -39,6 +40,7 @@ partial class Compiler
         DefineSymbol(SymbolTag.Constant, Builtins.StoreU8, 0, CType.MakeFunction(new[] { CType.MakePointer(CType.UInt8), CType.UInt8 }, CType.UInt8), BuiltinParamAddresses(2));
         DefineSymbol(SymbolTag.Constant, Builtins.StoreU16, 0, CType.MakeFunction(new[] { CType.MakePointer(CType.UInt16), CType.UInt16 }, CType.UInt16), BuiltinParamAddresses(2));
         DefineSymbol(SymbolTag.Constant, Builtins.AddU8, 0, CType.MakeFunction(new[] { CType.UInt8, CType.UInt8 }, CType.UInt8), BuiltinParamAddresses(2));
+        DefineSymbol(SymbolTag.Constant, Builtins.AddU8Ptr, 0, CType.MakeFunction(new[] { CType.UInt8Ptr, CType.UInt16 }, CType.UInt8Ptr), BuiltinParamAddresses(2));
         DefineSymbol(SymbolTag.Constant, Builtins.AddU16, 0, CType.MakeFunction(new[] { CType.UInt16, CType.UInt16 }, CType.UInt16), BuiltinParamAddresses(2));
         DefineSymbol(SymbolTag.Constant, Builtins.SubtractU8, 0, CType.MakeFunction(new[] { CType.UInt8, CType.UInt8 }, CType.UInt8), BuiltinParamAddresses(2));
         DefineSymbol(SymbolTag.Constant, Builtins.SubtractU16, 0, CType.MakeFunction(new[] { CType.UInt16, CType.UInt16 }, CType.UInt16), BuiltinParamAddresses(2));
@@ -77,6 +79,26 @@ partial class Compiler
             else if (decl.Tag == DeclarationTag.Variable)
             {
                 DefineVariable(decl.Type, decl.Name);
+            }
+            else if (decl.Tag == DeclarationTag.Struct)
+            {
+                CField[] fields = new CField[decl.Fields.Count];
+                int offset = 0;
+                for (int i = 0; i < fields.Length; i++)
+                {
+                    fields[i] = new CField
+                    {
+                        Type = decl.Fields[i].Type,
+                        Name = decl.Fields[i].Name,
+                        Offset = offset,
+                    };
+                    offset += SizeOf(fields[i].Type);
+                }
+                StructTypes.Add(decl.Name, new CStructInfo
+                {
+                    TotalSize = offset,
+                    Fields = fields,
+                });
             }
             else
             {
@@ -183,6 +205,29 @@ partial class Compiler
         {
             Expr arg = e.Args[0];
             return ReplaceGenericFunctions(arg);
+        }
+        else if (e.Tag == ExprTag.Cast)
+        {
+            Expr arg = e.Args[0];
+            return Expr.MakeCast(e.DeclaredType, ReplaceGenericFunctions(arg));
+        }
+        else if (e.Tag == ExprTag.StructCast)
+        {
+            Expr structExpr = e.Args[0];
+            string fieldName = e.Name;
+            Expr addressExpr = e.Args[1];
+            return Expr.MakeStructCast(
+                ReplaceGenericFunctions(structExpr),
+                e.Name,
+                ReplaceGenericFunctions(addressExpr));
+        }
+        else if (e.Tag == ExprTag.OffsetOf)
+        {
+            Expr structExpr = e.Args[0];
+            string fieldName = e.Name;
+            return Expr.MakeOffsetOf(
+                ReplaceGenericFunctions(structExpr),
+                e.Name);
         }
         else if (e.Tag == ExprTag.Call)
         {
@@ -351,6 +396,19 @@ partial class Compiler
             CType expected = CType.UInt16;
             if (!TypesEqual(actual, expected)) Program.Error("incorrect return type");
         }
+        else if (e.Tag == ExprTag.Cast)
+        {
+            CheckTypes(e.Args[0]);
+        }
+        else if (e.Tag == ExprTag.StructCast)
+        {
+            CheckTypes(e.Args[0]);
+            CheckTypes(e.Args[1]);
+        }
+        else if (e.Tag == ExprTag.OffsetOf)
+        {
+            CheckTypes(e.Args[0]);
+        }
         else if (e.Tag == ExprTag.Call)
         {
             Symbol sym;
@@ -417,6 +475,20 @@ partial class Compiler
         {
             return CType.Void;
         }
+        else if (e.Tag == ExprTag.Cast)
+        {
+            return e.DeclaredType;
+        }
+        else if (e.Tag == ExprTag.StructCast)
+        {
+            CField field = GetFieldInfo(e.Args[0], e.Name);
+            return CType.MakePointer(field.Type);
+        }
+        else if (e.Tag == ExprTag.OffsetOf)
+        {
+            // Field offsets are always measured in bytes:
+            return CType.UInt16;
+        }
         else if (e.Tag == ExprTag.Call)
         {
             Symbol sym;
@@ -430,6 +502,23 @@ partial class Compiler
             Program.Panic("type of: unhandled case");
             return null;
         }
+    }
+
+    CStructInfo GetStructInfo(string name)
+    {
+        CStructInfo info;
+        if (!StructTypes.TryGetValue(name, out info)) Program.Error("struct not defined: {0}", name);
+        return info;
+    }
+
+    CField GetFieldInfo(Expr structExpr, string fieldName)
+    {
+        CType structType = TypeOf(structExpr);
+        if (structType.Tag != CTypeTag.Struct) Program.Error("left side must have struct type");
+        CStructInfo structInfo = GetStructInfo(structType.Name);
+        CField field = structInfo.Fields.FirstOrDefault(x => x.Name == fieldName);
+        if (field == null) Program.Error("type does not contain a field with this name: {0}", fieldName);
+        return field;
     }
 
     static bool TypesEqual(CType a, CType b)
@@ -561,6 +650,18 @@ partial class Compiler
             CompileExpression(e.Args[0], DestinationAcc, Continuation.Fallthrough);
             Emit(Opcode.RTS);
         }
+        else if (e.Tag == ExprTag.Cast)
+        {
+            CompileExpression(e.Args[0], dest, cont);
+        }
+        else if (e.Tag == ExprTag.StructCast)
+        {
+            CompileExpression(e.Args[1], dest, cont);
+        }
+        else if (e.Tag == ExprTag.OffsetOf)
+        {
+            Program.Panic("field offsets should be calculated as constants");
+        }
         else if (e.Tag == ExprTag.Call)
         {
             int addr;
@@ -670,7 +771,7 @@ partial class Compiler
                     Emit_U8(Opcode.LDA_ZP, T0);
                     Emit_U8(Opcode.ADC_ZP, T2);
                 }
-                else if (e.Name == Builtins.AddU16)
+                else if (e.Name == Builtins.AddU16 || e.Name == Builtins.AddU8Ptr)
                 {
                     if (e.Args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
                     Emit(Opcode.CLC);
@@ -789,6 +890,13 @@ partial class Compiler
                     return true;
                 }
             }
+        }
+        else if (e.Tag == ExprTag.OffsetOf)
+        {
+            CField field = GetFieldInfo(e.Args[0], e.Name);
+            value = field.Offset;
+            type = field.Type;
+            return true;
         }
 
         value = 0;
@@ -919,7 +1027,7 @@ partial class Compiler
         return (byte)((n >> 8) & 0xFF);
     }
 
-    static int SizeOf(CType type)
+    int SizeOf(CType type)
     {
         if (type.Tag == CTypeTag.Simple)
         {
@@ -930,12 +1038,17 @@ partial class Compiler
         {
             return 2;
         }
+        else if (type.Tag == CTypeTag.Struct)
+        {
+            CStructInfo info = GetStructInfo(type.Name);
+            return info.TotalSize;
+        }
 
         Program.NYI();
         return 1;
     }
 
-    static string GetLoadFunctionForType(CType type)
+    string GetLoadFunctionForType(CType type)
     {
         int width = SizeOf(type);
         if (width == 1) return Builtins.LoadU8;
@@ -1088,7 +1201,11 @@ struct Continuation
     public static readonly Continuation Fallthrough = new Continuation(JumpCondition.Never, null);
 }
 
-// CType = SimpleType | FunctionType (name, params, returnType) | Pointer subtype
+// One of:
+// - SimpleType
+// - FunctionType (name, params, returnType)
+// - Pointer subtype
+// - Struct name
 partial class CType
 {
     public CTypeTag Tag;
@@ -1103,6 +1220,7 @@ enum CTypeTag
     Simple,
     Function,
     Pointer,
+    Struct,
 }
 
 enum CSimpleType
@@ -1112,11 +1230,25 @@ enum CSimpleType
     UInt16,
 }
 
+class CStructInfo
+{
+    public int TotalSize;
+    public CField[] Fields;
+}
+
+class CField
+{
+    public CType Type;
+    public string Name;
+    public int Offset;
+}
+
 [DebuggerDisplay("{Show(),nq}")]
 partial class CType
 {
     public static readonly CType Void = MakeSimple(CSimpleType.Void);
     public static readonly CType UInt8 = MakeSimple(CSimpleType.UInt8);
+    public static readonly CType UInt8Ptr = MakePointer(UInt8);
     public static readonly CType UInt16 = MakeSimple(CSimpleType.UInt16);
 
     public static CType MakeSimple(CSimpleType simple)
@@ -1148,6 +1280,15 @@ partial class CType
         };
     }
 
+    public static CType MakeStruct(string name)
+    {
+        return new CType
+        {
+            Tag = CTypeTag.Struct,
+            Name = name,
+        };
+    }
+
     public override bool Equals(object obj)
     {
         throw new NotSupportedException();
@@ -1167,6 +1308,7 @@ partial class CType
             var paramTypes = ParameterTypes.Select(x => x.Show());
             return string.Format("function({0}) {1}", string.Join(", ", paramTypes), Subtype.Show());
         }
+        else if (Tag == CTypeTag.Struct) return "struct " + Name;
         else throw new NotImplementedException();
     }
 }

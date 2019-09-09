@@ -372,3 +372,20 @@ void reset()
     }
     *STOP = 0;
 }
+
+@ structs
+@in
+@out 12
+#include "test.h"
+
+struct Triple { uint16_t x, y, z; }
+struct Pair { uint16_t x; uint16_t y; }
+
+void reset()
+{
+    struct Pair p;
+    p.x = 10;
+    p.y = p.x + 2;
+    *OUT = p.y;
+    *STOP = 0;
+}

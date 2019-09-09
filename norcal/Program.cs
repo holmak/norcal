@@ -47,6 +47,11 @@ static class Program
                 Console.Write("var {0};\n\n", decl.Name);
                 Console.Write("\n\n");
             }
+            else if (decl.Tag == DeclarationTag.Struct)
+            {
+                Console.WriteLine("struct {0} {{ ... }}\n\n", decl.Name);
+                // TODO: Print the fields.
+            }
             else
             {
                 Panic("unhandled declaration type");
@@ -105,6 +110,12 @@ partial class Expr
                 return string.Format("($for {0})", string.Join(" ", Args.Select(x => x.Show())));
             case ExprTag.Return:
                 return string.Format("($return {0})", Args[0].Show());
+            case ExprTag.Cast:
+                return string.Format("($cast {0} {1})", DeclaredType.Show(), Args[0].Show());
+            case ExprTag.StructCast:
+                return string.Format("($struct_cast {0} {1} {2})", Args[0].Show(), Name, Args[1].Show());
+            case ExprTag.OffsetOf:
+                return string.Format("(offset_of {0} {1})", Args[0].Show(), Name);
             default:
                 throw new NotImplementedException();
         }
@@ -195,6 +206,36 @@ partial class Expr
         };
     }
 
+    public static Expr MakeCast(CType type, Expr expr)
+    {
+        return new Expr
+        {
+            Tag = ExprTag.Cast,
+            DeclaredType = type,
+            Args = new[] { expr },
+        };
+    }
+
+    public static Expr MakeStructCast(Expr structExpr, string fieldName, Expr addressExpr)
+    {
+        return new Expr
+        {
+            Tag = ExprTag.StructCast,
+            Args = new[] { structExpr, addressExpr },
+            Name = fieldName,
+        };
+    }
+
+    public static Expr MakeOffsetOf(Expr structExpr, string fieldName)
+    {
+        return new Expr
+        {
+            Tag = ExprTag.OffsetOf,
+            Args = new[] { structExpr },
+            Name = fieldName,
+        };
+    }
+
     public static Expr MakeCall(string function, IEnumerable<Expr> args)
     {
         Expr e = new Expr();
@@ -268,6 +309,9 @@ enum ExprTag
     Switch,     // cond, body, repeat...
     For,        // init, cond, next, body
     Return,     // arg
+    Cast,       // type, expr
+    StructCast, // structExpr, fieldName, addressExpr
+    OffsetOf,   // structExpr, fieldName
     Call,       // name, args...
 }
 
@@ -294,6 +338,7 @@ enum DeclarationTag
     Function,
     Constant,
     Variable,
+    Struct,
 }
 
 class NamedField
@@ -315,6 +360,7 @@ static class Builtins
 {
     public static readonly string AddGeneric = "$add_gen";
     public static readonly string AddU8 = "$add_u8";
+    public static readonly string AddU8Ptr = "$add_u8_ptr";
     public static readonly string AddU16 = "$add_u16";
     public static readonly string SubtractGeneric = "$sub_gen";
     public static readonly string SubtractU8 = "$sub_u8";
