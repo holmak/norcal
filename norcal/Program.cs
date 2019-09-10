@@ -115,7 +115,7 @@ partial class Expr
             case ExprTag.StructCast:
                 return string.Format("($struct_cast {0} {1} {2})", Args[0].Show(), Name, Args[1].Show());
             case ExprTag.OffsetOf:
-                return string.Format("(offset_of {0} {1})", Args[0].Show(), Name);
+                return string.Format("($offset_of {0} {1})", Args[0].Show(), Name);
             default:
                 throw new NotImplementedException();
         }
