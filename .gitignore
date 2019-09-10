@@ -1,0 +1,9 @@
+.vs/
+Debug/
+Release/
+*.VC.opendb
+*.VC.db
+*.vcxproj.user
+ignore/
+test_files/
+*.ines
