@@ -6,4 +6,4 @@ Release/
 *.vcxproj.user
 ignore/
 test_files/
-*.ines
+*.nes
