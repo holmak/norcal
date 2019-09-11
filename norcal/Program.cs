@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -28,40 +29,102 @@ static class Program
 
     static void PrintProgram(List<Declaration> program)
     {
-        foreach (Declaration decl in program)
+        using (TextWriter w = new StreamWriter("parsed.txt"))
         {
-            if (decl.Tag == DeclarationTag.Function)
+            foreach (Declaration decl in program)
             {
-                Console.Write("{0}()\n    ", decl.Name);
-                PrintExpr(decl.Body);
-                Console.Write("\n\n");
-            }
-            else if (decl.Tag == DeclarationTag.Constant)
-            {
-                Console.Write("define {0} = ", decl.Name);
-                PrintExpr(decl.Body);
-                Console.Write("\n\n");
-            }
-            else if (decl.Tag == DeclarationTag.Variable)
-            {
-                Console.Write("var {0};\n\n", decl.Name);
-                Console.Write("\n\n");
-            }
-            else if (decl.Tag == DeclarationTag.Struct)
-            {
-                Console.WriteLine("struct {0} {{ ... }}\n\n", decl.Name);
-                // TODO: Print the fields.
-            }
-            else
-            {
-                Panic("unhandled declaration type");
+                if (decl.Tag == DeclarationTag.Function)
+                {
+                    w.Write("{0}()\n", decl.Name);
+                    w.Write(ShowExpr(decl.Body));
+                    w.Write("\n\n");
+                }
+                else if (decl.Tag == DeclarationTag.Constant)
+                {
+                    w.Write("define {0} = ", decl.Name);
+                    w.Write(ShowExpr(decl.Body));
+                    w.Write("\n\n");
+                }
+                else if (decl.Tag == DeclarationTag.Variable)
+                {
+                    w.Write("var {0};\n\n", decl.Name);
+                    w.Write("\n\n");
+                }
+                else if (decl.Tag == DeclarationTag.Struct)
+                {
+                    w.WriteLine("struct {0} {{ ... }}\n\n", decl.Name);
+                    // TODO: Print the fields.
+                }
+                else
+                {
+                    Panic("unhandled declaration type");
+                }
             }
         }
     }
 
-    static void PrintExpr(Expr e)
+    static string ShowExpr(Expr e)
     {
-        Console.Write(e.Show());
+        return ShowStringTree(ExprToStringTree(e));
+    }
+
+    /// <summary>
+    /// The return value is a "string tree": a tree where each node is a string or another tree.
+    /// </summary>
+    static object ExprToStringTree(Expr e)
+    {
+        switch (e.Tag)
+        {
+            case ExprTag.Int:
+                return e.Int.ToString((e.Int < 512) ? "G" : "X");
+            case ExprTag.Name:
+                return e.Name;
+            case ExprTag.Call:
+                return Enumerable.Concat(new[] { e.Name }, e.Args.Select(ExprToStringTree));
+            case ExprTag.Scope:
+                return new[] { "$scope", ExprToStringTree(e.Args[0]) };
+            case ExprTag.Sequence:
+                return Enumerable.Concat(new[] { "$sequence" }, e.Args.Select(ExprToStringTree));
+            case ExprTag.Local:
+                return new[] { "$local", e.Name };
+            case ExprTag.AddressOf:
+                return new[] { "$address_of", ExprToStringTree(e.Args[0]) };
+            case ExprTag.Switch:
+                return Enumerable.Concat(new[] { "$switch" }, e.Args.Select(ExprToStringTree));
+            case ExprTag.For:
+                return Enumerable.Concat(new[] { "$for" }, e.Args.Select(ExprToStringTree));
+            case ExprTag.Return:
+                return new[] { "$return", ExprToStringTree(e.Args[0]) };
+            case ExprTag.Cast:
+                return new[] { "$cast", "<" + e.DeclaredType.Show() + ">", ExprToStringTree(e.Args[0]) };
+            case ExprTag.StructCast:
+                return new[] { "$struct_cast", ExprToStringTree(e.Args[0]), e.Name, ExprToStringTree(e.Args[1]) };
+            case ExprTag.OffsetOf:
+                return new[] { "$offset_of", ExprToStringTree(e.Args[0]), e.Name };
+            default:
+                throw new NotImplementedException();
+        }
+    }
+
+    /// <summary>
+    /// Format a "string tree" into a multi-line, indented string.
+    /// Each node must be a string or another "string tree".
+    /// </summary>
+    static string ShowStringTree(object tree)
+    {
+        if (tree is string) return (string)tree;
+
+        IEnumerable<object> subtrees = (IEnumerable<object>)tree;
+        IEnumerable<string> substrings = subtrees.Select(ShowStringTree);
+        bool small = subtrees.Count() <= 2;
+        if (small)
+        {
+            return "(" + string.Join(" ", substrings) + ")";
+        }
+        else
+        {
+            return "(" + string.Join("\n    ", substrings.Select(s => s.Replace("\n", "\n    "))) + ")";
+        }
     }
 
     public static void Error(string format, params object[] args)
