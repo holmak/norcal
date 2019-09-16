@@ -17,8 +17,7 @@ static class Program
 
         List<Declaration> program = Parser.ParseFile(sourcePath);
 
-        Console.WriteLine("Parser output:");
-        PrintProgram(program);
+        File.WriteAllText("stage0-parse.txt", ShowProgram(program));
         Console.WriteLine();
 
         Compiler compiler = new Compiler();
@@ -27,43 +26,44 @@ static class Program
         Disassembler.Disassemble(outputPath);
     }
 
-    static void PrintProgram(List<Declaration> program)
+    static string ShowProgram(List<Declaration> program)
     {
-        using (TextWriter w = new StreamWriter("parsed.txt"))
+        StringBuilder sb = new StringBuilder();
+
+        foreach (Declaration decl in program)
         {
-            foreach (Declaration decl in program)
+            if (decl.Tag == DeclarationTag.Function)
             {
-                if (decl.Tag == DeclarationTag.Function)
-                {
-                    w.Write("{0}()\n", decl.Name);
-                    w.Write(ShowExpr(decl.Body));
-                    w.Write("\n\n");
-                }
-                else if (decl.Tag == DeclarationTag.Constant)
-                {
-                    w.Write("define {0} = ", decl.Name);
-                    w.Write(ShowExpr(decl.Body));
-                    w.Write("\n\n");
-                }
-                else if (decl.Tag == DeclarationTag.Variable)
-                {
-                    w.Write("var {0};\n\n", decl.Name);
-                    w.Write("\n\n");
-                }
-                else if (decl.Tag == DeclarationTag.Struct)
-                {
-                    w.WriteLine("struct {0} {{ ... }}\n\n", decl.Name);
-                    // TODO: Print the fields.
-                }
-                else
-                {
-                    Panic("unhandled declaration type");
-                }
+                sb.AppendFormat("{0}()\n", decl.Name);
+                sb.AppendFormat(ShowExpr(decl.Body));
+                sb.AppendFormat("\n\n");
+            }
+            else if (decl.Tag == DeclarationTag.Constant)
+            {
+                sb.AppendFormat("define {0} = ", decl.Name);
+                sb.AppendFormat(ShowExpr(decl.Body));
+                sb.AppendFormat("\n\n");
+            }
+            else if (decl.Tag == DeclarationTag.Variable)
+            {
+                sb.AppendFormat("var {0};\n\n", decl.Name);
+                sb.AppendFormat("\n\n");
+            }
+            else if (decl.Tag == DeclarationTag.Struct)
+            {
+                sb.AppendFormat("struct {0} {{ ... }}\n\n", decl.Name);
+                // TODO: Print the fields.
+            }
+            else
+            {
+                Panic("unhandled declaration type");
             }
         }
+
+        return sb.ToString();
     }
 
-    static string ShowExpr(Expr e)
+    public static string ShowExpr(Expr e)
     {
         return ShowStringTree(ExprToStringTree(e));
     }
@@ -75,6 +75,8 @@ static class Program
     {
         switch (e.Tag)
         {
+            case ExprTag.Empty:
+                return "$empty";
             case ExprTag.Int:
                 return e.Int.ToString((e.Int < 512) ? "G" : "X");
             case ExprTag.Name:
@@ -153,6 +155,8 @@ partial class Expr
     {
         switch (Tag)
         {
+            case ExprTag.Empty:
+                return "$empty";
             case ExprTag.Int:
                 return Int.ToString((Int < 512) ? "G" : "X");
             case ExprTag.Name:
@@ -182,6 +186,14 @@ partial class Expr
             default:
                 throw new NotImplementedException();
         }
+    }
+
+    public static Expr MakeEmpty()
+    {
+        return new Expr
+        {
+            Tag = ExprTag.Empty,
+        };
     }
 
     public static Expr MakeInt(int n, CType type)
@@ -363,6 +375,7 @@ partial class Expr
 
 enum ExprTag
 {
+    Empty,      // nothing
     Int,        // number
     Name,       // name
     Scope,      // args...

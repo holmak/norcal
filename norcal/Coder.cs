@@ -120,14 +120,13 @@ partial class Compiler
 
     int FindVectorFunction(string name)
     {
-        Symbol sym;
-        if (FindSymbol(name, out sym))
+        CFunctionInfo info;
+        if (Functions.TryGetValue(name, out info))
         {
             // Vector functions must be functions that take no arguments and return nothing.
-            if (sym.Type.Tag != CTypeTag.Function) Program.Error("vectors must be functions");
-            if (sym.Type.ParameterTypes.Length != 0) Program.Error("vectors cannot take arguments");
-            if (sym.Type.Subtype != CType.Void) Program.Error("vectors cannot return a value");
-            return sym.Value;
+            if (info.ParameterTypes.Length != 0) Program.Error("vectors cannot take arguments");
+            if (info.ReturnType != CType.Void) Program.Error("vectors cannot return a value");
+            return info.Address;
         }
         else
         {

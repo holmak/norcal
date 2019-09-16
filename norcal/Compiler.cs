@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -9,7 +10,7 @@ partial class Compiler
 {
     int RamNext = RamStart;
     int NextLabelNumber = 0;
-    LexicalScope CurrentScope = new LexicalScope();
+    Dictionary<string, CFunctionInfo> Functions = new Dictionary<string, CFunctionInfo>();
     List<Fixup> Fixups = new List<Fixup>();
     Dictionary<string, CStructInfo> StructTypes = new Dictionary<string, CStructInfo>();
 
@@ -26,6 +27,12 @@ partial class Compiler
     static readonly int T2 = (T0 + 2);
     static readonly int T3 = (T0 + 3);
 
+    static readonly string[] LoadFunctions = new[]
+    {
+        Builtins.LoadU8,
+        Builtins.LoadU16,
+    };
+
     public void CompileProgram(List<Declaration> program)
     {
         // HACK: Many functions are currently just defined in the compiler, and they use
@@ -35,16 +42,18 @@ partial class Compiler
         int[] builtinParamAddresses = new[] { T0, T2 };
 
         // Define the types of the builtin functions:
-        DefineSymbol(SymbolTag.Constant, Builtins.LoadU8, 0, CType.MakeFunction(new[] { CType.MakePointer(CType.UInt8) }, CType.UInt8), BuiltinParamAddresses(1));
-        DefineSymbol(SymbolTag.Constant, Builtins.LoadU16, 0, CType.MakeFunction(new[] { CType.MakePointer(CType.UInt16) }, CType.UInt16), BuiltinParamAddresses(1));
-        DefineSymbol(SymbolTag.Constant, Builtins.StoreU8, 0, CType.MakeFunction(new[] { CType.MakePointer(CType.UInt8), CType.UInt8 }, CType.UInt8), BuiltinParamAddresses(2));
-        DefineSymbol(SymbolTag.Constant, Builtins.StoreU16, 0, CType.MakeFunction(new[] { CType.MakePointer(CType.UInt16), CType.UInt16 }, CType.UInt16), BuiltinParamAddresses(2));
-        DefineSymbol(SymbolTag.Constant, Builtins.AddU8, 0, CType.MakeFunction(new[] { CType.UInt8, CType.UInt8 }, CType.UInt8), BuiltinParamAddresses(2));
-        DefineSymbol(SymbolTag.Constant, Builtins.AddU8Ptr, 0, CType.MakeFunction(new[] { CType.UInt8Ptr, CType.UInt16 }, CType.UInt8Ptr), BuiltinParamAddresses(2));
-        DefineSymbol(SymbolTag.Constant, Builtins.AddU16, 0, CType.MakeFunction(new[] { CType.UInt16, CType.UInt16 }, CType.UInt16), BuiltinParamAddresses(2));
-        DefineSymbol(SymbolTag.Constant, Builtins.SubtractU8, 0, CType.MakeFunction(new[] { CType.UInt8, CType.UInt8 }, CType.UInt8), BuiltinParamAddresses(2));
-        DefineSymbol(SymbolTag.Constant, Builtins.SubtractU16, 0, CType.MakeFunction(new[] { CType.UInt16, CType.UInt16 }, CType.UInt16), BuiltinParamAddresses(2));
-        DefineSymbol(SymbolTag.Constant, Builtins.BoolFromU16, 0, CType.MakeFunction(new[] { CType.UInt16 }, CType.UInt8), BuiltinParamAddresses(1));
+        DefineFunction(Builtins.LoadU8, new[] { CType.MakePointer(CType.UInt8) }, CType.UInt8, 0, BuiltinParamAddresses(1));
+        DefineFunction(Builtins.LoadU16, new[] { CType.MakePointer(CType.UInt16) }, CType.UInt16, 0, BuiltinParamAddresses(1));
+        DefineFunction(Builtins.StoreU8, new[] { CType.MakePointer(CType.UInt8), CType.UInt8 }, CType.UInt8, 0, BuiltinParamAddresses(2));
+        DefineFunction(Builtins.StoreU16, new[] { CType.MakePointer(CType.UInt16), CType.UInt16 }, CType.UInt16, 0, BuiltinParamAddresses(2));
+        DefineFunction(Builtins.AddU8, new[] { CType.UInt8, CType.UInt8 }, CType.UInt8, 0, BuiltinParamAddresses(2));
+        DefineFunction(Builtins.AddU8Ptr, new[] { CType.UInt8Ptr, CType.UInt16 }, CType.UInt8Ptr, 0, BuiltinParamAddresses(2));
+        DefineFunction(Builtins.AddU16, new[] { CType.UInt16, CType.UInt16 }, CType.UInt16, 0, BuiltinParamAddresses(2));
+        DefineFunction(Builtins.SubtractU8, new[] { CType.UInt8, CType.UInt8 }, CType.UInt8, 0, BuiltinParamAddresses(2));
+        DefineFunction(Builtins.SubtractU16, new[] { CType.UInt16, CType.UInt16 }, CType.UInt16, 0, BuiltinParamAddresses(2));
+        DefineFunction(Builtins.BoolFromU16, new[] { CType.UInt16 }, CType.UInt8, 0, BuiltinParamAddresses(1));
+
+        LexicalScope globalScope = new LexicalScope();
 
         // First pass: Read all declarations to get type information and global symbols.
         foreach (Declaration decl in program)
@@ -61,9 +70,7 @@ partial class Compiler
                     paramTypes[i] = type;
                     addresses[i] = AllocGlobal(SizeOf(type));
                 }
-
-                CType functionType = CType.MakeFunction(paramTypes, decl.Type);
-                DefineSymbol(SymbolTag.Constant, decl.Name, 0, functionType, addresses);
+                DefineFunction(decl.Name, paramTypes, decl.Type, 0, addresses);
             }
             else if (decl.Tag == DeclarationTag.Constant)
             {
@@ -74,11 +81,11 @@ partial class Compiler
                 {
                     Program.Error("expression must be constant");
                 }
-                DefineSymbol(SymbolTag.Constant, decl.Name, value, decl.Type, null);
+                DefineSymbol(globalScope, SymbolTag.Constant, decl.Name, value, decl.Type);
             }
             else if (decl.Tag == DeclarationTag.Variable)
             {
-                DefineVariable(decl.Type, decl.Name);
+                DefineVariable(globalScope, decl.Type, decl.Name);
             }
             else if (decl.Tag == DeclarationTag.Struct)
             {
@@ -115,26 +122,29 @@ partial class Compiler
                 EmitComment("define function " + decl.Name);
 
                 // Record the address of this function's code:
-                Symbol sym;
-                if (!FindSymbol(decl.Name, out sym)) Program.Panic("a symbol should already be defined for this function.");
-                sym.Value = GetCurrentCodeAddress();
+                CFunctionInfo functionInfo;
+                if (!Functions.TryGetValue(decl.Name, out functionInfo)) Program.Panic("this function should already be defined");
+                functionInfo.Address = GetCurrentCodeAddress();
 
-                BeginScope();
+                LexicalScope functionScope = PushScope(globalScope);
 
                 // Define each of the function's parameters as a local variable:
                 for (int i = 0; i < decl.Fields.Count; i++)
                 {
                     NamedField f = decl.Fields[i];
-                    DefineSymbol(SymbolTag.Variable, f.Name, sym.ParamAddresses[i], f.Type, null);
+                    DefineSymbol(functionScope, SymbolTag.Variable, f.Name, functionInfo.ParameterAddresses[i], f.Type);
                 }
 
                 Expr body = decl.Body;
+                body = ReplaceNamedVariables(body, functionScope);
+                File.WriteAllText("stage1-replace-vars.txt", Program.ShowExpr(body));
+                body = ReplaceAddressOf(body);
+                File.WriteAllText("stage2-replace-addressof.txt", Program.ShowExpr(body));
                 body = ReplaceGenericFunctions(body);
-                CheckTypes(body);
+                File.WriteAllText("stage3-replace-generics.txt", Program.ShowExpr(body));
+                //CheckTypes(body);
                 CompileExpression(body, DestinationDiscard, Continuation.Fallthrough);
                 Emit(Opcode.RTS);
-
-                EndScope();
             }
         }
 
@@ -143,9 +153,9 @@ partial class Compiler
         {
             if (fixup.Tag != FixupTag.None)
             {
-                Symbol sym;
-                if (!FindSymbol(fixup.Target, out sym)) Program.Error("function not defined: " + fixup.Target);
-                int target = sym.Value;
+                CFunctionInfo functionInfo;
+                if (!Functions.TryGetValue(fixup.Target, out functionInfo)) Program.Error("function not defined: " + fixup.Target);
+                int target = functionInfo.Address;
 
                 if (fixup.Tag != FixupTag.Absolute) Program.Panic("function fixups should always be absolute");
                 EmitFix_U16(fixup.Location, target);
@@ -157,9 +167,211 @@ partial class Compiler
         if (Fixups.Any(x => x.Tag != FixupTag.None)) Program.Panic("some fixups remain");
     }
 
+    Expr ReplaceNamedVariables(Expr e, LexicalScope scope)
+    {
+        if (e.Tag == ExprTag.Empty)
+        {
+            return e;
+        }
+        else if (e.Tag == ExprTag.Int)
+        {
+            return e;
+        }
+        else if (e.Tag == ExprTag.Name)
+        {
+            Symbol sym;
+            if (!FindSymbol(scope, e.Name, out sym)) Program.Error("symbol not defined: {0}", e.Name);
+            if (sym.Tag == SymbolTag.Constant)
+            {
+                // TODO: Make sure the constant value fits in the specified type.
+                return Expr.MakeInt(sym.Value, sym.Type);
+            }
+            else if (sym.Tag == SymbolTag.Variable)
+            {
+                // Load the variable with a function of appropriate width:
+                string loadFunction = null;
+                if (SizeOf(sym.Type) == 1) loadFunction = Builtins.LoadU8;
+                else if (SizeOf(sym.Type) == 2) loadFunction = Builtins.LoadU16;
+                else Program.Panic("unhandled case");
+
+                return Expr.MakeCall(loadFunction, Expr.MakeInt(sym.Value, CType.MakePointer(sym.Type)));
+            }
+            Program.Panic("unhandled case");
+            return null;
+        }
+        else if (e.Tag == ExprTag.Scope)
+        {
+            Expr arg = e.Args[0];
+            e = ReplaceNamedVariables(arg, PushScope(scope));
+            // Remove the "scope" node, which isn't needed once all the variables have been replaced:
+            return e;
+        }
+        else if (e.Tag == ExprTag.Sequence)
+        {
+            return Expr.MakeSequence(e.Args.Select(x => ReplaceNamedVariables(x, scope)).ToArray());
+        }
+        else if (e.Tag == ExprTag.Local)
+        {
+            DefineSymbol(scope, SymbolTag.Variable, e.Name, 0, e.DeclaredType);
+            // There is no need to keep the declaration node:
+            return Expr.MakeEmpty();
+        }
+        else if (e.Tag == ExprTag.AddressOf)
+        {
+            Expr arg = e.Args[0];
+            return Expr.MakeAddressOf(ReplaceNamedVariables(arg, scope));
+        }
+        else if (e.Tag == ExprTag.Switch)
+        {
+            return Expr.MakeSwitch(e.Args.Select(x => ReplaceNamedVariables(x, scope)).ToArray());
+        }
+        else if (e.Tag == ExprTag.For)
+        {
+            return Expr.MakeFor(
+                ReplaceNamedVariables(e.Args[0], scope),
+                ReplaceNamedVariables(e.Args[1], scope),
+                ReplaceNamedVariables(e.Args[2], scope),
+                ReplaceNamedVariables(e.Args[3], scope));
+        }
+        else if (e.Tag == ExprTag.Return)
+        {
+            Expr arg = e.Args[0];
+            return ReplaceNamedVariables(arg, scope);
+        }
+        else if (e.Tag == ExprTag.Cast)
+        {
+            Expr arg = e.Args[0];
+            return Expr.MakeCast(e.DeclaredType, ReplaceNamedVariables(arg, scope));
+        }
+        else if (e.Tag == ExprTag.StructCast)
+        {
+            Expr structExpr = e.Args[0];
+            string fieldName = e.Name;
+            Expr addressExpr = e.Args[1];
+            return Expr.MakeStructCast(
+                ReplaceNamedVariables(structExpr, scope),
+                e.Name,
+                ReplaceNamedVariables(addressExpr, scope));
+        }
+        else if (e.Tag == ExprTag.OffsetOf)
+        {
+            Expr structExpr = e.Args[0];
+            string fieldName = e.Name;
+            return Expr.MakeOffsetOf(
+                ReplaceNamedVariables(structExpr, scope),
+                e.Name);
+        }
+        else if (e.Tag == ExprTag.Call)
+        {
+            Expr[] args = e.Args.Select(x => ReplaceNamedVariables(x, scope)).ToArray();
+            return Expr.MakeCall(e.Name, args);
+        }
+        else
+        {
+            Program.Panic("unhandled case");
+            return null;
+        }
+    }
+
+    Expr ReplaceAddressOf(Expr e)
+    {
+        if (e.Tag == ExprTag.Empty)
+        {
+            return e;
+        }
+        else if (e.Tag == ExprTag.Int)
+        {
+            return e;
+        }
+        else if (e.Tag == ExprTag.Name)
+        {
+            InvalidNode(e);
+            return null;
+        }
+        else if (e.Tag == ExprTag.Scope)
+        {
+            InvalidNode(e);
+            return null;
+        }
+        else if (e.Tag == ExprTag.Sequence)
+        {
+            return Expr.MakeSequence(e.Args.Select(x => ReplaceAddressOf(x)).ToArray());
+        }
+        else if (e.Tag == ExprTag.Local)
+        {
+            InvalidNode(e);
+            return null;
+        }
+        else if (e.Tag == ExprTag.AddressOf)
+        {
+            Expr loadCall = e.Args[0];
+            if (loadCall.Tag == ExprTag.Call && LoadFunctions.Contains(loadCall.Name))
+            {
+                return ReplaceAddressOf(loadCall.Args[0]);
+            }
+
+            Program.Panic("unexpected subexpression within address-of operation");
+            return null;
+        }
+        else if (e.Tag == ExprTag.Switch)
+        {
+            return Expr.MakeSwitch(e.Args.Select(x => ReplaceAddressOf(x)).ToArray());
+        }
+        else if (e.Tag == ExprTag.For)
+        {
+            return Expr.MakeFor(
+                ReplaceAddressOf(e.Args[0]),
+                ReplaceAddressOf(e.Args[1]),
+                ReplaceAddressOf(e.Args[2]),
+                ReplaceAddressOf(e.Args[3]));
+        }
+        else if (e.Tag == ExprTag.Return)
+        {
+            Expr arg = e.Args[0];
+            return Expr.MakeReturn(ReplaceAddressOf(arg));
+        }
+        else if (e.Tag == ExprTag.Cast)
+        {
+            Expr arg = e.Args[0];
+            return Expr.MakeCast(e.DeclaredType, ReplaceAddressOf(arg));
+        }
+        else if (e.Tag == ExprTag.StructCast)
+        {
+            Expr structExpr = e.Args[0];
+            string fieldName = e.Name;
+            Expr addressExpr = e.Args[1];
+            return Expr.MakeStructCast(
+                ReplaceAddressOf(structExpr),
+                e.Name,
+                ReplaceAddressOf(addressExpr));
+        }
+        else if (e.Tag == ExprTag.OffsetOf)
+        {
+            Expr structExpr = e.Args[0];
+            string fieldName = e.Name;
+            return Expr.MakeOffsetOf(
+                ReplaceAddressOf(structExpr),
+                e.Name);
+        }
+        else if (e.Tag == ExprTag.Call)
+        {
+            Expr[] args = e.Args.Select(x => ReplaceAddressOf(x)).ToArray();
+            return Expr.MakeCall(e.Name, args);
+        }
+        else
+        {
+            Program.Panic("unhandled case");
+            return null;
+        }
+    }
+
     Expr ReplaceGenericFunctions(Expr e)
     {
-        if (e.Tag == ExprTag.Int)
+        if (e.Tag == ExprTag.Empty)
+        {
+            return e;
+        }
+        else if (e.Tag == ExprTag.Int)
         {
             return e;
         }
@@ -169,11 +381,8 @@ partial class Compiler
         }
         else if (e.Tag == ExprTag.Scope)
         {
-            BeginScope();
-            Expr arg = e.Args[0];
-            e = ReplaceGenericFunctions(arg);
-            EndScope();
-            return Expr.MakeScope(e);
+            InvalidNode(e);
+            return null;
         }
         else if (e.Tag == ExprTag.Sequence)
         {
@@ -181,8 +390,8 @@ partial class Compiler
         }
         else if (e.Tag == ExprTag.Local)
         {
-            DefineSymbol(SymbolTag.Variable, e.Name, 0, e.DeclaredType, null);
-            return e;
+            InvalidNode(e);
+            return null;
         }
         else if (e.Tag == ExprTag.AddressOf)
         {
@@ -204,7 +413,7 @@ partial class Compiler
         else if (e.Tag == ExprTag.Return)
         {
             Expr arg = e.Args[0];
-            return ReplaceGenericFunctions(arg);
+            return Expr.MakeReturn(ReplaceGenericFunctions(arg));
         }
         else if (e.Tag == ExprTag.Cast)
         {
@@ -344,9 +553,13 @@ partial class Compiler
 
     void CheckTypes(Expr e)
     {
-        if (e.Tag == ExprTag.Int)
+        if (e.Tag == ExprTag.Empty)
         {
             // NOP
+        }
+        else if (e.Tag == ExprTag.Int)
+        {
+            // TODO: This should have had a specific type assigned to it by now.
         }
         else if (e.Tag == ExprTag.Name)
         {
@@ -354,10 +567,7 @@ partial class Compiler
         }
         else if (e.Tag == ExprTag.Scope)
         {
-            BeginScope();
-            Expr arg = e.Args[0];
-            CheckTypes(arg);
-            EndScope();
+            InvalidNode(e);
         }
         else if (e.Tag == ExprTag.Sequence)
         {
@@ -365,16 +575,11 @@ partial class Compiler
         }
         else if (e.Tag == ExprTag.Local)
         {
-            DefineSymbol(SymbolTag.Variable, e.Name, 0, e.DeclaredType, null);
+            InvalidNode(e);
         }
         else if (e.Tag == ExprTag.AddressOf)
         {
-            Expr arg = e.Args[0];
-            CheckTypes(arg);
-            if (arg.Tag != ExprTag.Name) Program.NYI();
-            Symbol sym;
-            if (!FindSymbol(arg.Name, out sym)) Program.Error("symbol not defined: {0}", arg.Name);
-            if (sym.Tag != SymbolTag.Variable) Program.Error("cannot take address of a constant: {0}", arg.Name);
+            InvalidNode(e);
         }
         else if (e.Tag == ExprTag.Switch)
         {
@@ -411,17 +616,16 @@ partial class Compiler
         }
         else if (e.Tag == ExprTag.Call)
         {
-            Symbol sym;
-            if (!FindSymbol(e.Name, out sym)) Program.Error("symbol not defined: {0}", e.Name);
-            if (sym.Type.Tag != CTypeTag.Function) Program.Error("symbol is not a function: {0}", e.Name);
-            if (sym.Type.ParameterTypes.Length != e.Args.Length) Program.Error("wrong number of arguments to function: {0}", e.Name);
+            CFunctionInfo functionInfo;
+            if (!Functions.TryGetValue(e.Name, out functionInfo)) Program.Error("function not defined: {0}", e.Name);
+            if (functionInfo.ParameterTypes.Length != e.Args.Length) Program.Error("wrong number of arguments to function: {0}", e.Name);
             // Check that each of the actual and expected parameter types match:
             for (int i = 0; i < e.Args.Length; i++)
             {
                 Expr arg = e.Args[i];
                 CheckTypes(arg);
                 CType argType = TypeOf(arg);
-                if (!TypesEqual(argType, sym.Type.ParameterTypes[i])) Program.Error("argument to function has wrong type");
+                if (!TypesEqual(argType, functionInfo.ParameterTypes[i])) Program.Error("argument to function has wrong type");
             }
         }
         else
@@ -432,15 +636,18 @@ partial class Compiler
 
     CType TypeOf(Expr e)
     {
-        if (e.Tag == ExprTag.Int)
+        if (e.Tag == ExprTag.Empty)
+        {
+            return CType.Void;
+        }
+        else if (e.Tag == ExprTag.Int)
         {
             return e.DeclaredType;
         }
         else if (e.Tag == ExprTag.Name)
         {
-            Symbol sym;
-            if (!FindSymbol(e.Name, out sym)) Program.Error("symbol not defined: {0}", e.Name);
-            return sym.Type;
+            InvalidNode(e);
+            return null;
         }
         else if (e.Tag == ExprTag.Scope)
         {
@@ -491,11 +698,9 @@ partial class Compiler
         }
         else if (e.Tag == ExprTag.Call)
         {
-            Symbol sym;
-            if (!FindSymbol(e.Name, out sym)) Program.Error("symbol not defined: {0}", e.Name);
-            if (sym.Type.Tag != CTypeTag.Function) Program.Error("symbol is not a function: {0}", e.Name);
-            // The type of a function call expression is the function's return type:
-            return sym.Type.Subtype;
+            CFunctionInfo functionInfo;
+            if (!Functions.TryGetValue(e.Name, out functionInfo)) Program.Error("function not defined: {0}", e.Name);
+            return functionInfo.ReturnType;
         }
         else
         {
@@ -541,19 +746,17 @@ partial class Compiler
         {
             EmitLoadImmediate(value, type, dest, cont);
         }
+        else if (e.Tag == ExprTag.Empty)
+        {
+            // NOP
+        }
         else if (e.Tag == ExprTag.Name)
         {
-            Symbol sym;
-            if (!FindSymbol(e.Name, out sym)) Program.Error("undefined symbol");
-            if (sym.Tag != SymbolTag.Variable) Program.NYI();
-            int address = sym.Value;
-            EmitLoad(address, sym.Type, dest, cont);
+            InvalidNode(e);
         }
         else if (e.Tag == ExprTag.Scope)
         {
-            BeginScope();
-            CompileExpression(e.Args[0], dest, cont);
-            EndScope();
+            InvalidNode(e);
         }
         else if (e.Tag == ExprTag.Sequence)
         {
@@ -575,26 +778,11 @@ partial class Compiler
         }
         else if (e.Tag == ExprTag.Local)
         {
-            DefineVariable(e.DeclaredType, e.Name);
-            if (dest != DestinationDiscard) Program.Panic("cannot store value of expression of type 'void'");
-            if (cont.When != JumpCondition.Never) Program.Panic("cannot branch based on value of type 'void'");
+            InvalidNode(e);
         }
         else if (e.Tag == ExprTag.AddressOf)
         {
-            if (e.Args.Length != 1) Program.Panic("wrong number of args");
-            Expr arg = e.Args[0];
-            if (arg.Tag == ExprTag.Name)
-            {
-                Symbol sym;
-                if (!FindSymbol(arg.Name, out sym)) Program.Error("undefined symbol");
-                if (sym.Tag != SymbolTag.Variable) Program.Error("target of assignment must be a variable: " + arg.Name);
-                int address = sym.Value;
-                EmitLoadImmediate(address, CType.MakePointer(TypeOf(arg)), dest, cont);
-            }
-            else
-            {
-                Program.NYI();
-            }
+            InvalidNode(e);
         }
         else if (e.Tag == ExprTag.Switch)
         {
@@ -629,7 +817,6 @@ partial class Compiler
             string bottom = MakeUniqueLabel();
 
             EmitComment("for loop (prologue)");
-            BeginScope();
             CompileExpression(init, DestinationDiscard, Continuation.Fallthrough);
             EmitComment("for loop");
             int top = GetCurrentCodeAddress();
@@ -637,7 +824,6 @@ partial class Compiler
             CompileExpression(body, DestinationDiscard, Continuation.Fallthrough);
             CompileExpression(induction, DestinationDiscard, Continuation.Fallthrough);
             EmitJump(top);
-            EndScope();
             EmitComment("for loop (end)");
             FixReferencesTo(bottom);
 
@@ -696,13 +882,12 @@ partial class Compiler
             {
                 // This is the general-purpose way of calling functions.
 
-                Symbol functionSym;
-                if (!FindSymbol(e.Name, out functionSym)) Program.Error("function is not defined: " + e.Name);
+                CFunctionInfo functionInfo;
+                if (!Functions.TryGetValue(e.Name, out functionInfo)) Program.Error("function not defined: " + e.Name);
 
                 // Get the call frame address (and type information) from the function's type entry.
-                if (functionSym.Type.Tag != CTypeTag.Function) Program.Error("only functions can be called: " + e.Name);
-                CType[] paramTypes = functionSym.Type.ParameterTypes;
-                int[] paramAddresses = functionSym.ParamAddresses;
+                CType[] paramTypes = functionInfo.ParameterTypes;
+                int[] paramAddresses = functionInfo.ParameterAddresses;
 
                 if (paramTypes.Length != paramAddresses.Length) Program.Panic("in function symbol, the number of types doesn't match the number of argument locations: " + e.Name);
                 if (e.Args.Length != paramTypes.Length) Program.Error("wrong number of arguments to function: " + e.Name);
@@ -827,20 +1012,13 @@ partial class Compiler
                 }
                 else
                 {
-                    // Check to see whether this function is defined:
-                    // (It probably won't have as address assigned yet, but we can make sure it exists.)
-                    Symbol sym;
-                    if (!FindSymbol(e.Name, out sym)) Program.Error("function not defined: " + e.Name);
-
                     // JSR to the function:
                     Emit_U16(Opcode.JSR, 0);
                     Fixups.Add(new Fixup(FixupTag.Absolute, GetCurrentCodeAddress() - 2, e.Name));
                 }
 
                 // The return value is placed in the accumulator.
-
-                CType functionReturnType = functionSym.Type.Subtype;
-                EmitStoreAcc(functionReturnType, dest);
+                EmitStoreAcc(functionInfo.ReturnType, dest);
                 EmitBranchOnAcc(cont);
 
                 EndTempScope();
@@ -861,35 +1039,6 @@ partial class Compiler
             value = e.Int;
             type = e.DeclaredType;
             return true;
-        }
-        else if (e.Tag == ExprTag.Name)
-        {
-            Symbol sym;
-            if (!FindSymbol(e.Name, out sym)) Program.Error("undefined symbol: {0}", e.Name);
-
-            if (sym.Tag == SymbolTag.Constant)
-            {
-                // TODO: Make sure the constant value is not too big.
-                value = sym.Value;
-                type = sym.Type;
-                return true;
-            }
-        }
-        else if (e.Tag == ExprTag.AddressOf)
-        {
-            Expr arg = e.Args[0];
-            if (arg.Tag == ExprTag.Name)
-            {
-                Symbol sym;
-                if (!FindSymbol(arg.Name, out sym)) Program.Error("undefined symbol: {0}", e.Name);
-
-                if (sym.Tag == SymbolTag.Variable)
-                {
-                    value = sym.Value;
-                    type = CType.MakePointer(sym.Type);
-                    return true;
-                }
-            }
         }
         else if (e.Tag == ExprTag.OffsetOf)
         {
@@ -1006,10 +1155,10 @@ partial class Compiler
         }
     }
 
-    void DefineVariable(CType type, string name)
+    void DefineVariable(LexicalScope scope, CType type, string name)
     {
         int address = AllocGlobal(SizeOf(type));
-        DefineSymbol(SymbolTag.Variable, name, address, type, null);
+        DefineSymbol(scope, SymbolTag.Variable, name, address, type);
     }
 
     string MakeUniqueLabel()
@@ -1057,28 +1206,38 @@ partial class Compiler
         return null;
     }
 
-    void DefineSymbol(SymbolTag tag, string name, int value, CType type, int[] paramAddresses)
+    void DefineFunction(string name, CType[] paramTypes, CType returnType, int address, int[] paramAddresses)
+    {
+        Functions.Add(name, new CFunctionInfo
+        {
+            ParameterTypes = paramTypes,
+            ReturnType = returnType,
+            Address = address,
+            ParameterAddresses = paramAddresses,
+        });
+    }
+
+    void DefineSymbol(LexicalScope scope, SymbolTag tag, string name, int value, CType type)
     {
         // It is an error to define two things with the same name in the same scope.
-        if (CurrentScope.Symbols.Any(x => x.Name == name))
+        if (scope.Symbols.Any(x => x.Name == name))
         {
             Program.Error("symbols cannot be redefined: {0}", name);
         }
 
-        CurrentScope.Symbols.Add(new Symbol
+        scope.Symbols.Add(new Symbol
         {
             Tag = tag,
             Name = name,
             Value = value,
             Type = type,
-            ParamAddresses = paramAddresses,
         });
     }
 
-    bool FindSymbol(string name, out Symbol found)
+    bool FindSymbol(LexicalScope scope, string name, out Symbol found)
     {
         // Inspect all scopes, starting from the innermost.
-        for (LexicalScope scope = CurrentScope; scope != null; scope = scope.Outer)
+        for (; scope != null; scope = scope.Outer)
         {
             foreach (Symbol sym in scope.Symbols)
             {
@@ -1113,16 +1272,11 @@ partial class Compiler
         // TODO: Implement temporaries.
     }
 
-    void BeginScope()
+    static LexicalScope PushScope(LexicalScope scope)
     {
-        LexicalScope outer = CurrentScope;
-        CurrentScope = new LexicalScope();
-        CurrentScope.Outer = outer;
-    }
-
-    void EndScope()
-    {
-        CurrentScope = CurrentScope.Outer;
+        LexicalScope inner = new LexicalScope();
+        inner.Outer = scope;
+        return inner;
     }
 
     // TODO: Temporary variables can be freed when the current temp scope ends.
@@ -1139,6 +1293,8 @@ partial class Compiler
         Program.Panic("unhandled case");
         return null;
     }
+
+    static void InvalidNode(Expr e) => Program.Panic("invalid '{0}' node encountered", e.Tag);
 }
 
 [DebuggerDisplay("{Tag} {Name} = 0x{Value,h} ({Type.Show(),nq})")]
@@ -1148,7 +1304,6 @@ class Symbol
     public string Name;
     public int Value;
     public CType Type;
-    public int[] ParamAddresses;
 }
 
 enum SymbolTag
@@ -1203,7 +1358,6 @@ struct Continuation
 
 // One of:
 // - SimpleType
-// - FunctionType (name, params, returnType)
 // - Pointer subtype
 // - Struct name
 partial class CType
@@ -1211,14 +1365,12 @@ partial class CType
     public CTypeTag Tag;
     public CSimpleType SimpleType;
     public string Name;
-    public CType[] ParameterTypes;
     public CType Subtype;
 }
 
 enum CTypeTag
 {
     Simple,
-    Function,
     Pointer,
     Struct,
 }
@@ -1243,6 +1395,14 @@ class CField
     public int Offset;
 }
 
+partial class CFunctionInfo
+{
+    public CType[] ParameterTypes;
+    public CType ReturnType;
+    public int Address;
+    public int[] ParameterAddresses;
+}
+
 [DebuggerDisplay("{Show(),nq}")]
 partial class CType
 {
@@ -1257,17 +1417,6 @@ partial class CType
         {
             Tag = CTypeTag.Simple,
             SimpleType = simple,
-        };
-    }
-
-    public static CType MakeFunction(CType[] parameterTypes, CType returnType)
-    {
-        return new CType
-        {
-            Tag = CTypeTag.Function,
-            Name = null,
-            ParameterTypes = parameterTypes,
-            Subtype = returnType,
         };
     }
 
@@ -1303,13 +1452,28 @@ partial class CType
     {
         if (Tag == CTypeTag.Simple) return SimpleType.ToString();
         else if (Tag == CTypeTag.Pointer) return "pointer to " + Subtype.Show();
-        else if (Tag == CTypeTag.Function)
-        {
-            var paramTypes = ParameterTypes.Select(x => x.Show());
-            return string.Format("function({0}) {1}", string.Join(", ", paramTypes), Subtype.Show());
-        }
         else if (Tag == CTypeTag.Struct) return "struct " + Name;
         else throw new NotImplementedException();
+    }
+}
+
+[DebuggerDisplay("{Show(),nq}")]
+partial class CFunctionInfo
+{
+    public override bool Equals(object obj)
+    {
+        throw new NotSupportedException();
+    }
+
+    public override int GetHashCode()
+    {
+        throw new NotSupportedException();
+    }
+
+    public string Show()
+    {
+        var paramTypes = ParameterTypes.Select(x => x.Show());
+        return string.Format("function({0}) {1}", string.Join(", ", paramTypes), ReturnType.Show());
     }
 }
 
