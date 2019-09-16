@@ -5,12 +5,13 @@ joinpaths = os.path.join
 
 # Configuration
 TEST_DIR = 'test_files'
+DEBUG_DIR = 'debug_output'
 TESTS_FILE = 'tests.txt'
 SOURCE_FILE = joinpaths(TEST_DIR, 'source.c')
 IMAGE_FILE = joinpaths(TEST_DIR, 'program.nes')
 INPUT_FILE = joinpaths(TEST_DIR, 'input.bin')
 REPORT_FILE = joinpaths(TEST_DIR, 'results.html')
-DISASM_FILE = joinpaths(TEST_DIR, 'dis.s')
+DISASM_FILE = joinpaths(DEBUG_DIR, 'dis.s')
 COMPILER = 'norcal/bin/Debug/norcal.exe'
 SIMULATOR = 'sim6502/x64/Debug/sim6502.exe'
 
@@ -90,7 +91,7 @@ for test in tests:
     # Compile:
     with open(SOURCE_FILE, 'w') as f:
         f.write(test.source)
-    process = run_process([COMPILER, SOURCE_FILE, IMAGE_FILE])
+    process = run_process([COMPILER, SOURCE_FILE, IMAGE_FILE, '--debug-output'])
     if process == TIMED_OUT:
         test.actual_output = '(compiler timed out)'
         test.passed = False

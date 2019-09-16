@@ -8,22 +8,39 @@ using System.Threading.Tasks;
 
 static class Program
 {
+    public static bool EnableDebugOutput { get; private set; } = false;
+
+    public static readonly string DebugOutputPath = "debug_output";
+
     static void Main(string[] args)
     {
-        if (args.Length != 2) Error("usage: norcal src.c output.nes");
+        if (args.Length < 2) Error("usage: norcal src.c output.nes [--debug-output]");
 
         string sourcePath = args[0];
         string outputPath = args[1];
+        EnableDebugOutput = args.Contains("--debug-output");
 
         List<Declaration> program = Parser.ParseFile(sourcePath);
 
-        File.WriteAllText("stage0-parse.txt", ShowProgram(program));
-        Console.WriteLine();
+        WriteDebugFile("stage0-parse.txt", ShowProgram(program));
 
         Compiler compiler = new Compiler();
         compiler.CompileProgram(program);
         compiler.WriteImage(outputPath);
-        Disassembler.Disassemble(outputPath);
+
+        if (EnableDebugOutput)
+        {
+            Disassembler.Disassemble(outputPath);
+        }
+    }
+
+    public static void WriteDebugFile(string filename, string text)
+    {
+        if (EnableDebugOutput)
+        {
+            Directory.CreateDirectory(DebugOutputPath);
+            File.WriteAllText(Path.Combine(DebugOutputPath, filename), text);
+        }
     }
 
     static string ShowProgram(List<Declaration> program)

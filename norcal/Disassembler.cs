@@ -11,7 +11,8 @@ static class Disassembler
     public static void Disassemble(string programPath)
     {
         Queue<byte> program = new Queue<byte>(File.ReadAllBytes(programPath));
-        Queue<string> comments = new Queue<string>(File.ReadAllLines("comments.txt"));
+        string commentsPath = Path.Combine(Program.DebugOutputPath, "comments.txt");
+        Queue<string> comments = new Queue<string>(File.ReadAllLines(commentsPath));
         StringBuilder dis = new StringBuilder();
 
         // Skip the iNES header.
@@ -70,8 +71,7 @@ static class Disassembler
             dis.Append("\n");
         }
 
-        // TODO: Choose a better disassembly filename.
-        File.WriteAllText("dis.s", dis.ToString());
+        Program.WriteDebugFile("dis.s", dis.ToString());
     }
 
     static bool TryDequeue(Queue<byte> input, out byte item)

@@ -108,8 +108,7 @@ partial class Compiler
         }
 
         // Write the comment file:
-        // TODO: Choose a more appropriate path for the comments file.
-        File.WriteAllLines("comments.txt", Comments);
+        Program.WriteDebugFile("comments.txt", string.Join("", Comments.Select(x => x + "\n")));
     }
 
     void PadList(List<byte> list, int size)

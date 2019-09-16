@@ -137,11 +137,11 @@ partial class Compiler
 
                 Expr body = decl.Body;
                 body = ReplaceNamedVariables(body, functionScope);
-                File.WriteAllText("stage1-replace-vars.txt", Program.ShowExpr(body));
+                Program.WriteDebugFile("stage1-replace-vars.txt", Program.ShowExpr(body));
                 body = ReplaceAddressOf(body);
-                File.WriteAllText("stage2-replace-addressof.txt", Program.ShowExpr(body));
+                Program.WriteDebugFile("stage2-replace-addressof.txt", Program.ShowExpr(body));
                 body = ReplaceGenericFunctions(body);
-                File.WriteAllText("stage3-replace-generics.txt", Program.ShowExpr(body));
+                Program.WriteDebugFile("stage3-replace-generics.txt", Program.ShowExpr(body));
                 //CheckTypes(body);
                 CompileExpression(body, DestinationDiscard, Continuation.Fallthrough);
                 Emit(Opcode.RTS);
