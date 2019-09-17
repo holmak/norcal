@@ -142,7 +142,7 @@ partial class Compiler
                 Program.WriteDebugFile("stage2-replace-addressof.txt", Program.ShowExpr(body));
                 body = ReplaceGenericFunctions(body);
                 Program.WriteDebugFile("stage3-replace-generics.txt", Program.ShowExpr(body));
-                //CheckTypes(body);
+                CheckTypes(body);
                 CompileExpression(body, DestinationDiscard, Continuation.Fallthrough);
                 Emit(Opcode.RTS);
             }
