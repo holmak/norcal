@@ -169,15 +169,7 @@ partial class Compiler
 
     Expr ReplaceNamedVariables(Expr e, LexicalScope scope)
     {
-        if (e.Tag == ExprTag.Empty)
-        {
-            return e;
-        }
-        else if (e.Tag == ExprTag.Int)
-        {
-            return e;
-        }
-        else if (e.Tag == ExprTag.Name)
+        if (e.Tag == ExprTag.Name)
         {
             Symbol sym;
             if (!FindSymbol(scope, e.Name, out sym)) Program.Error("symbol not defined: {0}", e.Name);
@@ -206,103 +198,21 @@ partial class Compiler
             // Remove the "scope" node, which isn't needed once all the variables have been replaced:
             return e;
         }
-        else if (e.Tag == ExprTag.Sequence)
-        {
-            return Expr.MakeSequence(e.Args.Select(x => ReplaceNamedVariables(x, scope)).ToArray());
-        }
         else if (e.Tag == ExprTag.Local)
         {
             DefineSymbol(scope, SymbolTag.Variable, e.Name, 0, e.DeclaredType);
             // There is no need to keep the declaration node:
             return Expr.MakeEmpty();
         }
-        else if (e.Tag == ExprTag.AddressOf)
-        {
-            Expr arg = e.Args[0];
-            return Expr.MakeAddressOf(ReplaceNamedVariables(arg, scope));
-        }
-        else if (e.Tag == ExprTag.Switch)
-        {
-            return Expr.MakeSwitch(e.Args.Select(x => ReplaceNamedVariables(x, scope)).ToArray());
-        }
-        else if (e.Tag == ExprTag.For)
-        {
-            return Expr.MakeFor(
-                ReplaceNamedVariables(e.Args[0], scope),
-                ReplaceNamedVariables(e.Args[1], scope),
-                ReplaceNamedVariables(e.Args[2], scope),
-                ReplaceNamedVariables(e.Args[3], scope));
-        }
-        else if (e.Tag == ExprTag.Return)
-        {
-            Expr arg = e.Args[0];
-            return ReplaceNamedVariables(arg, scope);
-        }
-        else if (e.Tag == ExprTag.Cast)
-        {
-            Expr arg = e.Args[0];
-            return Expr.MakeCast(e.DeclaredType, ReplaceNamedVariables(arg, scope));
-        }
-        else if (e.Tag == ExprTag.StructCast)
-        {
-            Expr structExpr = e.Args[0];
-            string fieldName = e.Name;
-            Expr addressExpr = e.Args[1];
-            return Expr.MakeStructCast(
-                ReplaceNamedVariables(structExpr, scope),
-                e.Name,
-                ReplaceNamedVariables(addressExpr, scope));
-        }
-        else if (e.Tag == ExprTag.OffsetOf)
-        {
-            Expr structExpr = e.Args[0];
-            string fieldName = e.Name;
-            return Expr.MakeOffsetOf(
-                ReplaceNamedVariables(structExpr, scope),
-                e.Name);
-        }
-        else if (e.Tag == ExprTag.Call)
-        {
-            Expr[] args = e.Args.Select(x => ReplaceNamedVariables(x, scope)).ToArray();
-            return Expr.MakeCall(e.Name, args);
-        }
         else
         {
-            Program.Panic("unhandled case");
-            return null;
+            return e.Map(x => ReplaceNamedVariables(x, scope));
         }
     }
 
     Expr ReplaceAddressOf(Expr e)
     {
-        if (e.Tag == ExprTag.Empty)
-        {
-            return e;
-        }
-        else if (e.Tag == ExprTag.Int)
-        {
-            return e;
-        }
-        else if (e.Tag == ExprTag.Name)
-        {
-            InvalidNode(e);
-            return null;
-        }
-        else if (e.Tag == ExprTag.Scope)
-        {
-            InvalidNode(e);
-            return null;
-        }
-        else if (e.Tag == ExprTag.Sequence)
-        {
-            return Expr.MakeSequence(e.Args.Select(x => ReplaceAddressOf(x)).ToArray());
-        }
-        else if (e.Tag == ExprTag.Local)
-        {
-            InvalidNode(e);
-            return null;
-        }
-        else if (e.Tag == ExprTag.AddressOf)
+        if (e.Tag == ExprTag.AddressOf)
         {
             Expr loadCall = e.Args[0];
             if (loadCall.Tag == ExprTag.Call && LoadFunctions.Contains(loadCall.Name))
@@ -313,132 +223,20 @@ partial class Compiler
             Program.Panic("unexpected subexpression within address-of operation");
             return null;
         }
-        else if (e.Tag == ExprTag.Switch)
+        else if (e.Tag == ExprTag.Name || e.Tag == ExprTag.Scope || e.Tag == ExprTag.Local)
         {
-            return Expr.MakeSwitch(e.Args.Select(x => ReplaceAddressOf(x)).ToArray());
-        }
-        else if (e.Tag == ExprTag.For)
-        {
-            return Expr.MakeFor(
-                ReplaceAddressOf(e.Args[0]),
-                ReplaceAddressOf(e.Args[1]),
-                ReplaceAddressOf(e.Args[2]),
-                ReplaceAddressOf(e.Args[3]));
-        }
-        else if (e.Tag == ExprTag.Return)
-        {
-            Expr arg = e.Args[0];
-            return Expr.MakeReturn(ReplaceAddressOf(arg));
-        }
-        else if (e.Tag == ExprTag.Cast)
-        {
-            Expr arg = e.Args[0];
-            return Expr.MakeCast(e.DeclaredType, ReplaceAddressOf(arg));
-        }
-        else if (e.Tag == ExprTag.StructCast)
-        {
-            Expr structExpr = e.Args[0];
-            string fieldName = e.Name;
-            Expr addressExpr = e.Args[1];
-            return Expr.MakeStructCast(
-                ReplaceAddressOf(structExpr),
-                e.Name,
-                ReplaceAddressOf(addressExpr));
-        }
-        else if (e.Tag == ExprTag.OffsetOf)
-        {
-            Expr structExpr = e.Args[0];
-            string fieldName = e.Name;
-            return Expr.MakeOffsetOf(
-                ReplaceAddressOf(structExpr),
-                e.Name);
-        }
-        else if (e.Tag == ExprTag.Call)
-        {
-            Expr[] args = e.Args.Select(x => ReplaceAddressOf(x)).ToArray();
-            return Expr.MakeCall(e.Name, args);
+            InvalidNode(e);
+            return null;
         }
         else
         {
-            Program.Panic("unhandled case");
-            return null;
+            return e.Map(ReplaceAddressOf);
         }
     }
 
     Expr ReplaceGenericFunctions(Expr e)
     {
-        if (e.Tag == ExprTag.Empty)
-        {
-            return e;
-        }
-        else if (e.Tag == ExprTag.Int)
-        {
-            return e;
-        }
-        else if (e.Tag == ExprTag.Name)
-        {
-            return e;
-        }
-        else if (e.Tag == ExprTag.Scope)
-        {
-            InvalidNode(e);
-            return null;
-        }
-        else if (e.Tag == ExprTag.Sequence)
-        {
-            return Expr.MakeSequence(e.Args.Select(ReplaceGenericFunctions).ToArray());
-        }
-        else if (e.Tag == ExprTag.Local)
-        {
-            InvalidNode(e);
-            return null;
-        }
-        else if (e.Tag == ExprTag.AddressOf)
-        {
-            Expr arg = e.Args[0];
-            return Expr.MakeAddressOf(ReplaceGenericFunctions(arg));
-        }
-        else if (e.Tag == ExprTag.Switch)
-        {
-            return Expr.MakeSwitch(e.Args.Select(ReplaceGenericFunctions).ToArray());
-        }
-        else if (e.Tag == ExprTag.For)
-        {
-            return Expr.MakeFor(
-                ReplaceGenericFunctions(e.Args[0]),
-                ReplaceGenericFunctions(e.Args[1]),
-                ReplaceGenericFunctions(e.Args[2]),
-                ReplaceGenericFunctions(e.Args[3]));
-        }
-        else if (e.Tag == ExprTag.Return)
-        {
-            Expr arg = e.Args[0];
-            return Expr.MakeReturn(ReplaceGenericFunctions(arg));
-        }
-        else if (e.Tag == ExprTag.Cast)
-        {
-            Expr arg = e.Args[0];
-            return Expr.MakeCast(e.DeclaredType, ReplaceGenericFunctions(arg));
-        }
-        else if (e.Tag == ExprTag.StructCast)
-        {
-            Expr structExpr = e.Args[0];
-            string fieldName = e.Name;
-            Expr addressExpr = e.Args[1];
-            return Expr.MakeStructCast(
-                ReplaceGenericFunctions(structExpr),
-                e.Name,
-                ReplaceGenericFunctions(addressExpr));
-        }
-        else if (e.Tag == ExprTag.OffsetOf)
-        {
-            Expr structExpr = e.Args[0];
-            string fieldName = e.Name;
-            return Expr.MakeOffsetOf(
-                ReplaceGenericFunctions(structExpr),
-                e.Name);
-        }
-        else if (e.Tag == ExprTag.Call)
+        if (e.Tag == ExprTag.Call)
         {
             Expr[] args = e.Args.Select(ReplaceGenericFunctions).ToArray();
 
@@ -525,10 +323,14 @@ partial class Compiler
                 return Expr.MakeCall(e.Name, args);
             }
         }
+        else if (e.Tag == ExprTag.Name || e.Tag == ExprTag.Scope || e.Tag == ExprTag.Local)
+        {
+            InvalidNode(e);
+            return null;
+        }
         else
         {
-            Program.Panic("unhandled case");
-            return null;
+            return e.Map(ReplaceGenericFunctions);
         }
     }
 

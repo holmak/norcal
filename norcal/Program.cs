@@ -388,6 +388,45 @@ partial class Expr
             return false;
         }
     }
+
+    /// <summary>
+    /// Apply a function to this expression tree.
+    /// </summary>
+    public Expr Map(Func<Expr, Expr> f)
+    {
+        switch (Tag)
+        {
+            case ExprTag.Empty:
+            case ExprTag.Int:
+            case ExprTag.Name:
+                return this;
+            case ExprTag.Scope:
+                return MakeScope(f(Args[0]));
+            case ExprTag.Sequence:
+                return MakeSequence(Args.Select(f).ToArray());
+            case ExprTag.Local:
+                return this;
+            case ExprTag.AddressOf:
+                return MakeAddressOf(f(Args[0]));
+            case ExprTag.Switch:
+                return MakeSwitch(Args.Select(f).ToArray());
+            case ExprTag.For:
+                return MakeFor(f(Args[0]), f(Args[1]), f(Args[2]), f(Args[3]));
+            case ExprTag.Return:
+                return MakeReturn(f(Args[0]));
+            case ExprTag.Cast:
+                return MakeCast(DeclaredType, f(Args[0]));
+            case ExprTag.StructCast:
+                return MakeStructCast(f(Args[0]), Name, f(Args[1]));
+            case ExprTag.OffsetOf:
+                return MakeOffsetOf(f(Args[0]), Name);
+            case ExprTag.Call:
+                return MakeCall(Name, Args.Select(f));
+            default:
+                Program.NYI();
+                return null;
+        }
+    }
 }
 
 enum ExprTag
