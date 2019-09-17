@@ -200,7 +200,7 @@ partial class Compiler
         }
         else if (e.Tag == ExprTag.Local)
         {
-            DefineSymbol(scope, SymbolTag.Variable, e.Name, 0, e.DeclaredType);
+            DefineVariable(scope, e.DeclaredType, e.Name);
             // There is no need to keep the declaration node:
             return Expr.MakeEmpty();
         }
