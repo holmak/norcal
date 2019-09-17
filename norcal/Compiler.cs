@@ -220,7 +220,8 @@ partial class Compiler
                 return ReplaceAddressOf(loadCall.Args[0]);
             }
 
-            Program.Panic("unexpected subexpression within address-of operation");
+            // TODO: Show the appropriate one of these two error messages:
+            Program.Error("cannot take address of this expression, or, cannot assign to constants");
             return null;
         }
         else if (e.Tag == ExprTag.Name || e.Tag == ExprTag.Scope || e.Tag == ExprTag.Local)
