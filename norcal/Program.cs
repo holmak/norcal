@@ -161,6 +161,8 @@ static class Program
     }
 
     public static void NYI() => Panic("not yet implemented");
+
+    public static void UnhandledCase() => Panic("unhandled case");
 }
 
 [DebuggerDisplay("{DebuggerDisplay,nq}")]

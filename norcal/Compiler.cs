@@ -184,11 +184,11 @@ partial class Compiler
                 string loadFunction = null;
                 if (SizeOf(sym.Type) == 1) loadFunction = Builtins.LoadU8;
                 else if (SizeOf(sym.Type) == 2) loadFunction = Builtins.LoadU16;
-                else Program.Panic("unhandled case");
+                else Program.UnhandledCase();
 
                 return Expr.MakeCall(loadFunction, Expr.MakeInt(sym.Value, CType.MakePointer(sym.Type)));
             }
-            Program.Panic("unhandled case");
+            Program.UnhandledCase();
             return null;
         }
         else if (e.Tag == ExprTag.Scope)
@@ -1093,7 +1093,7 @@ partial class Compiler
     {
         if (count == 1) return new[] { T0 };
         else if (count == 2) return new[] { T0, T2 };
-        Program.Panic("unhandled case");
+        Program.UnhandledCase();
         return null;
     }
 
