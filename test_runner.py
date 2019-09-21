@@ -217,12 +217,12 @@ with open(REPORT_FILE, 'w') as report:
     for test in tests:
         if not test.passed and first_error_id is None:
             first_error_id = test.html_id
-        report.write('<tr id="{}">\n'.format(test.html_id))
+        report.write('<tr>\n')
         if test.passed:
             report.write('<td bgcolor="#53F253"></td>\n')
         else:
             report.write('<td bgcolor="#E9322E"></td>\n')
-        report.write('<td>' + test.description + '</td>\n')
+        report.write('<td id="{}">{}</td>\n'.format(test.html_id, test.description))
         report.write('<td><pre>' + pre(test.source) + '</pre></td>\n')
         report.write('<td><details><summary>Show</summary><pre>' + pre(test.disasm) + '</pre></details></td>\n')
         report.write('<td><pre>' + pre_data(test.input) + '</pre></td>\n')
