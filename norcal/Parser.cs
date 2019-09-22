@@ -99,12 +99,13 @@ partial class Parser
                     }
                 }
                 if (!TryParse(TokenType.LBRACE)) ParserError("expected {");
-                List<Expr> body = new List<Expr>();
+                List<object> args = new List<object>();
+                args.Add(Tag.Sequence);
                 while (!TryParse(TokenType.RBRACE))
                 {
-                    body.Add(ParseStatement(true));
+                    args.Add(ParseStatement(true));
                 }
-                d.Body = Expr.MakeScope(Expr.MakeSequence(body.ToArray()));
+                d.Body = Expr.Make(Tag.Scope, Expr.Make(args.ToArray()));
             }
             else
             {
@@ -130,15 +131,16 @@ partial class Parser
             if (TryParse(TokenType.EQUALS))
             {
                 Expr value = ParseExpr();
-                stmt = Expr.MakeSequence(new[]
+                stmt = Expr.Make(new object[]
                 {
-                    Expr.MakeLocal(type, localname),
-                    MakeAssignExpr(Expr.MakeName(localname), value),
+                    Tag.Sequence,
+                    Expr.Make(Tag.Local, type, localname),
+                    MakeAssignExpr(Expr.Make(Tag.Name, localname), value),
                 });
             }
             else
             {
-                stmt = Expr.MakeLocal(type, localname);
+                stmt = Expr.Make(Tag.Local, type, localname);
             }
             if (!TryParse(TokenType.SEMICOLON)) ParserError("expected ;");
         }
@@ -147,10 +149,10 @@ partial class Parser
             if (!allowLong) Error_NotAllowedInFor();
             if (!TryParse(TokenType.LPAREN)) ParserError("expected (");
             Expr test = ParseExpr();
-            test = Expr.MakeCall(Builtins.BoolFromGeneric, test);
+            test = Expr.Make(Tag.BoolFromGeneric, test);
             if (!TryParse(TokenType.RPAREN)) ParserError("expected )");
             Expr then = ParseStatementBlock();
-            stmt = Expr.MakeSwitch(test, then);
+            stmt = Expr.Make(Tag.Switch, test, then);
         }
         else if (TryParseName("for"))
         {
@@ -162,12 +164,12 @@ partial class Parser
             Expr next = ParseExpr();
             if (!TryParse(TokenType.RPAREN)) ParserError("expected )");
             Expr body = ParseStatementBlock();
-            stmt = Expr.MakeFor(init, test, next, body);
+            stmt = Expr.Make(Tag.For, init, test, next, body);
         }
         else if (TryParseName("return"))
         {
             if (!allowLong) Error_NotAllowedInFor();
-            stmt = Expr.MakeReturn(ParseExpr());
+            stmt = Expr.Make(Tag.Return, ParseExpr());
             if (!TryParse(TokenType.SEMICOLON)) ParserError("expected ;");
         }
         else
@@ -189,12 +191,13 @@ partial class Parser
         // A block can be a single statement, or a series of statements surrounded by braces.
         if (TryParse(TokenType.LBRACE))
         {
-            List<Expr> body = new List<Expr>();
+            List<object> args = new List<object>();
+            args.Add(Tag.Sequence);
             while (!TryParse(TokenType.RBRACE))
             {
-                body.Add(ParseStatement(true));
+                args.Add(ParseStatement(true));
             }
-            return Expr.MakeSequence(body.ToArray());
+            return Expr.Make(args.ToArray());
         }
         else
         {
@@ -281,11 +284,11 @@ partial class Parser
         {
             if (TryParse(TokenType.PLUS))
             {
-                e = Expr.MakeCall(Builtins.AddGeneric, e, ParseMultiplyExpr());
+                e = Expr.Make(Tag.AddGeneric, e, ParseMultiplyExpr());
             }
             else if (TryParse(TokenType.MINUS))
             {
-                e = Expr.MakeCall(Builtins.SubtractGeneric, e, ParseMultiplyExpr());
+                e = Expr.Make(Tag.SubtractGeneric, e, ParseMultiplyExpr());
             }
             else
             {
@@ -311,7 +314,7 @@ partial class Parser
     {
         if (TryParse(TokenType.STAR))
         {
-            return Expr.MakeCall(Builtins.LoadGeneric, ParseSuffixExpr());
+            return Expr.Make(Tag.LoadGeneric, ParseSuffixExpr());
         }
         else
         {
@@ -327,7 +330,15 @@ partial class Parser
         {
             if (TryParse(TokenType.LPAREN))
             {
-                List<Expr> args = new List<Expr>();
+                List<object> args = new List<object>();
+
+                string function;
+                if (!e.Match(Tag.Name, out function))
+                {
+                    ParserError("functions may only be called by name");
+                }
+
+                args.Add(function);
                 if (!TryParse(TokenType.RPAREN))
                 {
                     while (true)
@@ -338,25 +349,17 @@ partial class Parser
                     }
                 }
 
-                string function;
-                if (e.MatchName(out function))
-                {
-                    e = Expr.MakeCall(function, args);
-                }
-                else
-                {
-                    ParserError("functions may only be called by name");
-                }
+                e = Expr.Make(args.ToArray());
             }
             else if (TryParse(TokenType.PERIOD))
             {
                 string fieldName;
                 if (!TryParseAnyName(out fieldName)) ParserError("expected a field name");
-                e = Expr.MakeCall(Builtins.LoadGeneric,
-                    Expr.MakeStructCast(e, fieldName,
-                        Expr.MakeCall(Builtins.AddU8Ptr,
-                            Expr.MakeCast(CType.UInt8Ptr, Expr.MakeAddressOf(e)),
-                            Expr.MakeOffsetOf(e, fieldName))));
+                e = Expr.Make(Tag.LoadGeneric,
+                    Expr.Make(Tag.StructCast, e, fieldName,
+                        Expr.Make(Tag.AddU8Ptr,
+                            Expr.Make(Tag.Cast, CType.UInt8Ptr, Expr.Make(Tag.AddressOf, e)),
+                            Expr.Make(Tag.OffsetOf, e, fieldName))));
             }
             else
             {
@@ -374,11 +377,11 @@ partial class Parser
         string name;
         if (TryParseInt(out n))
         {
-            return Expr.MakeInt(n, CType.UInt16);
+            return Expr.Make(Tag.Int, n).WithType(CType.UInt16);
         }
         else if (TryParseAnyName(out name))
         {
-            return Expr.MakeName(name);
+            return Expr.Make(Tag.Name, name);
         }
         else if (TryParse(TokenType.LPAREN))
         {
@@ -396,19 +399,19 @@ partial class Parser
     Expr AddressOf(Expr e)
     {
         Expr inner;
-        if (e.MatchUnaryCall(Builtins.LoadGeneric, out inner))
+        if (e.Match(Tag.LoadGeneric, out inner))
         {
             return inner;
         }
         else
         {
-            return Expr.MakeAddressOf(e);
+            return Expr.Make(Tag.AddressOf, e);
         }
     }
 
     Expr MakeAssignExpr(Expr dst, Expr src)
     {
-        return Expr.MakeCall(Builtins.StoreGeneric, AddressOf(dst), src);
+        return Expr.Make(Tag.StoreGeneric, AddressOf(dst), src);
     }
 
     Token PeekToken()

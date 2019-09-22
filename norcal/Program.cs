@@ -52,13 +52,13 @@ static class Program
             if (decl.Tag == DeclarationTag.Function)
             {
                 sb.AppendFormat("{0}()\n", decl.Name);
-                sb.AppendFormat(ShowExpr(decl.Body));
+                sb.AppendFormat(decl.Body.ShowMultiline());
                 sb.AppendFormat("\n\n");
             }
             else if (decl.Tag == DeclarationTag.Constant)
             {
                 sb.AppendFormat("define {0} = ", decl.Name);
-                sb.AppendFormat(ShowExpr(decl.Body));
+                sb.AppendFormat(decl.Body.ShowMultiline());
                 sb.AppendFormat("\n\n");
             }
             else if (decl.Tag == DeclarationTag.Variable)
@@ -80,72 +80,6 @@ static class Program
         return sb.ToString();
     }
 
-    public static string ShowExpr(Expr e)
-    {
-        return ShowStringTree(ExprToStringTree(e));
-    }
-
-    /// <summary>
-    /// The return value is a "string tree": a tree where each node is a string or another tree.
-    /// </summary>
-    static object ExprToStringTree(Expr e)
-    {
-        switch (e.Tag)
-        {
-            case ExprTag.Empty:
-                return "$empty";
-            case ExprTag.Int:
-                return e.Int.ToString((e.Int < 512) ? "G" : "X");
-            case ExprTag.Name:
-                return e.Name;
-            case ExprTag.Call:
-                return Enumerable.Concat(new[] { e.Name }, e.Args.Select(ExprToStringTree));
-            case ExprTag.Scope:
-                return new[] { "$scope", ExprToStringTree(e.Args[0]) };
-            case ExprTag.Sequence:
-                return Enumerable.Concat(new[] { "$sequence" }, e.Args.Select(ExprToStringTree));
-            case ExprTag.Local:
-                return new[] { "$local", e.Name };
-            case ExprTag.AddressOf:
-                return new[] { "$address_of", ExprToStringTree(e.Args[0]) };
-            case ExprTag.Switch:
-                return Enumerable.Concat(new[] { "$switch" }, e.Args.Select(ExprToStringTree));
-            case ExprTag.For:
-                return Enumerable.Concat(new[] { "$for" }, e.Args.Select(ExprToStringTree));
-            case ExprTag.Return:
-                return new[] { "$return", ExprToStringTree(e.Args[0]) };
-            case ExprTag.Cast:
-                return new[] { "$cast", "<" + e.DeclaredType.Show() + ">", ExprToStringTree(e.Args[0]) };
-            case ExprTag.StructCast:
-                return new[] { "$struct_cast", ExprToStringTree(e.Args[0]), e.Name, ExprToStringTree(e.Args[1]) };
-            case ExprTag.OffsetOf:
-                return new[] { "$offset_of", ExprToStringTree(e.Args[0]), e.Name };
-            default:
-                throw new NotImplementedException();
-        }
-    }
-
-    /// <summary>
-    /// Format a "string tree" into a multi-line, indented string.
-    /// Each node must be a string or another "string tree".
-    /// </summary>
-    static string ShowStringTree(object tree)
-    {
-        if (tree is string) return (string)tree;
-
-        IEnumerable<object> subtrees = (IEnumerable<object>)tree;
-        IEnumerable<string> substrings = subtrees.Select(ShowStringTree);
-        bool small = subtrees.Count() <= 2;
-        if (small)
-        {
-            return "(" + string.Join(" ", substrings) + ")";
-        }
-        else
-        {
-            return "(" + string.Join("\n    ", substrings.Select(s => s.Replace("\n", "\n    "))) + ")";
-        }
-    }
-
     public static void Error(string format, params object[] args)
     {
         string message = string.Format(format, args);
@@ -165,230 +99,170 @@ static class Program
     public static void UnhandledCase() => Panic("unhandled case");
 }
 
-[DebuggerDisplay("{DebuggerDisplay,nq}")]
-partial class Expr
+// Expr is treated as a dynamically-typed tuple, with many variants:
+// $empty
+// $int number
+// $name name
+// $scope body
+// $sequence exprs...
+// $local declaredType name
+// $addressOf expr
+// $switch { condition body } (repeated any number of times)
+// $for init cond next body
+// $return expr
+// $cast type expr
+// $structCast structExpr fieldName addressExpr
+// $offsetOf structExpr fieldName
+// <functionName> args...
+//
+// The "type" property, if present, specifies the type determined by type-checking rules.
+
+[DebuggerDisplay("{Show(),nq}")]
+class Expr
 {
-    string DebuggerDisplay => Show();
+    private readonly object[] Args;
+    public readonly CType Type;
 
-    public string Show()
+    public Expr(object[] args, CType type)
     {
-        switch (Tag)
+        foreach (object arg in args)
         {
-            case ExprTag.Empty:
-                return "$empty";
-            case ExprTag.Int:
-                return Int.ToString((Int < 512) ? "G" : "X");
-            case ExprTag.Name:
-                return Name;
-            case ExprTag.Call:
-                return string.Format("({0} {1})", Name, string.Join(" ", Args.Select(x => x.Show())));
-            case ExprTag.Scope:
-                return string.Format("($scope {0})", Args[0].Show());
-            case ExprTag.Sequence:
-                return string.Format("($sequence {0})", string.Join(" ", Args.Select(x => x.DebuggerDisplay)));
-            case ExprTag.Local:
-                return string.Format("($local {0})", Name);
-            case ExprTag.AddressOf:
-                return string.Format("($address_of {0})", Args[0].Show());
-            case ExprTag.Switch:
-                return string.Format("($switch {0})", string.Join(" ", Args.Select(x => x.Show())));
-            case ExprTag.For:
-                return string.Format("($for {0})", string.Join(" ", Args.Select(x => x.Show())));
-            case ExprTag.Return:
-                return string.Format("($return {0})", Args[0].Show());
-            case ExprTag.Cast:
-                return string.Format("($cast {0} {1})", DeclaredType.Show(), Args[0].Show());
-            case ExprTag.StructCast:
-                return string.Format("($struct_cast {0} {1} {2})", Args[0].Show(), Name, Args[1].Show());
-            case ExprTag.OffsetOf:
-                return string.Format("($offset_of {0} {1})", Args[0].Show(), Name);
-            default:
-                throw new NotImplementedException();
+            if (arg == null) throw new Exception("Null in tuple.");
+            if (!(arg is int || arg is string || arg is CType || arg is Expr))
+            {
+                throw new Exception("Unsupported type in tuple: " + arg.GetType());
+            }
         }
+
+        Args = args;
+        Type = type;
     }
 
-    public static Expr MakeEmpty()
+    public static Expr Make(params object[] args) => new Expr(args, CType.Implied);
+
+    public bool MatchTag(string tag)
     {
-        return new Expr
+        return (string)Args[0] == tag;
+    }
+
+    public bool Match(string tag)
+    {
+        if (Args.Length == 1 &&
+            Args[0] is string && (string)Args[0] == tag)
         {
-            Tag = ExprTag.Empty,
-        };
-    }
-
-    public static Expr MakeInt(int n, CType type)
-    {
-        return new Expr
-        {
-            Tag = ExprTag.Int,
-            Int = n,
-            DeclaredType = type,
-        };
-    }
-
-    public static Expr MakeName(string name)
-    {
-        return new Expr
-        {
-            Tag = ExprTag.Name,
-            Name = name,
-        };
-    }
-
-    public static Expr MakeScope(Expr arg)
-    {
-        return new Expr
-        {
-            Tag = ExprTag.Scope,
-            Args = new[] { arg },
-        };
-    }
-
-    public static Expr MakeSequence(Expr[] statements)
-    {
-        return new Expr
-        {
-            Tag = ExprTag.Sequence,
-            Args = statements,
-        };
-    }
-
-    public static Expr MakeLocal(CType declaredType, string name)
-    {
-        return new Expr
-        {
-            Tag = ExprTag.Local,
-            DeclaredType = declaredType,
-            Name = name,
-        };
-    }
-
-    public static Expr MakeAddressOf(Expr arg)
-    {
-        return new Expr
-        {
-            Tag = ExprTag.AddressOf,
-            Args = new[] { arg },
-        };
-    }
-
-    public static Expr MakeSwitch(Expr condition, Expr body) => MakeSwitch(new[] { condition, body });
-
-    public static Expr MakeSwitch(Expr[] args)
-    {
-        return new Expr
-        {
-            Tag = ExprTag.Switch,
-            Args = args,
-        };
-    }
-
-    public static Expr MakeFor(Expr initialization, Expr condition, Expr induction, Expr body)
-    {
-        return new Expr
-        {
-            Tag = ExprTag.For,
-            Args = new[] { initialization, condition, induction, body },
-        };
-    }
-
-    public static Expr MakeReturn(Expr arg)
-    {
-        return new Expr
-        {
-            Tag = ExprTag.Return,
-            Args = new[] { arg },
-        };
-    }
-
-    public static Expr MakeCast(CType type, Expr expr)
-    {
-        return new Expr
-        {
-            Tag = ExprTag.Cast,
-            DeclaredType = type,
-            Args = new[] { expr },
-        };
-    }
-
-    public static Expr MakeStructCast(Expr structExpr, string fieldName, Expr addressExpr)
-    {
-        return new Expr
-        {
-            Tag = ExprTag.StructCast,
-            Args = new[] { structExpr, addressExpr },
-            Name = fieldName,
-        };
-    }
-
-    public static Expr MakeOffsetOf(Expr structExpr, string fieldName)
-    {
-        return new Expr
-        {
-            Tag = ExprTag.OffsetOf,
-            Args = new[] { structExpr },
-            Name = fieldName,
-        };
-    }
-
-    public static Expr MakeCall(string function, IEnumerable<Expr> args)
-    {
-        Expr e = new Expr();
-        e.Tag = ExprTag.Call;
-        e.Name = function;
-        e.Args = args.ToArray();
-        return e;
-    }
-
-    public static Expr MakeCall(string function, Expr arg)
-    {
-        return MakeCall(function, new Expr[] { arg });
-    }
-
-    public static Expr MakeCall(string function, Expr left, Expr right)
-    {
-        return MakeCall(function, new Expr[] { left, right });
-    }
-
-    public bool MatchInt(out int n)
-    {
-        if (Tag == ExprTag.Int)
-        {
-            n = Int;
             return true;
         }
-        else
-        {
-            n = 0;
-            return false;
-        }
+
+        return false;
     }
 
-    public bool MatchName(out string name)
+    public bool Match<T1>(string tag, out T1 var1)
     {
-        if (Tag == ExprTag.Name)
+        if (Args.Length == 2 &&
+            Args[0] is string && (string)Args[0] == tag &&
+            Args[1] is T1)
         {
-            name = Name;
+            var1 = (T1)Args[1];
             return true;
         }
-        else
-        {
-            name = null;
-            return false;
-        }
+
+        var1 = default(T1);
+        return false;
     }
 
-    public bool MatchUnaryCall(string function, out Expr arg)
+    public bool Match<T1, T2>(string tag, out T1 var1, out T2 var2)
     {
-        if (Tag == ExprTag.Call && Args.Length == 1 && Name == function)
+        if (Args.Length == 3 &&
+            Args[0] is string && (string)Args[0] == tag &&
+            Args[1] is T1 &&
+            Args[2] is T2)
         {
-            arg = Args[0];
+            var1 = (T1)Args[1];
+            var2 = (T2)Args[2];
             return true;
         }
-        else
+
+        var1 = default(T1);
+        var2 = default(T2);
+        return false;
+    }
+
+    public bool Match<T1, T2, T3>(string tag, out T1 var1, out T2 var2, out T3 var3)
+    {
+        if (Args.Length == 4 &&
+            Args[0] is string && (string)Args[0] == tag &&
+            Args[1] is T1 &&
+            Args[2] is T2 &&
+            Args[3] is T3)
         {
-            arg = null;
-            return false;
+            var1 = (T1)Args[1];
+            var2 = (T2)Args[2];
+            var3 = (T3)Args[3];
+            return true;
         }
+
+        var1 = default(T1);
+        var2 = default(T2);
+        var3 = default(T3);
+        return false;
+    }
+
+    public bool Match<T1, T2, T3, T4>(string tag, out T1 var1, out T2 var2, out T3 var3, out T4 var4)
+    {
+        if (Args.Length == 5 &&
+            Args[0] is string && (string)Args[0] == tag &&
+            Args[1] is T1 &&
+            Args[2] is T2 &&
+            Args[3] is T3 &&
+            Args[4] is T4)
+        {
+            var1 = (T1)Args[1];
+            var2 = (T2)Args[2];
+            var3 = (T3)Args[3];
+            var4 = (T4)Args[4];
+            return true;
+        }
+
+        var1 = default(T1);
+        var2 = default(T2);
+        var3 = default(T3);
+        var4 = default(T4);
+        return false;
+    }
+
+    public bool MatchAny<T>(string tag, out T[] vars)
+    {
+        if (Args.Length >= 1 &&
+            Args[0] is string && (string)Args[0] == tag &&
+            Args.Skip(1).All(x => x is T))
+        {
+            vars = Args.Skip(1).Cast<T>().ToArray();
+            return true;
+        }
+
+        vars = null;
+        return false;
+    }
+
+    public bool MatchAny<T>(out string tag, out T[] vars)
+    {
+        if (Args.Length >= 1 &&
+            Args[0] is string &&
+            Args.Skip(1).All(x => x is T))
+        {
+            tag = (string)Args[0];
+            vars = Args.Skip(1).Cast<T>().ToArray();
+            return true;
+        }
+
+        tag = null;
+        vars = null;
+        return false;
+    }
+
+    public Expr WithType(CType type)
+    {
+        return new Expr(Args, type);
     }
 
     /// <summary>
@@ -396,66 +270,93 @@ partial class Expr
     /// </summary>
     public Expr Map(Func<Expr, Expr> f)
     {
-        switch (Tag)
+        object[] results = new object[Args.Length];
+
+        for (int i = 0; i < Args.Length; i++)
         {
-            case ExprTag.Empty:
-            case ExprTag.Int:
-            case ExprTag.Name:
-                return this;
-            case ExprTag.Scope:
-                return MakeScope(f(Args[0]));
-            case ExprTag.Sequence:
-                return MakeSequence(Args.Select(f).ToArray());
-            case ExprTag.Local:
-                return this;
-            case ExprTag.AddressOf:
-                return MakeAddressOf(f(Args[0]));
-            case ExprTag.Switch:
-                return MakeSwitch(Args.Select(f).ToArray());
-            case ExprTag.For:
-                return MakeFor(f(Args[0]), f(Args[1]), f(Args[2]), f(Args[3]));
-            case ExprTag.Return:
-                return MakeReturn(f(Args[0]));
-            case ExprTag.Cast:
-                return MakeCast(DeclaredType, f(Args[0]));
-            case ExprTag.StructCast:
-                return MakeStructCast(f(Args[0]), Name, f(Args[1]));
-            case ExprTag.OffsetOf:
-                return MakeOffsetOf(f(Args[0]), Name);
-            case ExprTag.Call:
-                return MakeCall(Name, Args.Select(f));
-            default:
+            Expr subexpr = Args[i] as Expr;
+            if (subexpr != null)
+            {
+                results[i] = f(subexpr);
+            }
+            else
+            {
+                // Return other elements unchanged:
+                results[i] = Args[i];
+            }
+        }
+
+        return Make(results).WithType(Type);
+    }
+
+    public string Show() => ShowWithOptions(false);
+
+    public string ShowMultiline() => ShowWithOptions(true);
+
+    string ShowWithOptions(bool multiline)
+    {
+        return ShowStringTree(multiline, ToStringTree());
+    }
+
+    /// <summary>
+    /// The return value is a "string tree": a tree where each node is a string or an array of subtrees.
+    /// </summary>
+    object ToStringTree()
+    {
+        object[] tree = new object[Args.Length];
+
+        for (int i = 0; i < Args.Length; i++)
+        {
+            int? integer = Args[i] as int?;
+            string name = Args[i] as string;
+            Expr subexpr = Args[i] as Expr;
+            CType type = Args[i] as CType;
+            if (integer != null)
+            {
+                int n = integer.Value;
+                tree[i] = n.ToString((n < 512) ? "G" : "X");
+            }
+            else if (name != null)
+            {
+                tree[i] = name;
+            }
+            else if (subexpr != null)
+            {
+                tree[i] = subexpr.ToStringTree();
+            }
+            else if (type != null)
+            {
+                tree[i] = type.Show();
+            }
+            else
+            {
                 Program.NYI();
-                return null;
+            }
+        }
+
+        return tree;
+    }
+
+    /// <summary>
+    /// Format a "string tree" into a multi-line, indented string.
+    /// Each node must be a string or another "string tree".
+    /// </summary>
+    static string ShowStringTree(bool multiline, object tree)
+    {
+        if (tree is string) return (string)tree;
+
+        IEnumerable<object> subtrees = (IEnumerable<object>)tree;
+        IEnumerable<string> substrings = subtrees.Select(x => ShowStringTree(multiline, x));
+        bool small = subtrees.Count() <= 2;
+        if (small || !multiline)
+        {
+            return "(" + string.Join(" ", substrings) + ")";
+        }
+        else
+        {
+            return "(" + string.Join("\n    ", substrings.Select(s => s.Replace("\n", "\n    "))) + ")";
         }
     }
-}
-
-enum ExprTag
-{
-    Empty,      // nothing
-    Int,        // number
-    Name,       // name
-    Scope,      // args...
-    Sequence,   // args...
-    Local,      // name
-    AddressOf,  // arg
-    Switch,     // cond, body, repeat...
-    For,        // init, cond, next, body
-    Return,     // arg
-    Cast,       // type, expr
-    StructCast, // structExpr, fieldName, addressExpr
-    OffsetOf,   // structExpr, fieldName
-    Call,       // name, args...
-}
-
-partial class Expr
-{
-    public ExprTag Tag;
-    public int Int;
-    public string Name;
-    public CType DeclaredType;
-    public Expr[] Args;
 }
 
 class Declaration
@@ -488,28 +389,46 @@ class NamedField
 }
 
 /// <summary>
-/// Names of special builtin functions.
+/// Names of AST nodes.
 /// </summary>
-static class Builtins
+static class Tag
 {
+    // Special nodes:
+    public static readonly string Empty = "$empty";
+    public static readonly string Int = "$int";
+    public static readonly string Name = "$name";
+    public static readonly string Scope = "$scope";
+    public static readonly string Sequence = "$sequence";
+    public static readonly string Local = "$local";
+    public static readonly string AddressOf = "$address_of";
+    public static readonly string Switch = "$switch";
+    public static readonly string For = "$for";
+    public static readonly string Return = "$return";
+    public static readonly string Cast = "$cast";
+    public static readonly string StructCast = "$struct_cast";
+    public static readonly string OffsetOf = "$offset_of";
+
+    // Type-generic pseudo-functions:
     public static readonly string AddGeneric = "$add_gen";
-    public static readonly string AddU8 = "$add_u8";
-    public static readonly string AddU8Ptr = "$add_u8_ptr";
-    public static readonly string AddU16 = "$add_u16";
     public static readonly string SubtractGeneric = "$sub_gen";
-    public static readonly string SubtractU8 = "$sub_u8";
-    public static readonly string SubtractU16 = "$sub_u16";
     public static readonly string LoadGeneric = "$load_gen";
-    public static readonly string LoadU8 = "$load_u8";
-    public static readonly string LoadU16 = "$load_u16";
     public static readonly string StoreGeneric = "$store_gen";
-    public static readonly string StoreU8 = "$store_u8";
-    public static readonly string StoreU16 = "$store_u16";
     public static readonly string BoolFromGeneric = "$bool_from_gen";
-    public static readonly string BoolFromU16 = "$bool_from_u16";
     public static readonly string PredecrementGeneric = "$predecr_gen";
-    public static readonly string PredecrementU8 = "$predecr_u8";
-    public static readonly string PredecrementU16 = "$predecr_u16";
+
+    // Runtime functions:
+    public static readonly string AddU8 = "_rt_add_u8";
+    public static readonly string AddU8Ptr = "_rt_add_u8_ptr";
+    public static readonly string AddU16 = "_rt_add_u16";
+    public static readonly string SubtractU8 = "_rt_sub_u8";
+    public static readonly string SubtractU16 = "_rt_sub_u16";
+    public static readonly string LoadU8 = "_rt_load_u8";
+    public static readonly string LoadU16 = "_rt_load_u16";
+    public static readonly string StoreU8 = "_rt_store_u8";
+    public static readonly string StoreU16 = "_rt_store_u16";
+    public static readonly string BoolFromU16 = "_rt_bool_from_u16";
+    public static readonly string PredecrementU8 = "_rt_predecr_u8";
+    public static readonly string PredecrementU16 = "_rt_predecr_u16";
 }
 
 enum Opcode

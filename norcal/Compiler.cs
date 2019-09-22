@@ -29,8 +29,8 @@ partial class Compiler
 
     static readonly string[] LoadFunctions = new[]
     {
-        Builtins.LoadU8,
-        Builtins.LoadU16,
+        Tag.LoadU8,
+        Tag.LoadU16,
     };
 
     public void CompileProgram(List<Declaration> program)
@@ -42,16 +42,16 @@ partial class Compiler
         int[] builtinParamAddresses = new[] { T0, T2 };
 
         // Define the types of the builtin functions:
-        DefineFunction(Builtins.LoadU8, new[] { CType.MakePointer(CType.UInt8) }, CType.UInt8, 0, BuiltinParamAddresses(1));
-        DefineFunction(Builtins.LoadU16, new[] { CType.MakePointer(CType.UInt16) }, CType.UInt16, 0, BuiltinParamAddresses(1));
-        DefineFunction(Builtins.StoreU8, new[] { CType.MakePointer(CType.UInt8), CType.UInt8 }, CType.UInt8, 0, BuiltinParamAddresses(2));
-        DefineFunction(Builtins.StoreU16, new[] { CType.MakePointer(CType.UInt16), CType.UInt16 }, CType.UInt16, 0, BuiltinParamAddresses(2));
-        DefineFunction(Builtins.AddU8, new[] { CType.UInt8, CType.UInt8 }, CType.UInt8, 0, BuiltinParamAddresses(2));
-        DefineFunction(Builtins.AddU8Ptr, new[] { CType.UInt8Ptr, CType.UInt16 }, CType.UInt8Ptr, 0, BuiltinParamAddresses(2));
-        DefineFunction(Builtins.AddU16, new[] { CType.UInt16, CType.UInt16 }, CType.UInt16, 0, BuiltinParamAddresses(2));
-        DefineFunction(Builtins.SubtractU8, new[] { CType.UInt8, CType.UInt8 }, CType.UInt8, 0, BuiltinParamAddresses(2));
-        DefineFunction(Builtins.SubtractU16, new[] { CType.UInt16, CType.UInt16 }, CType.UInt16, 0, BuiltinParamAddresses(2));
-        DefineFunction(Builtins.BoolFromU16, new[] { CType.UInt16 }, CType.UInt8, 0, BuiltinParamAddresses(1));
+        DefineFunction(Tag.LoadU8, new[] { CType.MakePointer(CType.UInt8) }, CType.UInt8, 0, BuiltinParamAddresses(1));
+        DefineFunction(Tag.LoadU16, new[] { CType.MakePointer(CType.UInt16) }, CType.UInt16, 0, BuiltinParamAddresses(1));
+        DefineFunction(Tag.StoreU8, new[] { CType.MakePointer(CType.UInt8), CType.UInt8 }, CType.UInt8, 0, BuiltinParamAddresses(2));
+        DefineFunction(Tag.StoreU16, new[] { CType.MakePointer(CType.UInt16), CType.UInt16 }, CType.UInt16, 0, BuiltinParamAddresses(2));
+        DefineFunction(Tag.AddU8, new[] { CType.UInt8, CType.UInt8 }, CType.UInt8, 0, BuiltinParamAddresses(2));
+        DefineFunction(Tag.AddU8Ptr, new[] { CType.UInt8Ptr, CType.UInt16 }, CType.UInt8Ptr, 0, BuiltinParamAddresses(2));
+        DefineFunction(Tag.AddU16, new[] { CType.UInt16, CType.UInt16 }, CType.UInt16, 0, BuiltinParamAddresses(2));
+        DefineFunction(Tag.SubtractU8, new[] { CType.UInt8, CType.UInt8 }, CType.UInt8, 0, BuiltinParamAddresses(2));
+        DefineFunction(Tag.SubtractU16, new[] { CType.UInt16, CType.UInt16 }, CType.UInt16, 0, BuiltinParamAddresses(2));
+        DefineFunction(Tag.BoolFromU16, new[] { CType.UInt16 }, CType.UInt8, 0, BuiltinParamAddresses(1));
 
         LexicalScope globalScope = new LexicalScope();
 
@@ -137,11 +137,11 @@ partial class Compiler
 
                 Expr body = decl.Body;
                 body = ReplaceNamedVariables(body, functionScope);
-                Program.WriteDebugFile("stage1-replace-vars.txt", Program.ShowExpr(body));
+                Program.WriteDebugFile("stage1-replace-vars.txt", body.ShowMultiline());
                 body = ReplaceAddressOf(body);
-                Program.WriteDebugFile("stage2-replace-addressof.txt", Program.ShowExpr(body));
+                Program.WriteDebugFile("stage2-replace-addressof.txt", body.ShowMultiline());
                 body = ReplaceGenericFunctions(body);
-                Program.WriteDebugFile("stage3-replace-generics.txt", Program.ShowExpr(body));
+                Program.WriteDebugFile("stage3-replace-generics.txt", body.ShowMultiline());
                 CheckTypes(body);
                 CompileExpression(body, DestinationDiscard, Continuation.Fallthrough);
                 Emit(Opcode.RTS);
@@ -169,40 +169,36 @@ partial class Compiler
 
     Expr ReplaceNamedVariables(Expr e, LexicalScope scope)
     {
-        if (e.Tag == ExprTag.Name)
+        string name;
+        Expr body;
+        CType declaredType;
+        if (e.Match(Tag.Name, out name))
         {
             Symbol sym;
-            if (!FindSymbol(scope, e.Name, out sym)) Program.Error("symbol not defined: {0}", e.Name);
+            if (!FindSymbol(scope, name, out sym)) Program.Error("symbol not defined: {0}", name);
             if (sym.Tag == SymbolTag.Constant)
             {
                 // TODO: Make sure the constant value fits in the specified type.
-                return Expr.MakeInt(sym.Value, sym.Type);
+                return Expr.Make(Tag.Int, sym.Value).WithType(sym.Type);
             }
             else if (sym.Tag == SymbolTag.Variable)
             {
-                // Load the variable with a function of appropriate width:
-                string loadFunction = null;
-                if (SizeOf(sym.Type) == 1) loadFunction = Builtins.LoadU8;
-                else if (SizeOf(sym.Type) == 2) loadFunction = Builtins.LoadU16;
-                else Program.UnhandledCase();
-
-                return Expr.MakeCall(loadFunction, Expr.MakeInt(sym.Value, CType.MakePointer(sym.Type)));
+                Expr address = Expr.Make(Tag.Int, sym.Value).WithType(CType.MakePointer(sym.Type));
+                return Expr.Make(Tag.LoadGeneric, address);
             }
             Program.UnhandledCase();
             return null;
         }
-        else if (e.Tag == ExprTag.Scope)
+        else if (e.Match(Tag.Scope, out body))
         {
-            Expr arg = e.Args[0];
-            e = ReplaceNamedVariables(arg, PushScope(scope));
             // Remove the "scope" node, which isn't needed once all the variables have been replaced:
-            return e;
+            return ReplaceNamedVariables(body, PushScope(scope));
         }
-        else if (e.Tag == ExprTag.Local)
+        else if (e.Match(Tag.Local, out declaredType, out name))
         {
-            DefineVariable(scope, e.DeclaredType, e.Name);
+            DefineVariable(scope, declaredType, name);
             // There is no need to keep the declaration node:
-            return Expr.MakeEmpty();
+            return Expr.Make(Tag.Empty);
         }
         else
         {
@@ -212,126 +208,106 @@ partial class Compiler
 
     Expr ReplaceAddressOf(Expr e)
     {
-        if (e.Tag == ExprTag.AddressOf)
+        Expr lvalue;
+        if (e.Match(Tag.AddressOf, out lvalue))
         {
-            Expr loadCall = e.Args[0];
-            if (loadCall.Tag == ExprTag.Call && LoadFunctions.Contains(loadCall.Name))
+            Expr addressExpr;
+            if (lvalue.Match(Tag.LoadGeneric, out addressExpr))
             {
-                return ReplaceAddressOf(loadCall.Args[0]);
+                return ReplaceAddressOf(addressExpr);
             }
 
             // TODO: Show the appropriate one of these two error messages:
             Program.Error("cannot take address of this expression, or, cannot assign to constants");
             return null;
         }
-        else if (e.Tag == ExprTag.Name || e.Tag == ExprTag.Scope || e.Tag == ExprTag.Local)
-        {
-            InvalidNode(e);
-            return null;
-        }
         else
         {
+            ReportInvalidNodes(e, Tag.Name, Tag.Scope, Tag.Local);
             return e.Map(ReplaceAddressOf);
         }
     }
 
     Expr ReplaceGenericFunctions(Expr e)
     {
-        if (e.Tag == ExprTag.Call)
+        // Recursively apply this pass to all arguments:
+        e = e.Map(ReplaceGenericFunctions);
+
+        Expr left, right;
+        if (e.Match(Tag.LoadGeneric, out left))
         {
-            Expr[] args = e.Args.Select(ReplaceGenericFunctions).ToArray();
+            CType addressType = TypeOf(left);
+            if (addressType.Tag != CTypeTag.Pointer) Program.Error("load address must have pointer type");
+            CType returnType = addressType.Subtype;
 
-            if (e.Name == Builtins.LoadGeneric)
-            {
-                Expr source = args[0];
+            string specificName = null;
+            if (TypesEqual(returnType, CType.UInt8)) specificName = Tag.LoadU8;
+            else if (TypesEqual(returnType, CType.UInt16)) specificName = Tag.LoadU16;
+            else Program.NYI();
 
-                CType addressType = TypeOf(source);
-                if (addressType.Tag != CTypeTag.Pointer) Program.Error("load address must have pointer type");
-                CType returnType = addressType.Subtype;
-
-                string specificName = null;
-                if (TypesEqual(returnType, CType.UInt16)) specificName = Builtins.LoadU16;
-                else Program.NYI();
-
-                return Expr.MakeCall(specificName, source);
-            }
-            else if (e.Name == Builtins.StoreGeneric)
-            {
-                Expr left = args[0];
-                Expr right = args[1];
-                CType leftType = TypeOf(left);
-
-                CType addressType = TypeOf(left);
-                if (addressType.Tag != CTypeTag.Pointer) Program.Error("store address must have pointer type");
-                CType expectedTypeOfValue = addressType.Subtype;
-
-                right = ChangeTypeIfPossible(right, expectedTypeOfValue);
-                CType actualType = TypeOf(right);
-                if (!TypesEqual(expectedTypeOfValue, actualType)) Program.Error("types in assignment must match");
-
-                string specificName = null;
-                if (TypesEqual(actualType, CType.UInt8)) specificName = Builtins.StoreU8;
-                else if (TypesEqual(actualType, CType.UInt16)) specificName = Builtins.StoreU16;
-                else Program.NYI();
-
-                return Expr.MakeCall(specificName, left, right);
-            }
-            else if (e.Name == Builtins.AddGeneric)
-            {
-                Expr left = args[0];
-                Expr right = args[1];
-                CType leftType = TypeOf(left);
-
-                right = ChangeTypeIfPossible(right, leftType);
-                if (!TypesEqual(leftType, TypeOf(right))) Program.Error("types in binary expression must match");
-
-                string specificName = null;
-                if (TypesEqual(leftType, CType.UInt8)) specificName = Builtins.AddU8;
-                else if (TypesEqual(leftType, CType.UInt16)) specificName = Builtins.AddU16;
-                else Program.NYI();
-
-                return Expr.MakeCall(specificName, left, right);
-            }
-            else if (e.Name == Builtins.SubtractGeneric)
-            {
-                Expr left = args[0];
-                Expr right = args[1];
-                CType leftType = TypeOf(left);
-
-                right = ChangeTypeIfPossible(args[1], leftType);
-                if (!TypesEqual(leftType, TypeOf(right))) Program.Error("types in binary expression must match");
-
-                string specificName = null;
-                if (TypesEqual(leftType, CType.UInt8)) specificName = Builtins.SubtractU8;
-                else if (TypesEqual(leftType, CType.UInt16)) specificName = Builtins.SubtractU16;
-                else Program.NYI();
-
-                return Expr.MakeCall(specificName, left, right);
-            }
-            else if (e.Name == Builtins.BoolFromGeneric)
-            {
-                Expr source = args[0];
-                CType sourceType = TypeOf(source);
-
-                string specificName = null;
-                if (TypesEqual(sourceType, CType.UInt16)) specificName = Builtins.BoolFromU16;
-                else Program.NYI();
-
-                return Expr.MakeCall(specificName, args);
-            }
-            else
-            {
-                return Expr.MakeCall(e.Name, args);
-            }
+            return Expr.Make(specificName, left);
         }
-        else if (e.Tag == ExprTag.Name || e.Tag == ExprTag.Scope || e.Tag == ExprTag.Local)
+        else if (e.Match(Tag.StoreGeneric, out left, out right))
         {
-            InvalidNode(e);
-            return null;
+            CType leftType = TypeOf(left);
+
+            CType addressType = TypeOf(left);
+            if (addressType.Tag != CTypeTag.Pointer) Program.Error("store address must have pointer type");
+            CType expectedTypeOfValue = addressType.Subtype;
+
+            right = ChangeTypeIfPossible(right, expectedTypeOfValue);
+            CType actualType = TypeOf(right);
+            if (!TypesEqual(expectedTypeOfValue, actualType)) Program.Error("types in assignment must match");
+
+            string specificName = null;
+            if (TypesEqual(actualType, CType.UInt8)) specificName = Tag.StoreU8;
+            else if (TypesEqual(actualType, CType.UInt16)) specificName = Tag.StoreU16;
+            else Program.NYI();
+
+            return Expr.Make(specificName, left, right);
+        }
+        else if (e.Match(Tag.AddGeneric, out left, out right))
+        {
+            CType leftType = TypeOf(left);
+
+            right = ChangeTypeIfPossible(right, leftType);
+            if (!TypesEqual(leftType, TypeOf(right))) Program.Error("types in binary expression must match");
+
+            string specificName = null;
+            if (TypesEqual(leftType, CType.UInt8)) specificName = Tag.AddU8;
+            else if (TypesEqual(leftType, CType.UInt16)) specificName = Tag.AddU16;
+            else Program.NYI();
+
+            return Expr.Make(specificName, left, right);
+        }
+        else if (e.Match(Tag.SubtractGeneric, out left, out right))
+        {
+            CType leftType = TypeOf(left);
+
+            right = ChangeTypeIfPossible(right, leftType);
+            if (!TypesEqual(leftType, TypeOf(right))) Program.Error("types in binary expression must match");
+
+            string specificName = null;
+            if (TypesEqual(leftType, CType.UInt8)) specificName = Tag.SubtractU8;
+            else if (TypesEqual(leftType, CType.UInt16)) specificName = Tag.SubtractU16;
+            else Program.NYI();
+
+            return Expr.Make(specificName, left, right);
+        }
+        else if (e.Match(Tag.BoolFromGeneric, out left))
+        {
+            CType sourceType = TypeOf(left);
+
+            string specificName = null;
+            if (TypesEqual(sourceType, CType.UInt16)) specificName = Tag.BoolFromU16;
+            else Program.NYI();
+
+            return Expr.Make(specificName, left);
         }
         else
         {
-            return e.Map(ReplaceGenericFunctions);
+            ReportInvalidNodes(e, Tag.Name, Tag.Scope, Tag.Local);
+            return e;
         }
     }
 
@@ -342,12 +318,12 @@ partial class Compiler
     Expr ChangeTypeIfPossible(Expr e, CType expected)
     {
         // Make sure the actual value is small enough to fit.
-        if (TypesEqual(expected, CType.UInt8) && e.Tag == ExprTag.Int)
+        int value;
+        if (TypesEqual(expected, CType.UInt8) && e.Match(Tag.Int, out value))
         {
-            int value = e.Int;
             if (value >= 0 && value <= byte.MaxValue)
             {
-                return Expr.MakeInt(value, CType.UInt8);
+                return Expr.Make(Tag.Int, value).WithType(CType.UInt8);
             }
         }
 
@@ -356,79 +332,56 @@ partial class Compiler
 
     void CheckTypes(Expr e)
     {
-        if (e.Tag == ExprTag.Empty)
+        ReportInvalidNodes(e, Tag.Scope, Tag.Local, Tag.AddressOf);
+
+        string name;
+        int value;
+        Expr[] args;
+        Expr arg;
+
+        // Typecheck each subexpression:
+        if (e.MatchAny(out name, out args))
         {
-            // NOP
+            foreach (Expr sub in args.OfType<Expr>())
+            {
+                CheckTypes(sub);
+            }
         }
-        else if (e.Tag == ExprTag.Int)
+
+        if (e.Match(Tag.Int, out value))
         {
             // TODO: This should have had a specific type assigned to it by now.
         }
-        else if (e.Tag == ExprTag.Name)
+        else if (e.MatchAny(Tag.Switch, out args))
         {
-            // NOP
-        }
-        else if (e.Tag == ExprTag.Scope)
-        {
-            InvalidNode(e);
-        }
-        else if (e.Tag == ExprTag.Sequence)
-        {
-            foreach (Expr sub in e.Args) CheckTypes(sub);
-        }
-        else if (e.Tag == ExprTag.Local)
-        {
-            InvalidNode(e);
-        }
-        else if (e.Tag == ExprTag.AddressOf)
-        {
-            InvalidNode(e);
-        }
-        else if (e.Tag == ExprTag.Switch)
-        {
-            foreach (Expr sub in e.Args) CheckTypes(sub);
             // TODO: Each condition must have type "uint8_t".
             // TODO: Each then-clause must have the same type.
         }
-        else if (e.Tag == ExprTag.For)
+        else if (e.Match(Tag.For))
         {
-            foreach (Expr sub in e.Args) CheckTypes(sub);
-            // TODO: Are there any other rules?
+            // TODO: Are there any special rules?
         }
-        else if (e.Tag == ExprTag.Return)
+        else if (e.Match(Tag.Return, out arg))
         {
-            Expr arg = e.Args[0];
-            CheckTypes(arg);
             CType actual = TypeOf(arg);
             // TODO: Get the current function's declared return type.
             CType expected = CType.UInt16;
             if (!TypesEqual(actual, expected)) Program.Error("incorrect return type");
         }
-        else if (e.Tag == ExprTag.Cast)
+        else if (e.MatchAny(out name, out args))
         {
-            CheckTypes(e.Args[0]);
-        }
-        else if (e.Tag == ExprTag.StructCast)
-        {
-            CheckTypes(e.Args[0]);
-            CheckTypes(e.Args[1]);
-        }
-        else if (e.Tag == ExprTag.OffsetOf)
-        {
-            CheckTypes(e.Args[0]);
-        }
-        else if (e.Tag == ExprTag.Call)
-        {
-            CFunctionInfo functionInfo;
-            if (!Functions.TryGetValue(e.Name, out functionInfo)) Program.Error("function not defined: {0}", e.Name);
-            if (functionInfo.ParameterTypes.Length != e.Args.Length) Program.Error("wrong number of arguments to function: {0}", e.Name);
-            // Check that each of the actual and expected parameter types match:
-            for (int i = 0; i < e.Args.Length; i++)
+            // Don't try to typecheck special AST nodes, which start with "$".
+            if (!name.StartsWith("$"))
             {
-                Expr arg = e.Args[i];
-                CheckTypes(arg);
-                CType argType = TypeOf(arg);
-                if (!TypesEqual(argType, functionInfo.ParameterTypes[i])) Program.Error("argument to function has wrong type");
+                CFunctionInfo functionInfo;
+                if (!Functions.TryGetValue(name, out functionInfo)) Program.Error("function not defined: {0}", name);
+                if (functionInfo.ParameterTypes.Length != args.Length) Program.Error("wrong number of arguments to function: {0}", name);
+                // Check that each of the actual and expected parameter types match:
+                for (int i = 0; i < args.Length; i++)
+                {
+                    CType argType = TypeOf(args[i]);
+                    if (!TypesEqual(argType, functionInfo.ParameterTypes[i])) Program.Error("argument to function has wrong type");
+                }
             }
         }
         else
@@ -439,70 +392,61 @@ partial class Compiler
 
     CType TypeOf(Expr e)
     {
-        if (e.Tag == ExprTag.Empty)
+        ReportInvalidNodes(e, Tag.Name, Tag.Local);
+
+        int value;
+        string name;
+        CType declaredType;
+        Expr body, subexpr, structExpr, addressExpr;
+        Expr[] args;
+        if (e.Match(Tag.Empty))
         {
             return CType.Void;
         }
-        else if (e.Tag == ExprTag.Int)
+        else if (e.Match(Tag.Int, out value))
         {
-            return e.DeclaredType;
+            return e.Type;
         }
-        else if (e.Tag == ExprTag.Name)
+        else if (e.Match(Tag.Scope, out body))
         {
-            InvalidNode(e);
-            return null;
+            return TypeOf(body);
         }
-        else if (e.Tag == ExprTag.Scope)
+        else if (e.MatchAny(Tag.Sequence, out args))
         {
-            Expr arg = e.Args[0];
-            return TypeOf(arg);
-        }
-        else if (e.Tag == ExprTag.Sequence)
-        {
-            if (e.Args.Length > 0) return TypeOf(e.Args.Last());
+            if (args.Length > 0) return TypeOf(args.Last());
             else return CType.Void;
         }
-        else if (e.Tag == ExprTag.Local)
+        else if (e.Match(Tag.AddressOf, out subexpr))
         {
-            return CType.Void;
+            return CType.MakePointer(TypeOf(subexpr));
         }
-        else if (e.Tag == ExprTag.AddressOf)
-        {
-            Expr arg = e.Args[0];
-            CType subtype = TypeOf(arg);
-            return CType.MakePointer(subtype);
-        }
-        else if (e.Tag == ExprTag.Switch)
+        else if (e.MatchAny(Tag.Switch, out args))
         {
             // TODO: Figure out the type.
             return CType.Void;
         }
-        else if (e.Tag == ExprTag.For)
+        else if (e.MatchTag(Tag.For) || e.MatchTag(Tag.Return))
         {
             return CType.Void;
         }
-        else if (e.Tag == ExprTag.Return)
+        else if (e.Match(Tag.Cast, out declaredType, out subexpr))
         {
-            return CType.Void;
+            return declaredType;
         }
-        else if (e.Tag == ExprTag.Cast)
+        else if (e.Match(Tag.StructCast, out structExpr, out name, out addressExpr))
         {
-            return e.DeclaredType;
-        }
-        else if (e.Tag == ExprTag.StructCast)
-        {
-            CField field = GetFieldInfo(e.Args[0], e.Name);
+            CField field = GetFieldInfo(structExpr, name);
             return CType.MakePointer(field.Type);
         }
-        else if (e.Tag == ExprTag.OffsetOf)
+        else if (e.MatchTag(Tag.OffsetOf))
         {
             // Field offsets are always measured in bytes:
             return CType.UInt16;
         }
-        else if (e.Tag == ExprTag.Call)
+        else if (e.MatchAny(out name, out args))
         {
             CFunctionInfo functionInfo;
-            if (!Functions.TryGetValue(e.Name, out functionInfo)) Program.Error("function not defined: {0}", e.Name);
+            if (!Functions.TryGetValue(name, out functionInfo)) Program.Error("function not defined: {0}", name);
             return functionInfo.ReturnType;
         }
         else
@@ -544,54 +488,37 @@ partial class Compiler
     void CompileExpression(Expr e, int dest, Continuation cont)
     {
         int value;
-        CType type;
+        string functionName;
+        CType type, declaredType;
+        Expr[] args;
+        Expr test, then, init, induction, body, subexpr;
         if (EvaluateConstantExpression(e, out value, out type))
         {
             EmitLoadImmediate(value, type, dest, cont);
         }
-        else if (e.Tag == ExprTag.Empty)
+        else if (e.Match(Tag.Empty))
         {
             // NOP
         }
-        else if (e.Tag == ExprTag.Name)
+        else if (e.MatchAny(Tag.Sequence, out args))
         {
-            InvalidNode(e);
-        }
-        else if (e.Tag == ExprTag.Scope)
-        {
-            InvalidNode(e);
-        }
-        else if (e.Tag == ExprTag.Sequence)
-        {
-            for (int i = 0; i < e.Args.Length; i++)
+            for (int i = 0; i < args.Length; i++)
             {
-                Expr subexpr = e.Args[i];
                 EmitComment("begin new statement");
                 // Drop the result of each expression except the last.
-                bool isLast = (i == e.Args.Length - 1);
+                bool isLast = (i == args.Length - 1);
                 if (!isLast)
                 {
-                    CompileExpression(subexpr, DestinationDiscard, Continuation.Fallthrough);
+                    CompileExpression(args[i], DestinationDiscard, Continuation.Fallthrough);
                 }
                 else
                 {
-                    CompileExpression(subexpr, dest, cont);
+                    CompileExpression(args[i], dest, cont);
                 }
             }
         }
-        else if (e.Tag == ExprTag.Local)
+        else if (e.Match(Tag.Switch, out test, out then))
         {
-            InvalidNode(e);
-        }
-        else if (e.Tag == ExprTag.AddressOf)
-        {
-            InvalidNode(e);
-        }
-        else if (e.Tag == ExprTag.Switch)
-        {
-            if (e.Args.Length != 2) Program.Panic("wrong number of items in switch expression");
-            Expr test = e.Args[0];
-            Expr then = e.Args[1];
             string end = MakeUniqueLabel();
 
             // TODO: Handle any number of clauses. For each clause:
@@ -610,13 +537,8 @@ partial class Compiler
             EmitComment("end of switch");
             FixReferencesTo(end);
         }
-        else if (e.Tag == ExprTag.For)
+        else if (e.Match(Tag.For, out init, out test, out induction, out body))
         {
-            if (e.Args.Length != 4) Program.Panic("wrong number of items in for expression");
-            Expr init = e.Args[0];
-            Expr test = e.Args[1];
-            Expr induction = e.Args[2];
-            Expr body = e.Args[3];
             string bottom = MakeUniqueLabel();
 
             EmitComment("for loop (prologue)");
@@ -632,29 +554,21 @@ partial class Compiler
 
             if (cont.When != JumpCondition.Never) Program.NYI();
         }
-        else if (e.Tag == ExprTag.Return)
+        else if (e.Match(Tag.Return, out subexpr))
         {
-            if (e.Args.Length != 1) Program.Panic("wrong number of items in switch expression");
             EmitComment("return");
-            CompileExpression(e.Args[0], DestinationAcc, Continuation.Fallthrough);
+            CompileExpression(subexpr, DestinationAcc, Continuation.Fallthrough);
             Emit(Opcode.RTS);
         }
-        else if (e.Tag == ExprTag.Cast)
+        else if (e.Match(Tag.Cast, out declaredType, out subexpr))
         {
-            CompileExpression(e.Args[0], dest, cont);
+            // TODO: Shouldn't casts be removed before now?
+            CompileExpression(subexpr, dest, cont);
         }
-        else if (e.Tag == ExprTag.StructCast)
-        {
-            CompileExpression(e.Args[1], dest, cont);
-        }
-        else if (e.Tag == ExprTag.OffsetOf)
-        {
-            Program.Panic("field offsets should be calculated as constants");
-        }
-        else if (e.Tag == ExprTag.Call)
+        else if (e.MatchAny(out functionName, out args))
         {
             int addr;
-            if ((e.Name == Builtins.LoadU8 || e.Name == Builtins.LoadU16) && EvaluateConstantExpression(e.Args[0], out addr, out type))
+            if ((functionName == Tag.LoadU8 || functionName == Tag.LoadU16) && EvaluateConstantExpression(args[0], out addr, out type))
             {
                 // Loads from constant addresses must be optimized, because this pattern is used to copy data from
                 // temporary variables into call frames; we can't generate a call to "load_***" in the middle of
@@ -662,7 +576,7 @@ partial class Compiler
 
                 EmitLoad(addr, type, dest, cont);
             }
-            else if ((e.Name == Builtins.StoreU8 || e.Name == Builtins.StoreU16) && EvaluateConstantExpression(e.Args[0], out addr, out type))
+            else if ((functionName == Tag.StoreU8 || functionName == Tag.StoreU16) && EvaluateConstantExpression(args[0], out addr, out type))
             {
                 // This case is not essential, but generates better code.
 
@@ -670,12 +584,12 @@ partial class Compiler
                 {
                     EmitComment("assign to constant address");
                     // Let the sub-expression handle storing the data _and_ any conditional branch.
-                    CompileExpression(e.Args[1], addr, cont);
+                    CompileExpression(args[1], addr, cont);
                 }
                 else
                 {
                     EmitComment("assign to constant address, and produce the assigned value");
-                    CompileExpression(e.Args[1], DestinationAcc, Continuation.Fallthrough);
+                    CompileExpression(args[1], DestinationAcc, Continuation.Fallthrough);
                     EmitStoreAcc(type, addr);
                     EmitStoreAcc(type, dest);
                     EmitBranchOnAcc(cont);
@@ -686,17 +600,17 @@ partial class Compiler
                 // This is the general-purpose way of calling functions.
 
                 CFunctionInfo functionInfo;
-                if (!Functions.TryGetValue(e.Name, out functionInfo)) Program.Error("function not defined: " + e.Name);
+                if (!Functions.TryGetValue(functionName, out functionInfo)) Program.Error("function not defined: " + functionName);
 
                 // Get the call frame address (and type information) from the function's type entry.
                 CType[] paramTypes = functionInfo.ParameterTypes;
                 int[] paramAddresses = functionInfo.ParameterAddresses;
 
-                if (paramTypes.Length != paramAddresses.Length) Program.Panic("in function symbol, the number of types doesn't match the number of argument locations: " + e.Name);
-                if (e.Args.Length != paramTypes.Length) Program.Error("wrong number of arguments to function: " + e.Name);
+                if (paramTypes.Length != paramAddresses.Length) Program.Panic("in function symbol, the number of types doesn't match the number of argument locations: " + functionName);
+                if (args.Length != paramTypes.Length) Program.Error("wrong number of arguments to function: " + functionName);
 
                 BeginTempScope();
-                EmitComment("prepare call: function " + e.Name);
+                EmitComment("prepare call: function " + functionName);
 
                 // Evaluate the arguments and store the results in temporary variables.
                 // TODO: (optimization) The first arg doesn't have to be simplified, since we haven't started assembling a call frame yet.
@@ -705,7 +619,7 @@ partial class Compiler
                 List<Expr> temps = new List<Expr>();
                 for (int i = 0; i < paramTypes.Length; i++)
                 {
-                    Expr arg = e.Args[i];
+                    Expr arg = args[i];
                     CType argType = paramTypes[i];
 
                     int n;
@@ -713,12 +627,7 @@ partial class Compiler
                     Expr simpleArg;
                     if (EvaluateConstantExpression(arg, out n, out ignored))
                     {
-                        simpleArg = Expr.MakeInt(n, argType);
-                    }
-                    else if (arg.Tag == ExprTag.Name)
-                    {
-                        // An identifier is simple enough that it doesn't need to be loaded into a temporary.
-                        simpleArg = arg;
+                        simpleArg = Expr.Make(Tag.Int, n).WithType(argType);
                     }
                     else
                     {
@@ -726,7 +635,7 @@ partial class Compiler
                         int argSize = SizeOf(argType);
                         int temp = AllocTemp(argSize);
                         CompileExpression(arg, temp, Continuation.Fallthrough);
-                        simpleArg = Expr.MakeCall(GetLoadFunctionForType(argType), Expr.MakeInt(temp, argType));
+                        simpleArg = Expr.Make(GetLoadFunctionForType(argType), Expr.Make(Tag.Int, temp).WithType(argType));
                     }
                     temps.Add(simpleArg);
                 }
@@ -739,10 +648,10 @@ partial class Compiler
                 }
 
                 // For builtin operations, instead of jumping to a function, emit the code inline.
-                EmitComment("function body: " + e.Name);
-                if (e.Name == Builtins.LoadU16)
+                EmitComment("function body: " + functionName);
+                if (functionName == Tag.LoadU16)
                 {
-                    if (e.Args.Length != 1) Program.Panic("wrong number of arguments to unary operator");
+                    if (args.Length != 1) Program.Panic("wrong number of arguments to unary operator");
                     // TODO: This would be more efficient if it loaded the high byte first.
                     Emit_U8(Opcode.LDY_IMM, 0);
                     Emit_U8(Opcode.LDA_ZP_Y_IND, T0);
@@ -752,16 +661,16 @@ partial class Compiler
                     Emit(Opcode.TAX);
                     Emit_U8(Opcode.LDA_ZP, T2);
                 }
-                else if (e.Name == Builtins.AddU8)
+                else if (functionName == Tag.AddU8)
                 {
-                    if (e.Args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
+                    if (args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
                     Emit(Opcode.CLC);
                     Emit_U8(Opcode.LDA_ZP, T0);
                     Emit_U8(Opcode.ADC_ZP, T2);
                 }
-                else if (e.Name == Builtins.AddU16 || e.Name == Builtins.AddU8Ptr)
+                else if (functionName == Tag.AddU16 || functionName == Tag.AddU8Ptr)
                 {
-                    if (e.Args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
+                    if (args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
                     Emit(Opcode.CLC);
                     Emit_U8(Opcode.LDA_ZP, T0);
                     Emit_U8(Opcode.ADC_ZP, T2);
@@ -771,16 +680,16 @@ partial class Compiler
                     Emit(Opcode.TAX);
                     Emit_U8(Opcode.LDA_ZP, T0);
                 }
-                else if (e.Name == Builtins.SubtractU8)
+                else if (functionName == Tag.SubtractU8)
                 {
-                    if (e.Args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
+                    if (args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
                     Emit(Opcode.SEC);
                     Emit_U8(Opcode.LDA_ZP, T0);
                     Emit_U8(Opcode.SBC_ZP, T2);
                 }
-                else if (e.Name == Builtins.SubtractU16)
+                else if (functionName == Tag.SubtractU16)
                 {
-                    if (e.Args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
+                    if (args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
                     Emit(Opcode.SEC);
                     Emit_U8(Opcode.LDA_ZP, T0);
                     Emit_U8(Opcode.SBC_ZP, T2);
@@ -790,9 +699,9 @@ partial class Compiler
                     Emit(Opcode.TAX);
                     Emit_U8(Opcode.LDA_ZP, T0);
                 }
-                else if (e.Name == Builtins.StoreU16)
+                else if (functionName == Tag.StoreU16)
                 {
-                    if (e.Args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
+                    if (args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
                     Emit_U8(Opcode.LDY_IMM, 0);
                     Emit_U8(Opcode.LDA_ZP, T2);
                     Emit_U8(Opcode.STA_ZP_Y_IND, T0);
@@ -800,16 +709,16 @@ partial class Compiler
                     Emit_U8(Opcode.LDA_ZP, T3);
                     Emit_U8(Opcode.STA_ZP_Y_IND, T0);
                 }
-                else if (e.Name == Builtins.StoreU8)
+                else if (functionName == Tag.StoreU8)
                 {
-                    if (e.Args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
+                    if (args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
                     Emit_U8(Opcode.LDY_IMM, 0);
                     Emit_U8(Opcode.LDA_ZP, T2);
                     Emit_U8(Opcode.STA_ZP_Y_IND, T0);
                 }
-                else if (e.Name == Builtins.BoolFromU16)
+                else if (functionName == Tag.BoolFromU16)
                 {
-                    if (e.Args.Length != 1) Program.Panic("wrong number of arguments to unary operator");
+                    if (args.Length != 1) Program.Panic("wrong number of arguments to unary operator");
                     Emit_U8(Opcode.LDA_ZP, T0);
                     Emit_U8(Opcode.ORA_ZP, T1);
                 }
@@ -817,7 +726,7 @@ partial class Compiler
                 {
                     // JSR to the function:
                     Emit_U16(Opcode.JSR, 0);
-                    Fixups.Add(new Fixup(FixupTag.Absolute, GetCurrentCodeAddress() - 2, e.Name));
+                    Fixups.Add(new Fixup(FixupTag.Absolute, GetCurrentCodeAddress() - 2, functionName));
                 }
 
                 // The return value is placed in the accumulator.
@@ -829,7 +738,7 @@ partial class Compiler
         }
         else
         {
-            Program.NYI();
+            Program.UnhandledCase();
         }
     }
 
@@ -837,15 +746,17 @@ partial class Compiler
     bool EvaluateConstantExpression(Expr e, out int value, out CType type)
     {
         // TODO: Evaluate more complex constant expressions, too.
-        if (e.Tag == ExprTag.Int)
+        // TODO: Should this be partly or entirely replaced by a constant-folding pass?
+        Expr structExpr;
+        string name;
+        if (e.Match(Tag.Int, out value))
         {
-            value = e.Int;
-            type = e.DeclaredType;
+            type = e.Type;
             return true;
         }
-        else if (e.Tag == ExprTag.OffsetOf)
+        else if (e.Match(Tag.OffsetOf, out structExpr, out name))
         {
-            CField field = GetFieldInfo(e.Args[0], e.Name);
+            CField field = GetFieldInfo(structExpr, name);
             value = field.Offset;
             type = field.Type;
             return true;
@@ -1003,8 +914,8 @@ partial class Compiler
     string GetLoadFunctionForType(CType type)
     {
         int width = SizeOf(type);
-        if (width == 1) return Builtins.LoadU8;
-        else if (width == 2) return Builtins.LoadU16;
+        if (width == 1) return Tag.LoadU8;
+        else if (width == 2) return Tag.LoadU16;
         Program.NYI();
         return null;
     }
@@ -1097,7 +1008,16 @@ partial class Compiler
         return null;
     }
 
-    static void InvalidNode(Expr e) => Program.Panic("invalid '{0}' node encountered", e.Tag);
+    static void ReportInvalidNodes(Expr e, params string[] tags)
+    {
+        foreach (string tag in tags)
+        {
+            if (e.MatchTag(tag))
+            {
+                Program.Panic("invalid '{0}' node encountered", tag);
+            }
+        }
+    }
 }
 
 [DebuggerDisplay("{Tag} {Name} = 0x{Value,h} ({Type.Show(),nq})")]
@@ -1180,6 +1100,7 @@ enum CTypeTag
 
 enum CSimpleType
 {
+    Implied,
     Void,
     UInt8,
     UInt16,
@@ -1209,6 +1130,11 @@ partial class CFunctionInfo
 [DebuggerDisplay("{Show(),nq}")]
 partial class CType
 {
+    /// <summary>
+    /// This means that the typechecker hasn't assigned a type to this node yet.
+    /// </summary>
+    public static readonly CType Implied = MakeSimple(CSimpleType.Implied);
+
     public static readonly CType Void = MakeSimple(CSimpleType.Void);
     public static readonly CType UInt8 = MakeSimple(CSimpleType.UInt8);
     public static readonly CType UInt8Ptr = MakePointer(UInt8);
