@@ -355,11 +355,7 @@ partial class Parser
             {
                 string fieldName;
                 if (!TryParseAnyName(out fieldName)) ParserError("expected a field name");
-                e = Expr.Make(Tag.LoadGeneric,
-                    Expr.Make(Tag.StructCast, e, fieldName,
-                        Expr.Make(Tag.AddU8Ptr,
-                            Expr.Make(Tag.Cast, CType.UInt8Ptr, Expr.Make(Tag.AddressOf, e)),
-                            Expr.Make(Tag.OffsetOf, e, fieldName))));
+                e = Expr.Make(Tag.LoadGeneric, Expr.Make(Tag.Field, e, fieldName));
             }
             else
             {

@@ -117,8 +117,7 @@ static class Program
 // $for init cond next body
 // $return expr
 // $cast type expr
-// $structCast structExpr fieldName addressExpr
-// $offsetOf structExpr fieldName
+// field structExpr fieldName
 // <functionName> args...
 //
 // The "type" property, if present, specifies the type determined by type-checking rules.
@@ -411,8 +410,7 @@ static class Tag
     public static readonly string For = "$for";
     public static readonly string Return = "$return";
     public static readonly string Cast = "$cast";
-    public static readonly string StructCast = "$struct_cast";
-    public static readonly string OffsetOf = "$offset_of";
+    public static readonly string Field = "$field";
 
     // Type-generic pseudo-functions:
     public static readonly string AddGeneric = "$add_gen";

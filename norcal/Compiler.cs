@@ -138,6 +138,8 @@ partial class Compiler
                 Expr body = decl.Body;
                 body = ReplaceNamedVariables(body, functionScope);
                 Program.WritePassOutputToFile("replace-vars", body.ShowMultiline());
+                body = ReplaceFields(body);
+                Program.WritePassOutputToFile("replace-fields", body.ShowMultiline());
                 body = ReplaceAddressOf(body);
                 Program.WritePassOutputToFile("replace-addressof", body.ShowMultiline());
                 body = ReplaceGenericFunctions(body);
@@ -225,6 +227,37 @@ partial class Compiler
         {
             ReportInvalidNodes(e, Tag.Name, Tag.Scope, Tag.Local);
             return e.Map(ReplaceAddressOf);
+        }
+    }
+
+    Expr ReplaceFields(Expr e)
+    {
+        Expr left;
+        string fieldName;
+        if (e.Match(Tag.Field, out left, out fieldName))
+        {
+            left = ReplaceFields(left);
+
+            CType structType = TypeOf(left);
+            if (structType.Tag != CTypeTag.Struct) Program.Error("left side must have struct type");
+            CStructInfo structInfo = GetStructInfo(structType.Name);
+            CField fieldInfo = structInfo.Fields.FirstOrDefault(x => x.Name == fieldName);
+            if (fieldInfo == null) Program.Error("type does not contain a field with this name: {0}", fieldName);
+
+            return Expr.Make(
+                Tag.Cast,
+                CType.MakePointer(fieldInfo.Type),
+                Expr.Make(
+                    Tag.AddU16,
+                    Expr.Make(
+                        Tag.Cast,
+                        CType.UInt8Ptr,
+                        Expr.Make(Tag.AddressOf, left)),
+                    fieldInfo.Offset));
+        }
+        else
+        {
+            return e.Map(ReplaceFields);
         }
     }
 
@@ -336,6 +369,7 @@ partial class Compiler
 
         string name;
         int value;
+        CType type;
         Expr[] args;
         Expr arg;
 
@@ -368,6 +402,10 @@ partial class Compiler
             CType expected = CType.UInt16;
             if (!TypesEqual(actual, expected)) Program.Error("incorrect return type");
         }
+        else if (e.Match(Tag.Cast, out type, out arg))
+        {
+            // TODO: Make sure that the cast is allowed.
+        }
         else if (e.MatchAny(out name, out args))
         {
             // Don't try to typecheck special AST nodes, which start with "$".
@@ -397,7 +435,7 @@ partial class Compiler
         int value;
         string name;
         CType declaredType;
-        Expr body, subexpr, structExpr, addressExpr;
+        Expr body, subexpr;
         Expr[] args;
         if (e.Match(Tag.Empty))
         {
@@ -433,15 +471,11 @@ partial class Compiler
         {
             return declaredType;
         }
-        else if (e.Match(Tag.StructCast, out structExpr, out name, out addressExpr))
+        else if (e.Match(Tag.LoadGeneric, out subexpr))
         {
-            CField field = GetFieldInfo(structExpr, name);
-            return CType.MakePointer(field.Type);
-        }
-        else if (e.MatchTag(Tag.OffsetOf))
-        {
-            // Field offsets are always measured in bytes:
-            return CType.UInt16;
+            CType innerType = TypeOf(subexpr);
+            if (innerType.Tag != CTypeTag.Pointer) Program.Error("an expression with pointer type is required");
+            return innerType.Subtype;
         }
         else if (e.MatchAny(out name, out args))
         {
@@ -461,16 +495,6 @@ partial class Compiler
         CStructInfo info;
         if (!StructTypes.TryGetValue(name, out info)) Program.Error("struct not defined: {0}", name);
         return info;
-    }
-
-    CField GetFieldInfo(Expr structExpr, string fieldName)
-    {
-        CType structType = TypeOf(structExpr);
-        if (structType.Tag != CTypeTag.Struct) Program.Error("left side must have struct type");
-        CStructInfo structInfo = GetStructInfo(structType.Name);
-        CField field = structInfo.Fields.FirstOrDefault(x => x.Name == fieldName);
-        if (field == null) Program.Error("type does not contain a field with this name: {0}", fieldName);
-        return field;
     }
 
     static bool TypesEqual(CType a, CType b)
@@ -747,18 +771,9 @@ partial class Compiler
     {
         // TODO: Evaluate more complex constant expressions, too.
         // TODO: Should this be partly or entirely replaced by a constant-folding pass?
-        Expr structExpr;
-        string name;
         if (e.Match(Tag.Int, out value))
         {
             type = e.Type;
-            return true;
-        }
-        else if (e.Match(Tag.OffsetOf, out structExpr, out name))
-        {
-            CField field = GetFieldInfo(structExpr, name);
-            value = field.Offset;
-            type = field.Type;
             return true;
         }
 
