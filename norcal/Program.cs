@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 static class Program
 {
     public static bool EnableDebugOutput { get; private set; } = false;
+    private static int NextPassNumber = 0;
 
     public static readonly string DebugOutputPath = "debug_output";
 
@@ -21,8 +22,7 @@ static class Program
         EnableDebugOutput = args.Contains("--debug-output");
 
         List<Declaration> program = Parser.ParseFile(sourcePath);
-
-        WriteDebugFile("stage0-parse.txt", ShowProgram(program));
+        Program.WritePassOutputToFile("parse", ShowProgram(program));
 
         Compiler compiler = new Compiler();
         compiler.CompileProgram(program);
@@ -41,6 +41,12 @@ static class Program
             Directory.CreateDirectory(DebugOutputPath);
             File.WriteAllText(Path.Combine(DebugOutputPath, filename), text);
         }
+    }
+
+    public static void WritePassOutputToFile(string passName, string s)
+    {
+        WriteDebugFile(string.Format("pass{0}-{1}.txt", NextPassNumber, passName), s);
+        NextPassNumber += 1;
     }
 
     static string ShowProgram(List<Declaration> program)
