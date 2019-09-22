@@ -332,7 +332,7 @@ class Expr
             }
             else if (type != null)
             {
-                tree[i] = type.Show();
+                tree[i] = "<" + type.Show() + ">";
             }
             else
             {
