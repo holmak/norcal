@@ -55,7 +55,6 @@ partial class Compiler
 
         LexicalScope globalScope = new LexicalScope();
 
-        // First pass: Read all declarations to get type information and global symbols.
         foreach (Declaration decl in program)
         {
             if (decl.Tag == DeclarationTag.Function)
@@ -71,6 +70,34 @@ partial class Compiler
                     addresses[i] = AllocGlobal(SizeOf(type));
                 }
                 DefineFunction(decl.Name, paramTypes, decl.Type, 0, addresses);
+                EmitComment("define function " + decl.Name);
+
+                // Record the address of this function's code:
+                CFunctionInfo functionInfo;
+                if (!Functions.TryGetValue(decl.Name, out functionInfo)) Program.Panic("this function should already be defined");
+                functionInfo.Address = GetCurrentCodeAddress();
+
+                LexicalScope functionScope = PushScope(globalScope);
+
+                // Define each of the function's parameters as a local variable:
+                for (int i = 0; i < decl.Fields.Count; i++)
+                {
+                    NamedField f = decl.Fields[i];
+                    DefineSymbol(functionScope, SymbolTag.Variable, f.Name, functionInfo.ParameterAddresses[i], f.Type);
+                }
+
+                Expr body = decl.Body;
+                body = ReplaceNamedVariables(body, functionScope);
+                Program.WritePassOutputToFile("replace-vars", body.ShowMultiline());
+                body = ReplaceFields(body);
+                Program.WritePassOutputToFile("replace-fields", body.ShowMultiline());
+                body = ReplaceAddressOf(body);
+                Program.WritePassOutputToFile("replace-addressof", body.ShowMultiline());
+                body = ReplaceGenericFunctions(body);
+                Program.WritePassOutputToFile("replace-generics", body.ShowMultiline());
+                CheckTypes(body);
+                CompileExpression(body, DestinationDiscard, Continuation.Fallthrough);
+                Emit(Opcode.RTS);
             }
             else if (decl.Tag == DeclarationTag.Constant)
             {
@@ -109,44 +136,7 @@ partial class Compiler
             }
             else
             {
-                Program.Panic("unhandled declaration type");
-            }
-        }
-
-        // Second pass: Generate code for each function.
-
-        foreach (Declaration decl in program)
-        {
-            if (decl.Tag == DeclarationTag.Function)
-            {
-                EmitComment("define function " + decl.Name);
-
-                // Record the address of this function's code:
-                CFunctionInfo functionInfo;
-                if (!Functions.TryGetValue(decl.Name, out functionInfo)) Program.Panic("this function should already be defined");
-                functionInfo.Address = GetCurrentCodeAddress();
-
-                LexicalScope functionScope = PushScope(globalScope);
-
-                // Define each of the function's parameters as a local variable:
-                for (int i = 0; i < decl.Fields.Count; i++)
-                {
-                    NamedField f = decl.Fields[i];
-                    DefineSymbol(functionScope, SymbolTag.Variable, f.Name, functionInfo.ParameterAddresses[i], f.Type);
-                }
-
-                Expr body = decl.Body;
-                body = ReplaceNamedVariables(body, functionScope);
-                Program.WritePassOutputToFile("replace-vars", body.ShowMultiline());
-                body = ReplaceFields(body);
-                Program.WritePassOutputToFile("replace-fields", body.ShowMultiline());
-                body = ReplaceAddressOf(body);
-                Program.WritePassOutputToFile("replace-addressof", body.ShowMultiline());
-                body = ReplaceGenericFunctions(body);
-                Program.WritePassOutputToFile("replace-generics", body.ShowMultiline());
-                CheckTypes(body);
-                CompileExpression(body, DestinationDiscard, Continuation.Fallthrough);
-                Emit(Opcode.RTS);
+                Program.UnhandledCase();
             }
         }
 

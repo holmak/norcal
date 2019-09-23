@@ -136,6 +136,7 @@ void reset()
 @in 2 3 4
 @out 1 2 1 3 1 4
 #include "test.h"
+void f() { *OUT = 1; *OUT = *OUT; }
 void reset()
 {
     f();
@@ -144,12 +145,17 @@ void reset()
     *STOP = 0;
 }
 
-void f() { *OUT = 1; *OUT = *OUT; }
-
 @ Function arguments
 @in
 @out 1 7 2 8 3 9
 #include "test.h"
+
+void f(uint16_t red, uint16_t blue)
+{
+    *OUT = blue;
+    *OUT = red;
+}
+
 void reset()
 {
     f(7, 1);
@@ -158,16 +164,17 @@ void reset()
     *STOP = 0;
 }
 
-void f(uint16_t red, uint16_t blue)
-{
-    *OUT = blue;
-    *OUT = red;
-}
-
 @ Function return values
 @in
 @out 3 5 7
 #include "test.h"
+
+uint16_t f(uint16_t arg)
+{
+    arg = arg + arg;
+    return arg + 1;
+}
+
 void reset()
 {
     *OUT = f(1);
@@ -176,23 +183,10 @@ void reset()
     *STOP = 0;
 }
 
-uint16_t f(uint16_t arg)
-{
-    arg = arg + arg;
-    return arg + 1;
-}
-
 @ Multiple functions
 @in
 @out 3 4 7
 #include "test.h"
-void reset()
-{
-    *OUT = f(1);
-    *OUT = g(2);
-    *OUT = f(3);
-    *STOP = 0;
-}
 
 uint16_t f(uint16_t arg)
 {
@@ -202,6 +196,14 @@ uint16_t f(uint16_t arg)
 uint16_t g(uint16_t arg)
 {
     return arg + arg;
+}
+
+void reset()
+{
+    *OUT = f(1);
+    *OUT = g(2);
+    *OUT = f(3);
+    *STOP = 0;
 }
 
 @ Entry points
