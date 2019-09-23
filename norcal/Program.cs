@@ -119,16 +119,13 @@ static class Program
 // $cast type expr
 // field structExpr fieldName
 // <functionName> args...
-//
-// The "type" property, if present, specifies the type determined by type-checking rules.
 
 [DebuggerDisplay("{Show(),nq}")]
 class Expr
 {
     private readonly object[] Args;
-    public readonly CType Type;
 
-    public Expr(object[] args, CType type)
+    Expr(object[] args)
     {
         foreach (object arg in args)
         {
@@ -140,10 +137,9 @@ class Expr
         }
 
         Args = args;
-        Type = type;
     }
 
-    public static Expr Make(params object[] args) => new Expr(args, CType.Implied);
+    public static Expr Make(params object[] args) => new Expr(args);
 
     public bool MatchTag(string tag)
     {
@@ -265,11 +261,6 @@ class Expr
         return false;
     }
 
-    public Expr WithType(CType type)
-    {
-        return new Expr(Args, type);
-    }
-
     /// <summary>
     /// Apply a function to this expression tree.
     /// </summary>
@@ -291,7 +282,7 @@ class Expr
             }
         }
 
-        return Make(results).WithType(Type);
+        return Make(results);
     }
 
     public string Show() => ShowWithOptions(false);

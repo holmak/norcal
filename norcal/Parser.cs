@@ -373,7 +373,7 @@ partial class Parser
         string name;
         if (TryParseInt(out n))
         {
-            return Expr.Make(Tag.Int, n).WithType(CType.UInt16);
+            return Expr.Make(Tag.Int, n, CType.UInt16);
         }
         else if (TryParseAnyName(out name))
         {

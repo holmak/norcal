@@ -173,7 +173,7 @@ partial class Compiler
     {
         string name;
         Expr body;
-        CType declaredType;
+        CType type;
         if (e.Match(Tag.Name, out name))
         {
             Symbol sym;
@@ -181,11 +181,11 @@ partial class Compiler
             if (sym.Tag == SymbolTag.Constant)
             {
                 // TODO: Make sure the constant value fits in the specified type.
-                return Expr.Make(Tag.Int, sym.Value).WithType(sym.Type);
+                return Expr.Make(Tag.Int, sym.Value, sym.Type);
             }
             else if (sym.Tag == SymbolTag.Variable)
             {
-                Expr address = Expr.Make(Tag.Int, sym.Value).WithType(CType.MakePointer(sym.Type));
+                Expr address = Expr.Make(Tag.Int, sym.Value, CType.MakePointer(sym.Type));
                 return Expr.Make(Tag.LoadGeneric, address);
             }
             Program.UnhandledCase();
@@ -196,9 +196,9 @@ partial class Compiler
             // Remove the "scope" node, which isn't needed once all the variables have been replaced:
             return ReplaceNamedVariables(body, PushScope(scope));
         }
-        else if (e.Match(Tag.Local, out declaredType, out name))
+        else if (e.Match(Tag.Local, out type, out name))
         {
-            DefineVariable(scope, declaredType, name);
+            DefineVariable(scope, type, name);
             // There is no need to keep the declaration node:
             return Expr.Make(Tag.Empty);
         }
@@ -253,7 +253,10 @@ partial class Compiler
                         Tag.Cast,
                         CType.UInt8Ptr,
                         Expr.Make(Tag.AddressOf, left)),
-                    fieldInfo.Offset));
+                    Expr.Make(
+                        Tag.Int,
+                        fieldInfo.Offset,
+                        CType.UInt16)));
         }
         else
         {
@@ -352,11 +355,12 @@ partial class Compiler
     {
         // Make sure the actual value is small enough to fit.
         int value;
-        if (TypesEqual(expected, CType.UInt8) && e.Match(Tag.Int, out value))
+        CType type;
+        if (TypesEqual(expected, CType.UInt8) && e.Match(Tag.Int, out value, out type))
         {
             if (value >= 0 && value <= byte.MaxValue)
             {
-                return Expr.Make(Tag.Int, value).WithType(CType.UInt8);
+                return Expr.Make(Tag.Int, value, CType.UInt8);
             }
         }
 
@@ -382,9 +386,10 @@ partial class Compiler
             }
         }
 
-        if (e.Match(Tag.Int, out value))
+        if (e.Match(Tag.Int, out value, out type))
         {
-            // TODO: This should have had a specific type assigned to it by now.
+            // This should have had a specific type assigned to it by now:
+            if (TypesEqual(type, CType.Implied)) Program.Panic("integer literal has not been given a type");
         }
         else if (e.MatchAny(Tag.Switch, out args))
         {
@@ -434,16 +439,16 @@ partial class Compiler
 
         int value;
         string name;
-        CType declaredType;
+        CType type;
         Expr body, subexpr;
         Expr[] args;
         if (e.Match(Tag.Empty))
         {
             return CType.Void;
         }
-        else if (e.Match(Tag.Int, out value))
+        else if (e.Match(Tag.Int, out value, out type))
         {
-            return e.Type;
+            return type;
         }
         else if (e.Match(Tag.Scope, out body))
         {
@@ -467,9 +472,9 @@ partial class Compiler
         {
             return CType.Void;
         }
-        else if (e.Match(Tag.Cast, out declaredType, out subexpr))
+        else if (e.Match(Tag.Cast, out type, out subexpr))
         {
-            return declaredType;
+            return type;
         }
         else if (e.Match(Tag.LoadGeneric, out subexpr))
         {
@@ -513,7 +518,7 @@ partial class Compiler
     {
         int value;
         string functionName;
-        CType type, declaredType;
+        CType type;
         Expr[] args;
         Expr test, then, init, induction, body, subexpr;
         if (EvaluateConstantExpression(e, out value, out type))
@@ -584,7 +589,7 @@ partial class Compiler
             CompileExpression(subexpr, DestinationAcc, Continuation.Fallthrough);
             Emit(Opcode.RTS);
         }
-        else if (e.Match(Tag.Cast, out declaredType, out subexpr))
+        else if (e.Match(Tag.Cast, out type, out subexpr))
         {
             // TODO: Shouldn't casts be removed before now?
             CompileExpression(subexpr, dest, cont);
@@ -651,7 +656,7 @@ partial class Compiler
                     Expr simpleArg;
                     if (EvaluateConstantExpression(arg, out n, out ignored))
                     {
-                        simpleArg = Expr.Make(Tag.Int, n).WithType(argType);
+                        simpleArg = Expr.Make(Tag.Int, n, argType);
                     }
                     else
                     {
@@ -659,7 +664,7 @@ partial class Compiler
                         int argSize = SizeOf(argType);
                         int temp = AllocTemp(argSize);
                         CompileExpression(arg, temp, Continuation.Fallthrough);
-                        simpleArg = Expr.Make(GetLoadFunctionForType(argType), Expr.Make(Tag.Int, temp).WithType(argType));
+                        simpleArg = Expr.Make(GetLoadFunctionForType(argType), Expr.Make(Tag.Int, temp, argType));
                     }
                     temps.Add(simpleArg);
                 }
@@ -771,9 +776,8 @@ partial class Compiler
     {
         // TODO: Evaluate more complex constant expressions, too.
         // TODO: Should this be partly or entirely replaced by a constant-folding pass?
-        if (e.Match(Tag.Int, out value))
+        if (e.Match(Tag.Int, out value, out type))
         {
-            type = e.Type;
             return true;
         }
 
