@@ -22,7 +22,7 @@ static class Program
         EnableDebugOutput = args.Contains("--debug-output");
 
         List<Declaration> program = Parser.ParseFile(sourcePath);
-        Program.WritePassOutputToFile("parse", ShowProgram(program));
+        WritePassOutputToFile("parse", program);
 
         Compiler compiler = new Compiler();
         compiler.CompileProgram(program);
@@ -43,9 +43,9 @@ static class Program
         }
     }
 
-    public static void WritePassOutputToFile(string passName, string s)
+    public static void WritePassOutputToFile(string passName, List<Declaration> program)
     {
-        WriteDebugFile(string.Format("pass{0}-{1}.txt", NextPassNumber, passName), s);
+        WriteDebugFile(string.Format("pass{0}-{1}.txt", NextPassNumber, passName), ShowProgram(program));
         NextPassNumber += 1;
     }
 

@@ -53,8 +53,62 @@ partial class Compiler
         DefineFunction(Tag.SubtractU16, new[] { CType.UInt16, CType.UInt16 }, CType.UInt16, 0, BuiltinParamAddresses(2));
         DefineFunction(Tag.BoolFromU16, new[] { CType.UInt16 }, CType.UInt8, 0, BuiltinParamAddresses(1));
 
+        // Pass: Declare global symbols and replace symbols with addresses
+        program = ApplyFirstPass(program);
+
+        // Simplification passes:
+        program = ApplyPass("replace-fields", ReplaceFields, program);
+        program = ApplyPass("replace-address-of", ReplaceAddressOf, program);
+        program = ApplyPass("replace-generics", ReplaceGenericFunctions, program);
+
+        // Pass: Typechecking
+        foreach (Declaration decl in program)
+        {
+            if (decl.Tag == DeclarationTag.Function)
+            {
+                CheckTypes(decl.Body);
+            }
+        }
+
+        // Pass: Codegen
+        foreach (Declaration decl in program)
+        {
+            if (decl.Tag == DeclarationTag.Function)
+            {
+                // Record the address of this function's code:
+                CFunctionInfo functionInfo;
+                if (!Functions.TryGetValue(decl.Name, out functionInfo)) Program.Panic("this function should already be defined");
+                functionInfo.Address = GetCurrentCodeAddress();
+
+                CompileExpression(decl.Body, DestinationDiscard, Continuation.Fallthrough);
+                Emit(Opcode.RTS);
+            }
+        }
+
+        // Fix references to functions:
+        foreach (Fixup fixup in Fixups)
+        {
+            if (fixup.Tag != FixupTag.None)
+            {
+                CFunctionInfo functionInfo;
+                if (!Functions.TryGetValue(fixup.Target, out functionInfo)) Program.Error("function not defined: " + fixup.Target);
+                int target = functionInfo.Address;
+
+                if (fixup.Tag != FixupTag.Absolute) Program.Panic("function fixups should always be absolute");
+                EmitFix_U16(fixup.Location, target);
+                fixup.Tag = FixupTag.None;
+            }
+        }
+
+        // All fixups should now be fixed.
+        if (Fixups.Any(x => x.Tag != FixupTag.None)) Program.Panic("some fixups remain");
+    }
+
+    List<Declaration> ApplyFirstPass(List<Declaration> program)
+    {
         LexicalScope globalScope = new LexicalScope();
 
+        List<Declaration> newProgram = new List<Declaration>();
         foreach (Declaration decl in program)
         {
             if (decl.Tag == DeclarationTag.Function)
@@ -70,34 +124,24 @@ partial class Compiler
                     addresses[i] = AllocGlobal(SizeOf(type));
                 }
                 DefineFunction(decl.Name, paramTypes, decl.Type, 0, addresses);
-                EmitComment("define function " + decl.Name);
-
-                // Record the address of this function's code:
-                CFunctionInfo functionInfo;
-                if (!Functions.TryGetValue(decl.Name, out functionInfo)) Program.Panic("this function should already be defined");
-                functionInfo.Address = GetCurrentCodeAddress();
-
-                LexicalScope functionScope = PushScope(globalScope);
+                EmitComment("declare function " + decl.Name);
 
                 // Define each of the function's parameters as a local variable:
+                LexicalScope functionScope = PushScope(globalScope);
                 for (int i = 0; i < decl.Fields.Count; i++)
                 {
                     NamedField f = decl.Fields[i];
-                    DefineSymbol(functionScope, SymbolTag.Variable, f.Name, functionInfo.ParameterAddresses[i], f.Type);
+                    DefineSymbol(functionScope, SymbolTag.Variable, f.Name, addresses[i], f.Type);
                 }
 
-                Expr body = decl.Body;
-                body = ReplaceNamedVariables(body, functionScope);
-                Program.WritePassOutputToFile("replace-vars", body.ShowMultiline());
-                body = ReplaceFields(body);
-                Program.WritePassOutputToFile("replace-fields", body.ShowMultiline());
-                body = ReplaceAddressOf(body);
-                Program.WritePassOutputToFile("replace-addressof", body.ShowMultiline());
-                body = ReplaceGenericFunctions(body);
-                Program.WritePassOutputToFile("replace-generics", body.ShowMultiline());
-                CheckTypes(body);
-                CompileExpression(body, DestinationDiscard, Continuation.Fallthrough);
-                Emit(Opcode.RTS);
+                newProgram.Add(new Declaration
+                {
+                    Tag = decl.Tag,
+                    Type = decl.Type,
+                    Name = decl.Name,
+                    Body = ReplaceNamedVariables(decl.Body, functionScope),
+                    Fields = decl.Fields,
+                });
             }
             else if (decl.Tag == DeclarationTag.Constant)
             {
@@ -139,24 +183,33 @@ partial class Compiler
                 Program.UnhandledCase();
             }
         }
+        Program.WritePassOutputToFile("replace-vars", newProgram);
+        return newProgram;
+    }
 
-        // Fix references to functions:
-        foreach (Fixup fixup in Fixups)
+    List<Declaration> ApplyPass(string passName, Func<Expr, Expr> apply, List<Declaration> program)
+    {
+        List<Declaration> newProgram = new List<Declaration>();
+        foreach (Declaration decl in program)
         {
-            if (fixup.Tag != FixupTag.None)
+            if (decl.Tag == DeclarationTag.Function)
             {
-                CFunctionInfo functionInfo;
-                if (!Functions.TryGetValue(fixup.Target, out functionInfo)) Program.Error("function not defined: " + fixup.Target);
-                int target = functionInfo.Address;
-
-                if (fixup.Tag != FixupTag.Absolute) Program.Panic("function fixups should always be absolute");
-                EmitFix_U16(fixup.Location, target);
-                fixup.Tag = FixupTag.None;
+                newProgram.Add(new Declaration
+                {
+                    Tag = decl.Tag,
+                    Type = decl.Type,
+                    Name = decl.Name,
+                    Body = apply(decl.Body),
+                    Fields = decl.Fields,
+                });
+            }
+            else
+            {
+                newProgram.Add(decl);
             }
         }
-
-        // All fixups should now be fixed.
-        if (Fixups.Any(x => x.Tag != FixupTag.None)) Program.Panic("some fixups remain");
+        Program.WritePassOutputToFile(passName, newProgram);
+        return newProgram;
     }
 
     Expr ReplaceNamedVariables(Expr e, LexicalScope scope)
