@@ -388,7 +388,7 @@ partial class Compiler
             }
             else
             {
-                // TODO: The operands must have the same type, and it must be an integer type. (You can't add pointers together.)
+                // The operands must have the same type, and it must be an integer type. (You can't add pointers together.)
                 if (!TryToChangeType(ref right, leftType)) Program.Error("types in binary expression must match");
 
                 string specificName = null;
@@ -442,11 +442,15 @@ partial class Compiler
     /// </summary>
     bool TryToChangeType(ref Expr e, CType expectedType)
     {
-        // Make sure the actual value is small enough to fit.
         int value;
         CType type;
-        if (e.Match(Tag.Int, out value, out type))
+        if (TypesEqual(TypeOf(e), expectedType))
         {
+            return true;
+        }
+        else if (e.Match(Tag.Int, out value, out type))
+        {
+            // Make sure the actual value is small enough to fit.
             if (TypesEqual(expectedType, CType.UInt8) && value >= 0 && value <= byte.MaxValue)
             {
                 e = Expr.Make(Tag.Int, value, CType.UInt8);
