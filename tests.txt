@@ -391,3 +391,30 @@ void reset()
     *OUT = p.y;
     *STOP = 0;
 }
+
+@ arrays
+@in
+@out 42
+#include "test.h"
+
+uint8_t factors[6];
+
+void reset()
+{
+    factors[5] = 42;
+    *OUT = factors[5];
+    *STOP = 0;
+}
+
+@ arrays
+@in
+@out 43
+#include "test.h"
+
+void reset()
+{
+    uint16_t factors[9];
+    factors[8] = 43;
+    *OUT = factors[8];
+    *STOP = 0;
+}

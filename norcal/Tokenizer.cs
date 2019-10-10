@@ -122,6 +122,8 @@ class Tokenizer
             }
             else if (TryRead(';')) tag = TokenType.SEMICOLON;
             else if (TryRead('=')) tag = TokenType.EQUALS;
+            else if (TryRead('[')) tag = TokenType.LBRACKET;
+            else if (TryRead(']')) tag = TokenType.RBRACKET;
             else if (TryRead('{')) tag = TokenType.LBRACE;
             else if (TryRead('}')) tag = TokenType.RBRACE;
             else if (IsNameChar(GetNextChar()))
@@ -337,6 +339,8 @@ enum TokenType
     SEMICOLON,
     LBRACE,
     RBRACE,
+    LBRACKET,
+    RBRACKET,
 
     INT,
     NAME,

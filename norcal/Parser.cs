@@ -111,6 +111,15 @@ partial class Parser
             {
                 d.Tag = DeclarationTag.Variable;
                 if (TryParse(TokenType.EQUALS)) ParserError("global variables cannot be initialized");
+
+                if (TryParse(TokenType.LBRACKET))
+                {
+                    int dimension;
+                    if (!TryParseInt(out dimension)) ParserError("expected array size");
+                    if (!TryParse(TokenType.RBRACKET)) ParserError("expected ]");
+                    d.Type = CType.MakeArray(d.Type, dimension);
+                }
+
                 if (!TryParse(TokenType.SEMICOLON)) ParserError("expected ;");
             }
         }
@@ -356,6 +365,12 @@ partial class Parser
                 string fieldName;
                 if (!TryParseAnyName(out fieldName)) ParserError("expected a field name");
                 e = Expr.Make(Tag.LoadGeneric, Expr.Make(Tag.Field, e, fieldName));
+            }
+            else if (TryParse(TokenType.LBRACKET))
+            {
+                Expr index = ParseExpr();
+                e = Expr.Make(Tag.LoadGeneric, Expr.Make(Tag.Index, e, index));
+                if (!TryParse(TokenType.RBRACKET)) ParserError("expected ]");
             }
             else
             {

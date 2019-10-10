@@ -70,6 +70,9 @@ partial class Compiler
             }
         }
 
+        // Post-typechecking passes:
+        program = ApplyPass("fold-constants", SimplifyConstantExpressions, program);
+
         // Pass: Codegen
         foreach (Declaration decl in program)
         {
@@ -275,7 +278,7 @@ partial class Compiler
 
     Expr ReplaceFields(Expr e)
     {
-        Expr left;
+        Expr left, indexExpr;
         string fieldName;
         if (e.Match(Tag.Field, out left, out fieldName))
         {
@@ -300,6 +303,15 @@ partial class Compiler
                         Tag.Int,
                         fieldInfo.Offset,
                         CType.UInt16)));
+        }
+        else if (e.Match(Tag.Index, out left, out indexExpr))
+        {
+            left = ReplaceFields(left);
+            indexExpr = ReplaceFields(indexExpr);
+            return Expr.Make(
+                Tag.AddGeneric,
+                Expr.Make(Tag.AddressOf, left),
+                indexExpr);
         }
         else
         {
@@ -348,16 +360,44 @@ partial class Compiler
         else if (e.Match(Tag.AddGeneric, out left, out right))
         {
             CType leftType = TypeOf(left);
+            CType rightType = TypeOf(right);
 
-            right = ChangeTypeIfPossible(right, leftType);
-            if (!TypesEqual(leftType, TypeOf(right))) Program.Error("types in binary expression must match");
+            if (leftType.IsPointer)
+            {
+                if (!TryToChangeType(ref right, CType.UInt16)) Program.Panic("pointer offset must have integer type");
+                int elementSize = SizeOf(leftType.Subtype);
+                return Expr.Make(
+                    Tag.Cast,
+                    leftType,
+                    Expr.Make(
+                        Tag.AddU16,
+                        left,
+                        Expr.Make(
+                            Tag.MultiplyU16,
+                            right,
+                            Expr.Make(
+                                Tag.Int,
+                                elementSize,
+                                CType.UInt16))));
+            }
+            else if (rightType.IsPointer)
+            {
+                // TODO: Swap the operands and use the usual (pointer + offset) logic.
+                Program.NYI();
+                return null;
+            }
+            else
+            {
+                // TODO: The operands must have the same type, and it must be an integer type. (You can't add pointers together.)
+                if (!TryToChangeType(ref right, leftType)) Program.Error("types in binary expression must match");
 
-            string specificName = null;
-            if (TypesEqual(leftType, CType.UInt8)) specificName = Tag.AddU8;
-            else if (TypesEqual(leftType, CType.UInt16)) specificName = Tag.AddU16;
-            else Program.NYI();
+                string specificName = null;
+                if (TypesEqual(leftType, CType.UInt8)) specificName = Tag.AddU8;
+                else if (TypesEqual(leftType, CType.UInt16)) specificName = Tag.AddU16;
+                else Program.NYI();
 
-            return Expr.Make(specificName, left, right);
+                return Expr.Make(specificName, left, right);
+            }
         }
         else if (e.Match(Tag.SubtractGeneric, out left, out right))
         {
@@ -390,24 +430,36 @@ partial class Compiler
         }
     }
 
+    Expr ChangeTypeIfPossible(Expr e, CType expected)
+    {
+        TryToChangeType(ref e, expected);
+        return e;
+    }
+
     /// <summary>
     /// It is possible to interpret some expressions, such as integer literals, as any of several types.
     /// If possible, change the type of the given expression to the expected type.
     /// </summary>
-    Expr ChangeTypeIfPossible(Expr e, CType expected)
+    bool TryToChangeType(ref Expr e, CType expectedType)
     {
         // Make sure the actual value is small enough to fit.
         int value;
         CType type;
-        if (TypesEqual(expected, CType.UInt8) && e.Match(Tag.Int, out value, out type))
+        if (e.Match(Tag.Int, out value, out type))
         {
-            if (value >= 0 && value <= byte.MaxValue)
+            if (TypesEqual(expectedType, CType.UInt8) && value >= 0 && value <= byte.MaxValue)
             {
-                return Expr.Make(Tag.Int, value, CType.UInt8);
+                e = Expr.Make(Tag.Int, value, CType.UInt8);
+                return true;
+            }
+            else if (TypesEqual(expectedType, CType.UInt16) && value >= 0 && value <= ushort.MaxValue)
+            {
+                e = Expr.Make(Tag.Int, value, CType.UInt16);
+                return true;
             }
         }
 
-        return e;
+        return false;
     }
 
     void CheckTypes(Expr e)
@@ -476,7 +528,51 @@ partial class Compiler
         }
     }
 
+    Expr SimplifyConstantExpressions(Expr e)
+    {
+        // Recursively apply this pass to all arguments:
+        e = e.Map(SimplifyConstantExpressions);
+
+        Expr left, right;
+        CType type;
+        int a, b;
+
+        if (e.Match(Tag.AddU16, out left, out right) &&
+            left.Match(Tag.Int, out a, out type) &&
+            right.Match(Tag.Int, out b, out type))
+        {
+            return Expr.Make(Tag.Int, (a + b) % (1 << 16), CType.UInt16);
+        }
+        else if (e.Match(Tag.MultiplyU16, out left, out right) &&
+            left.Match(Tag.Int, out a, out type) &&
+            right.Match(Tag.Int, out b, out type))
+        {
+            return Expr.Make(Tag.Int, (a * b) % (1 << 16), CType.UInt16);
+        }
+        else
+        {
+            ReportInvalidNodes(e, Tag.Name, Tag.Scope, Tag.Local);
+            return e;
+        }
+    }
+
     CType TypeOf(Expr e)
+    {
+        // In most contexts, a pointer to an array "decays" into a pointer to the first element of the array.
+        CType type = TypeOfWithoutDecay(e);
+        CType decayedType;
+        if (type.IsPointer && type.Subtype.IsArray)
+        {
+            decayedType = CType.MakePointer(type.Subtype.Subtype);
+        }
+        else
+        {
+            decayedType = type;
+        }
+        return decayedType;
+    }
+
+    CType TypeOfWithoutDecay(Expr e)
     {
         ReportInvalidNodes(e, Tag.Name, Tag.Local);
 
@@ -968,6 +1064,10 @@ partial class Compiler
             CStructInfo info = GetStructInfo(type.Name);
             return info.TotalSize;
         }
+        else if (type.Tag == CTypeTag.Array)
+        {
+            return type.Dimension * SizeOf(type.Subtype);
+        }
 
         Program.NYI();
         return 1;
@@ -1145,12 +1245,14 @@ struct Continuation
 // - SimpleType
 // - Pointer subtype
 // - Struct name
+// - Array elementType dimension
 partial class CType
 {
     public CTypeTag Tag;
     public CSimpleType SimpleType;
     public string Name;
     public CType Subtype;
+    public int Dimension;
 }
 
 enum CTypeTag
@@ -1158,6 +1260,7 @@ enum CTypeTag
     Simple,
     Pointer,
     Struct,
+    Array,
 }
 
 enum CSimpleType
@@ -1229,6 +1332,20 @@ partial class CType
         };
     }
 
+    public static CType MakeArray(CType elementType, int dimension)
+    {
+        return new CType
+        {
+            Tag = CTypeTag.Array,
+            Subtype = elementType,
+            Dimension = dimension,
+        };
+    }
+
+    public bool IsPointer => Tag == CTypeTag.Pointer;
+    public bool IsStruct => Tag == CTypeTag.Struct;
+    public bool IsArray => Tag == CTypeTag.Array;
+
     public override bool Equals(object obj)
     {
         throw new NotSupportedException();
@@ -1244,6 +1361,7 @@ partial class CType
         if (Tag == CTypeTag.Simple) return SimpleType.ToString();
         else if (Tag == CTypeTag.Pointer) return "pointer to " + Subtype.Show();
         else if (Tag == CTypeTag.Struct) return "struct " + Name;
+        else if (Tag == CTypeTag.Array) return string.Format("array[{1}] of {0}", Subtype.Show(), Dimension);
         else throw new NotImplementedException();
     }
 }

@@ -402,6 +402,7 @@ static class Tag
     public static readonly string Return = "$return";
     public static readonly string Cast = "$cast";
     public static readonly string Field = "$field";
+    public static readonly string Index = "$index";
 
     // Type-generic pseudo-functions:
     public static readonly string AddGeneric = "$add_gen";
@@ -417,6 +418,7 @@ static class Tag
     public static readonly string AddU16 = "_rt_add_u16";
     public static readonly string SubtractU8 = "_rt_sub_u8";
     public static readonly string SubtractU16 = "_rt_sub_u16";
+    public static readonly string MultiplyU16 = "_rt_mul_u16";
     public static readonly string LoadU8 = "_rt_load_u8";
     public static readonly string LoadU16 = "_rt_load_u16";
     public static readonly string StoreU8 = "_rt_store_u8";
