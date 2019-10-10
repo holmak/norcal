@@ -332,8 +332,8 @@ partial class Compiler
             CType returnType = addressType.Subtype;
 
             string specificName = null;
-            if (TypesEqual(returnType, CType.UInt8)) specificName = Tag.LoadU8;
-            else if (TypesEqual(returnType, CType.UInt16)) specificName = Tag.LoadU16;
+            if (returnType == CType.UInt8) specificName = Tag.LoadU8;
+            else if (returnType == CType.UInt16) specificName = Tag.LoadU16;
             else Program.NYI();
 
             return Expr.Make(specificName, left);
@@ -348,11 +348,11 @@ partial class Compiler
 
             right = ChangeTypeIfPossible(right, expectedTypeOfValue);
             CType actualType = TypeOf(right);
-            if (!TypesEqual(expectedTypeOfValue, actualType)) Program.Error("types in assignment must match");
+            if (expectedTypeOfValue != actualType) Program.Error("types in assignment must match");
 
             string specificName = null;
-            if (TypesEqual(actualType, CType.UInt8)) specificName = Tag.StoreU8;
-            else if (TypesEqual(actualType, CType.UInt16)) specificName = Tag.StoreU16;
+            if (actualType == CType.UInt8) specificName = Tag.StoreU8;
+            else if (actualType == CType.UInt16) specificName = Tag.StoreU16;
             else Program.NYI();
 
             return Expr.Make(specificName, left, right);
@@ -392,8 +392,8 @@ partial class Compiler
                 if (!TryToChangeType(ref right, leftType)) Program.Error("types in binary expression must match");
 
                 string specificName = null;
-                if (TypesEqual(leftType, CType.UInt8)) specificName = Tag.AddU8;
-                else if (TypesEqual(leftType, CType.UInt16)) specificName = Tag.AddU16;
+                if (leftType == CType.UInt8) specificName = Tag.AddU8;
+                else if (leftType == CType.UInt16) specificName = Tag.AddU16;
                 else Program.NYI();
 
                 return Expr.Make(specificName, left, right);
@@ -404,11 +404,11 @@ partial class Compiler
             CType leftType = TypeOf(left);
 
             right = ChangeTypeIfPossible(right, leftType);
-            if (!TypesEqual(leftType, TypeOf(right))) Program.Error("types in binary expression must match");
+            if (leftType != TypeOf(right)) Program.Error("types in binary expression must match");
 
             string specificName = null;
-            if (TypesEqual(leftType, CType.UInt8)) specificName = Tag.SubtractU8;
-            else if (TypesEqual(leftType, CType.UInt16)) specificName = Tag.SubtractU16;
+            if (leftType == CType.UInt8) specificName = Tag.SubtractU8;
+            else if (leftType == CType.UInt16) specificName = Tag.SubtractU16;
             else Program.NYI();
 
             return Expr.Make(specificName, left, right);
@@ -418,7 +418,7 @@ partial class Compiler
             CType sourceType = TypeOf(left);
 
             string specificName = null;
-            if (TypesEqual(sourceType, CType.UInt16)) specificName = Tag.BoolFromU16;
+            if (sourceType == CType.UInt16) specificName = Tag.BoolFromU16;
             else Program.NYI();
 
             return Expr.Make(specificName, left);
@@ -444,19 +444,19 @@ partial class Compiler
     {
         int value;
         CType type;
-        if (TypesEqual(TypeOf(e), expectedType))
+        if (TypeOf(e) == expectedType)
         {
             return true;
         }
         else if (e.Match(Tag.Int, out value, out type))
         {
             // Make sure the actual value is small enough to fit.
-            if (TypesEqual(expectedType, CType.UInt8) && value >= 0 && value <= byte.MaxValue)
+            if (expectedType == CType.UInt8 && value >= 0 && value <= byte.MaxValue)
             {
                 e = Expr.Make(Tag.Int, value, CType.UInt8);
                 return true;
             }
-            else if (TypesEqual(expectedType, CType.UInt16) && value >= 0 && value <= ushort.MaxValue)
+            else if (expectedType == CType.UInt16 && value >= 0 && value <= ushort.MaxValue)
             {
                 e = Expr.Make(Tag.Int, value, CType.UInt16);
                 return true;
@@ -488,7 +488,7 @@ partial class Compiler
         if (e.Match(Tag.Int, out value, out type))
         {
             // This should have had a specific type assigned to it by now:
-            if (TypesEqual(type, CType.Implied)) Program.Panic("integer literal has not been given a type");
+            if (type == CType.Implied) Program.Panic("integer literal has not been given a type");
         }
         else if (e.MatchAny(Tag.Switch, out args))
         {
@@ -504,7 +504,7 @@ partial class Compiler
             CType actual = TypeOf(arg);
             // TODO: Get the current function's declared return type.
             CType expected = CType.UInt16;
-            if (!TypesEqual(actual, expected)) Program.Error("incorrect return type");
+            if (actual != expected) Program.Error("incorrect return type");
         }
         else if (e.Match(Tag.Cast, out type, out arg))
         {
@@ -522,7 +522,7 @@ partial class Compiler
                 for (int i = 0; i < args.Length; i++)
                 {
                     CType argType = TypeOf(args[i]);
-                    if (!TypesEqual(argType, functionInfo.ParameterTypes[i])) Program.Error("argument to function has wrong type");
+                    if (argType != functionInfo.ParameterTypes[i]) Program.Error("argument to function has wrong type");
                 }
             }
         }
@@ -643,18 +643,6 @@ partial class Compiler
         CStructInfo info;
         if (!StructTypes.TryGetValue(name, out info)) Program.Error("struct not defined: {0}", name);
         return info;
-    }
-
-    static bool TypesEqual(CType a, CType b)
-    {
-        if (a.Tag != b.Tag) return false;
-        else if (a.Tag == CTypeTag.Simple) return a.SimpleType == b.SimpleType;
-        else if (a.Tag == CTypeTag.Pointer) return TypesEqual(a.Subtype, b.Subtype);
-        else
-        {
-            Program.NYI();
-            return false;
-        }
     }
 
     void CompileExpression(Expr e, int dest, Continuation cont)
@@ -1297,7 +1285,7 @@ partial class CFunctionInfo
 }
 
 [DebuggerDisplay("{Show(),nq}")]
-partial class CType
+partial class CType : IEquatable<CType>
 {
     /// <summary>
     /// This means that the typechecker hasn't assigned a type to this node yet.
@@ -1352,6 +1340,7 @@ partial class CType
 
     public override bool Equals(object obj)
     {
+        // Don't bother supporting equality-testing with arbitrary other types.
         throw new NotSupportedException();
     }
 
@@ -1359,6 +1348,21 @@ partial class CType
     {
         throw new NotSupportedException();
     }
+
+    public bool Equals(CType other)
+    {
+        if (Tag != other.Tag) return false;
+        else if (Tag == CTypeTag.Simple) return SimpleType.Equals(other.SimpleType);
+        else if (Tag == CTypeTag.Pointer) return Subtype.Equals(other.Subtype);
+        else
+        {
+            Program.NYI();
+            return false;
+        }
+    }
+
+    public static bool operator ==(CType a, CType b) => a.Equals(b);
+    public static bool operator !=(CType a, CType b) => !a.Equals(b);
 
     public string Show()
     {

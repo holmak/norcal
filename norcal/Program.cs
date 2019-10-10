@@ -320,7 +320,7 @@ class Expr
             {
                 tree[i] = subexpr.ToStringTree();
             }
-            else if (type != null)
+            else if (!ReferenceEquals(type, null))
             {
                 tree[i] = "<" + type.Show() + ">";
             }
