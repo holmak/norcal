@@ -346,13 +346,11 @@ partial class Compiler
             if (addressType.Tag != CTypeTag.Pointer) Program.Error("store address must have pointer type");
             CType expectedTypeOfValue = addressType.Subtype;
 
-            right = ChangeTypeIfPossible(right, expectedTypeOfValue);
-            CType actualType = TypeOf(right);
-            if (expectedTypeOfValue != actualType) Program.Error("types in assignment must match");
+            if (!TryToChangeType(ref right, expectedTypeOfValue)) Program.Error("types in assignment must match");
 
             string specificName = null;
-            if (actualType == CType.UInt8) specificName = Tag.StoreU8;
-            else if (actualType == CType.UInt16) specificName = Tag.StoreU16;
+            if (expectedTypeOfValue == CType.UInt8) specificName = Tag.StoreU8;
+            else if (expectedTypeOfValue == CType.UInt16) specificName = Tag.StoreU16;
             else Program.NYI();
 
             return Expr.Make(specificName, left, right);
@@ -402,9 +400,7 @@ partial class Compiler
         else if (e.Match(Tag.SubtractGeneric, out left, out right))
         {
             CType leftType = TypeOf(left);
-
-            right = ChangeTypeIfPossible(right, leftType);
-            if (leftType != TypeOf(right)) Program.Error("types in binary expression must match");
+            if (!TryToChangeType(ref right, leftType)) Program.Error("types in binary expression must match");
 
             string specificName = null;
             if (leftType == CType.UInt8) specificName = Tag.SubtractU8;
@@ -428,12 +424,6 @@ partial class Compiler
             ReportInvalidNodes(e, Tag.Name, Tag.Scope, Tag.Local);
             return e;
         }
-    }
-
-    Expr ChangeTypeIfPossible(Expr e, CType expected)
-    {
-        TryToChangeType(ref e, expected);
-        return e;
     }
 
     /// <summary>
