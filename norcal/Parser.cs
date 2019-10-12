@@ -110,20 +110,23 @@ partial class Parser
             else
             {
                 d.Tag = DeclarationTag.Variable;
-
-                if (TryParse(TokenType.LBRACKET))
-                {
-                    int dimension;
-                    if (!TryParseInt(out dimension)) ParserError("expected array size");
-                    if (!TryParse(TokenType.RBRACKET)) ParserError("expected ]");
-                    d.Type = CType.MakeArray(d.Type, dimension);
-                }
-
+                ParseArrayDeclaration(ref d.Type);
                 if (TryParse(TokenType.EQUALS)) ParserError("global variables cannot be initialized");
                 if (!TryParse(TokenType.SEMICOLON)) ParserError("expected ;");
             }
         }
         return d;
+    }
+
+    void ParseArrayDeclaration(ref CType type)
+    {
+        if (TryParse(TokenType.LBRACKET))
+        {
+            int dimension;
+            if (!TryParseInt(out dimension)) ParserError("expected array size");
+            if (!TryParse(TokenType.RBRACKET)) ParserError("expected ]");
+            type = CType.MakeArray(type, dimension);
+        }
     }
 
     // If false, only allow statements that would fit in a "for" initializer.
@@ -136,6 +139,7 @@ partial class Parser
             // Declare a local variable:
             string localname;
             if (!TryParseAnyName(out localname)) ParserError("expected variable name");
+            ParseArrayDeclaration(ref type);
             // Optionally, an initial value can be assigned:
             if (TryParse(TokenType.EQUALS))
             {
