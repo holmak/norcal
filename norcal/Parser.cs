@@ -110,7 +110,6 @@ partial class Parser
             else
             {
                 d.Tag = DeclarationTag.Variable;
-                if (TryParse(TokenType.EQUALS)) ParserError("global variables cannot be initialized");
 
                 if (TryParse(TokenType.LBRACKET))
                 {
@@ -120,6 +119,7 @@ partial class Parser
                     d.Type = CType.MakeArray(d.Type, dimension);
                 }
 
+                if (TryParse(TokenType.EQUALS)) ParserError("global variables cannot be initialized");
                 if (!TryParse(TokenType.SEMICOLON)) ParserError("expected ;");
             }
         }
