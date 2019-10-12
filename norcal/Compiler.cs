@@ -42,16 +42,16 @@ partial class Compiler
         int[] builtinParamAddresses = new[] { T0, T2 };
 
         // Define the types of the builtin functions:
-        DefineFunction(Tag.LoadU8, new[] { CType.MakePointer(CType.UInt8) }, CType.UInt8, 0, BuiltinParamAddresses(1));
-        DefineFunction(Tag.LoadU16, new[] { CType.MakePointer(CType.UInt16) }, CType.UInt16, 0, BuiltinParamAddresses(1));
-        DefineFunction(Tag.StoreU8, new[] { CType.MakePointer(CType.UInt8), CType.UInt8 }, CType.UInt8, 0, BuiltinParamAddresses(2));
-        DefineFunction(Tag.StoreU16, new[] { CType.MakePointer(CType.UInt16), CType.UInt16 }, CType.UInt16, 0, BuiltinParamAddresses(2));
-        DefineFunction(Tag.AddU8, new[] { CType.UInt8, CType.UInt8 }, CType.UInt8, 0, BuiltinParamAddresses(2));
-        DefineFunction(Tag.AddU8Ptr, new[] { CType.UInt8Ptr, CType.UInt16 }, CType.UInt8Ptr, 0, BuiltinParamAddresses(2));
-        DefineFunction(Tag.AddU16, new[] { CType.UInt16, CType.UInt16 }, CType.UInt16, 0, BuiltinParamAddresses(2));
-        DefineFunction(Tag.SubtractU8, new[] { CType.UInt8, CType.UInt8 }, CType.UInt8, 0, BuiltinParamAddresses(2));
-        DefineFunction(Tag.SubtractU16, new[] { CType.UInt16, CType.UInt16 }, CType.UInt16, 0, BuiltinParamAddresses(2));
-        DefineFunction(Tag.BoolFromU16, new[] { CType.UInt16 }, CType.UInt8, 0, BuiltinParamAddresses(1));
+        DeclareFunction(Tag.LoadU8, new[] { CType.MakePointer(CType.UInt8) }, CType.UInt8, BuiltinParamAddresses(1));
+        DeclareFunction(Tag.LoadU16, new[] { CType.MakePointer(CType.UInt16) }, CType.UInt16, BuiltinParamAddresses(1));
+        DeclareFunction(Tag.StoreU8, new[] { CType.MakePointer(CType.UInt8), CType.UInt8 }, CType.UInt8, BuiltinParamAddresses(2));
+        DeclareFunction(Tag.StoreU16, new[] { CType.MakePointer(CType.UInt16), CType.UInt16 }, CType.UInt16, BuiltinParamAddresses(2));
+        DeclareFunction(Tag.AddU8, new[] { CType.UInt8, CType.UInt8 }, CType.UInt8, BuiltinParamAddresses(2));
+        DeclareFunction(Tag.AddU8Ptr, new[] { CType.UInt8Ptr, CType.UInt16 }, CType.UInt8Ptr, BuiltinParamAddresses(2));
+        DeclareFunction(Tag.AddU16, new[] { CType.UInt16, CType.UInt16 }, CType.UInt16, BuiltinParamAddresses(2));
+        DeclareFunction(Tag.SubtractU8, new[] { CType.UInt8, CType.UInt8 }, CType.UInt8, BuiltinParamAddresses(2));
+        DeclareFunction(Tag.SubtractU16, new[] { CType.UInt16, CType.UInt16 }, CType.UInt16, BuiltinParamAddresses(2));
+        DeclareFunction(Tag.BoolFromU16, new[] { CType.UInt16 }, CType.UInt8, BuiltinParamAddresses(1));
 
         // Pass: Declare global symbols and replace symbols with addresses
         program = ApplyFirstPass(program);
@@ -96,7 +96,8 @@ partial class Compiler
             {
                 CFunctionInfo functionInfo;
                 if (!Functions.TryGetValue(fixup.Target, out functionInfo)) Program.Error("function not defined: " + fixup.Target);
-                int target = functionInfo.Address;
+                if (!functionInfo.Address.HasValue) Program.Error("function declared but never defined: " + fixup.Target);
+                int target = functionInfo.Address.Value;
 
                 if (fixup.Tag != FixupTag.Absolute) Program.Panic("function fixups should always be absolute");
                 EmitFix_U16(fixup.Location, target);
@@ -127,7 +128,7 @@ partial class Compiler
                     paramTypes[i] = type;
                     addresses[i] = AllocGlobal(SizeOf(type));
                 }
-                DefineFunction(decl.Name, paramTypes, decl.Type, 0, addresses);
+                DeclareFunction(decl.Name, paramTypes, decl.Type, addresses);
                 EmitComment("declare function " + decl.Name);
 
                 // Define each of the function's parameters as a local variable:
@@ -1086,15 +1087,21 @@ partial class Compiler
         return null;
     }
 
-    void DefineFunction(string name, CType[] paramTypes, CType returnType, int address, int[] paramAddresses)
+    void DeclareFunction(string name, CType[] paramTypes, CType returnType, int[] paramAddresses)
     {
-        Functions.Add(name, new CFunctionInfo
+        // TODO: It should be allowed to declare a function multiple times as long as the types match.
+        if (Functions.ContainsKey(name))
+        {
+            Program.Error("function already declared: " + name);
+        }
+
+        Functions[name] = new CFunctionInfo
         {
             ParameterTypes = paramTypes,
             ReturnType = returnType,
-            Address = address,
             ParameterAddresses = paramAddresses,
-        });
+            Address = Maybe.Nothing,
+        };
     }
 
     void DefineSymbol(LexicalScope scope, SymbolTag tag, string name, int value, CType type)
@@ -1292,8 +1299,8 @@ partial class CFunctionInfo
 {
     public CType[] ParameterTypes;
     public CType ReturnType;
-    public int Address;
     public int[] ParameterAddresses;
+    public Maybe<int> Address;
 }
 
 [DebuggerDisplay("{Show(),nq}")]

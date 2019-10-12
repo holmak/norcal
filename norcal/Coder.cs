@@ -125,7 +125,8 @@ partial class Compiler
             // Vector functions must be functions that take no arguments and return nothing.
             if (info.ParameterTypes.Length != 0) Program.Error("vectors cannot take arguments");
             if (info.ReturnType != CType.Void) Program.Error("vectors cannot return a value");
-            return info.Address;
+            if (!info.Address.HasValue) Program.Error("vector declared but not defined");
+            return info.Address.Value;
         }
         else
         {
