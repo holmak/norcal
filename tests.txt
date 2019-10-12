@@ -402,7 +402,7 @@ uint8_t factors[6];
 void reset()
 {
     factors[5] = 42;
-    *OUT = factors[5];
+    *OUTB = factors[5];
     *STOP = 0;
 }
 
