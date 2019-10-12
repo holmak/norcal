@@ -72,6 +72,7 @@ partial class Compiler
 
         // Post-typechecking passes:
         program = ApplyPass("fold-constants", SimplifyConstantExpressions, program);
+        program = ApplyPass("simplify-casts", SimplifyCasts, program);
 
         // Pass: Codegen
         foreach (Declaration decl in program)
@@ -546,6 +547,27 @@ partial class Compiler
         else
         {
             ReportInvalidNodes(e, Tag.Name, Tag.Scope, Tag.Local);
+            return e;
+        }
+    }
+
+    // Simplify the AST by combining casts that are applied to simple integer constants.
+    Expr SimplifyCasts(Expr e)
+    {
+        // Recursively apply this pass to all arguments:
+        e = e.Map(SimplifyCasts);
+
+        Expr subexpr;
+        CType imposedType, ignoredType;
+        int value;
+
+        if (e.Match(Tag.Cast, out imposedType, out subexpr) &&
+            subexpr.Match(Tag.Int, out value, out ignoredType))
+        {
+            return Expr.Make(Tag.Int, value, imposedType);
+        }
+        else
+        {
             return e;
         }
     }
