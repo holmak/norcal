@@ -405,12 +405,12 @@ static class Tag
     public static readonly string Index = "$index";
 
     // Type-generic pseudo-functions:
-    public static readonly string AddGeneric = "$add_gen";
-    public static readonly string SubtractGeneric = "$sub_gen";
-    public static readonly string LoadGeneric = "$load_gen";
-    public static readonly string StoreGeneric = "$store_gen";
-    public static readonly string BoolFromGeneric = "$bool_from_gen";
-    public static readonly string PredecrementGeneric = "$predecr_gen";
+    public static readonly string AddGeneric = "$add";
+    public static readonly string SubtractGeneric = "$sub";
+    public static readonly string LoadGeneric = "$load";
+    public static readonly string StoreGeneric = "$store";
+    public static readonly string BoolFromGeneric = "$bool_from";
+    public static readonly string PredecrementGeneric = "$predecr";
 
     // Runtime functions:
     public static readonly string AddU8 = "_rt_add_u8";
