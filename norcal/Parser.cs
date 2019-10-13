@@ -327,7 +327,11 @@ partial class Parser
     {
         if (TryParse(TokenType.STAR))
         {
-            return Expr.Make(Tag.LoadGeneric, ParseSuffixExpr());
+            return Expr.Make(Tag.LoadGeneric, ParseUnaryPrefixExpr());
+        }
+        else if (TryParse(TokenType.AMPERSAND))
+        {
+            return Expr.Make(Tag.AddressOf, ParseUnaryPrefixExpr());
         }
         else
         {
@@ -369,6 +373,12 @@ partial class Parser
                 string fieldName;
                 if (!TryParseAnyName(out fieldName)) ParserError("expected a field name");
                 e = Expr.Make(Tag.LoadGeneric, Expr.Make(Tag.Field, e, fieldName));
+            }
+            else if (TryParse(TokenType.ARROW))
+            {
+                string fieldName;
+                if (!TryParseAnyName(out fieldName)) ParserError("expected a field name");
+                e = Expr.Make(Tag.LoadGeneric, Expr.Make(Tag.Field, Expr.Make(Tag.LoadGeneric, e), fieldName));
             }
             else if (TryParse(TokenType.LBRACKET))
             {

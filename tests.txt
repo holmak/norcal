@@ -392,6 +392,27 @@ void reset()
     *STOP = 0;
 }
 
+@ structs
+@in
+@out 12
+#include "test.h"
+
+struct Pair { uint8_t a, b; }
+
+void reset()
+{
+    struct Pair p;
+    p.a = 90;
+    p.b = 45;
+    *OUTB = hadd(&p);
+    *STOP = 0;
+}
+
+uint8_t hadd(struct Pair *p)
+{
+    return p->a + p->b;
+}
+
 @ arrays
 @in
 @out 42

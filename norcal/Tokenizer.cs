@@ -100,12 +100,17 @@ class Tokenizer
                 SkipToNextLine();
                 continue;
             }
+            else if (TryRead('&')) tag = TokenType.AMPERSAND;
             else if (TryRead('(')) tag = TokenType.LPAREN;
             else if (TryRead(')')) tag = TokenType.RPAREN;
             else if (TryRead('*')) tag = TokenType.STAR;
             else if (TryRead('+')) tag = TokenType.PLUS;
             else if (TryRead(',')) tag = TokenType.COMMA;
-            else if (TryRead('-')) tag = TokenType.MINUS;
+            else if (TryRead('-'))
+            {
+                if (TryRead('>')) tag = TokenType.ARROW;
+                else tag = TokenType.MINUS;
+            }
             else if (TryRead('.')) tag = TokenType.PERIOD;
             else if (TryRead('/'))
             {
@@ -341,6 +346,8 @@ enum TokenType
     RBRACE,
     LBRACKET,
     RBRACKET,
+    AMPERSAND,
+    ARROW,
 
     INT,
     NAME,
