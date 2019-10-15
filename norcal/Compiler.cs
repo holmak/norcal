@@ -809,6 +809,12 @@ partial class Compiler
                     Emit(Opcode.TAX);
                     Emit_U8(Opcode.LDA_ZP, T2);
                 }
+                else if (functionName == Tag.LoadU8)
+                {
+                    if (args.Length != 1) Program.Panic("wrong number of arguments to unary operator");
+                    Emit_U8(Opcode.LDY_IMM, 0);
+                    Emit_U8(Opcode.LDA_ZP_Y_IND, T0);
+                }
                 else if (functionName == Tag.AddU8)
                 {
                     if (args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
