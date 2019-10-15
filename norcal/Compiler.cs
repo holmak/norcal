@@ -60,8 +60,7 @@ partial class Compiler
         {
             if (decl.Tag == DeclarationTag.Function)
             {
-                CFunctionInfo functionInfo;
-                if (!Functions.TryGetValue(decl.Name, out functionInfo)) Program.Error("function not defined: " + decl.Name);
+                CFunctionInfo functionInfo = GetFunctionInfo(decl.Name);
                 CheckTypes(decl.Body, functionInfo.ReturnType);
             }
         }
@@ -76,8 +75,7 @@ partial class Compiler
             if (decl.Tag == DeclarationTag.Function)
             {
                 // Record the address of this function's code:
-                CFunctionInfo functionInfo;
-                if (!Functions.TryGetValue(decl.Name, out functionInfo)) Program.Panic("this function should already be defined");
+                CFunctionInfo functionInfo = GetFunctionInfo(decl.Name);
                 functionInfo.Address = GetCurrentCodeAddress();
 
                 CompileExpression(decl.Body, DestinationDiscard, Continuation.Fallthrough);
@@ -90,8 +88,7 @@ partial class Compiler
         {
             if (fixup.Tag != FixupTag.None)
             {
-                CFunctionInfo functionInfo;
-                if (!Functions.TryGetValue(fixup.Target, out functionInfo)) Program.Error("function not defined: " + fixup.Target);
+                CFunctionInfo functionInfo = GetFunctionInfo(fixup.Target);
                 if (!functionInfo.Address.HasValue) Program.Error("function declared but never defined: " + fixup.Target);
                 int target = functionInfo.Address.Value;
 
@@ -488,8 +485,7 @@ partial class Compiler
             // Don't try to typecheck special AST nodes, which start with "$".
             if (!name.StartsWith("$"))
             {
-                CFunctionInfo functionInfo;
-                if (!Functions.TryGetValue(name, out functionInfo)) Program.Error("function not defined: {0}", name);
+                CFunctionInfo functionInfo = GetFunctionInfo(name);
                 if (functionInfo.ParameterTypes.Length != args.Length) Program.Error("wrong number of arguments to function: {0}", name);
                 // Check that each of the actual and expected parameter types match:
                 for (int i = 0; i < args.Length; i++)
@@ -621,9 +617,7 @@ partial class Compiler
         }
         else if (e.MatchAny(out name, out args))
         {
-            CFunctionInfo functionInfo;
-            if (!Functions.TryGetValue(name, out functionInfo)) Program.Error("function not defined: {0}", name);
-            return functionInfo.ReturnType;
+            return GetFunctionInfo(name).ReturnType;
         }
         else
         {
@@ -1092,6 +1086,14 @@ partial class Compiler
             ParameterAddresses = paramAddresses,
             Address = Maybe.Nothing,
         };
+    }
+
+    CFunctionInfo GetFunctionInfo(string name)
+    {
+        CFunctionInfo info;
+        if (Functions.TryGetValue(name, out info)) return info;
+        Program.Error("function not declared: {0}", name);
+        return null;
     }
 
     void DefineSymbol(LexicalScope scope, SymbolTag tag, string name, int value, CType type)
