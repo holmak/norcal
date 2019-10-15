@@ -412,7 +412,7 @@ void reset()
 
 @ structs
 @in
-@out 12
+@out 135
 #include "test.h"
 
 struct Pair { uint8_t a, b; }
