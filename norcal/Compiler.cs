@@ -60,7 +60,9 @@ partial class Compiler
         {
             if (decl.Tag == DeclarationTag.Function)
             {
-                CheckTypes(decl.Body);
+                CFunctionInfo functionInfo;
+                if (!Functions.TryGetValue(decl.Name, out functionInfo)) Program.Error("function not defined: " + decl.Name);
+                CheckTypes(decl.Body, functionInfo.ReturnType);
             }
         }
 
@@ -439,7 +441,7 @@ partial class Compiler
         return false;
     }
 
-    void CheckTypes(Expr e)
+    void CheckTypes(Expr e, CType returnType)
     {
         ReportInvalidNodes(e, Tag.Scope, Tag.Local, Tag.AddressOf);
 
@@ -454,7 +456,7 @@ partial class Compiler
         {
             foreach (Expr sub in args.OfType<Expr>())
             {
-                CheckTypes(sub);
+                CheckTypes(sub, returnType);
             }
         }
 
@@ -475,9 +477,7 @@ partial class Compiler
         else if (e.Match(Tag.Return, out arg))
         {
             CType actual = TypeOf(arg);
-            // TODO: Get the current function's declared return type.
-            CType expected = CType.UInt16;
-            if (actual != expected) Program.Error("incorrect return type");
+            if (actual != returnType) Program.Error("incorrect return type");
         }
         else if (e.Match(Tag.Cast, out type, out arg))
         {

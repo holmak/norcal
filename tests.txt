@@ -248,7 +248,7 @@ void reset()
 #include "test.h"
 
 // The "static" keyword is ignored.
-static void f()
+static uint8_t f()
 {
     return 42;
 }
@@ -313,6 +313,24 @@ void reset()
 {
     uint16_t *ptr = 0x3344;
     *OUT = ptr;
+    *STOP = 0;
+}
+
+@ Typecheck return statement
+@in
+@out
+@error
+#include "test.h"
+
+uint8_t fwide()
+{
+    uint16_t wide = 0x1234;
+    return wide;
+}
+
+void reset()
+{
+    *OUT = fwide();
     *STOP = 0;
 }
 
@@ -399,6 +417,11 @@ void reset()
 
 struct Pair { uint8_t a, b; }
 
+uint8_t hadd(struct Pair *p)
+{
+    return p->a + p->b;
+}
+
 void reset()
 {
     struct Pair p;
@@ -406,11 +429,6 @@ void reset()
     p.b = 45;
     *OUTB = hadd(&p);
     *STOP = 0;
-}
-
-uint8_t hadd(struct Pair *p)
-{
-    return p->a + p->b;
 }
 
 @ arrays
