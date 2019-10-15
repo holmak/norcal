@@ -796,7 +796,7 @@ partial class Compiler
                 }
 
                 // For builtin operations, instead of jumping to a function, emit the code inline.
-                EmitComment("function body: " + functionName);
+                EmitComment("function call: " + functionName);
                 if (functionName == Tag.LoadU16)
                 {
                     if (args.Length != 1) Program.Panic("wrong number of arguments to unary operator");
