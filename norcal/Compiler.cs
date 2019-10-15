@@ -27,12 +27,6 @@ partial class Compiler
     static readonly int T2 = (T0 + 2);
     static readonly int T3 = (T0 + 3);
 
-    static readonly string[] LoadFunctions = new[]
-    {
-        Tag.LoadU8,
-        Tag.LoadU16,
-    };
-
     public void CompileProgram(List<Declaration> program)
     {
         // HACK: Many functions are currently just defined in the compiler, and they use
