@@ -710,7 +710,6 @@ partial class Compiler
         }
         else if (e.Match(Tag.Cast, out type, out subexpr))
         {
-            // TODO: Shouldn't casts be removed before now?
             CompileExpression(subexpr, dest, cont);
         }
         else if (e.MatchAny(out functionName, out args))
