@@ -326,13 +326,7 @@ partial class Compiler
             CType addressType = TypeOf(left);
             if (addressType.Tag != CTypeTag.Pointer) Program.Error("load address must have pointer type");
             CType returnType = addressType.Subtype;
-
-            string specificName = null;
-            if (returnType == CType.UInt8) specificName = Tag.LoadU8;
-            else if (returnType == CType.UInt16) specificName = Tag.LoadU16;
-            else Program.NYI();
-
-            return Expr.Make(specificName, left);
+            return Expr.Make(GetLoadFunctionForType(returnType), left);
         }
         else if (e.Match(Tag.StoreGeneric, out left, out right))
         {
@@ -341,15 +335,8 @@ partial class Compiler
             CType addressType = TypeOf(left);
             if (addressType.Tag != CTypeTag.Pointer) Program.Error("store address must have pointer type");
             CType expectedTypeOfValue = addressType.Subtype;
-
             if (!TryToChangeType(ref right, expectedTypeOfValue)) Program.Error("types in assignment must match");
-
-            string specificName = null;
-            if (expectedTypeOfValue == CType.UInt8) specificName = Tag.StoreU8;
-            else if (expectedTypeOfValue == CType.UInt16) specificName = Tag.StoreU16;
-            else Program.NYI();
-
-            return Expr.Make(specificName, left, right);
+            return Expr.Make(GetStoreFunctionForType(expectedTypeOfValue), left, right);
         }
         else if (e.Match(Tag.AddGeneric, out left, out right))
         {
@@ -1074,9 +1061,18 @@ partial class Compiler
 
     string GetLoadFunctionForType(CType type)
     {
-        int width = SizeOf(type);
-        if (width == 1) return Tag.LoadU8;
-        else if (width == 2) return Tag.LoadU16;
+        int size = SizeOf(type);
+        if (size == 1) return Tag.LoadU8;
+        if (size == 2) return Tag.LoadU16;
+        Program.NYI();
+        return null;
+    }
+
+    string GetStoreFunctionForType(CType type)
+    {
+        int size = SizeOf(type);
+        if (size == 1) return Tag.StoreU8;
+        if (size == 2) return Tag.StoreU16;
         Program.NYI();
         return null;
     }
