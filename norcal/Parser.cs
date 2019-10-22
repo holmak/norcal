@@ -229,7 +229,7 @@ partial class Parser
         return ParseAssignExpr();
     }
 
-    // = += -= etc.
+    // = *= /= %= += -= <<= >>= &= ^= |=
     Expr ParseAssignExpr()
     {
         Expr e = ParseLogicalOrExpr();
@@ -277,7 +277,7 @@ partial class Parser
         return ParseCompareExpr();
     }
 
-    // > >= etc.
+    // < > <= >=
     Expr ParseCompareExpr()
     {
         Expr e = ParseShiftExpr();
