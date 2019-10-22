@@ -131,8 +131,11 @@ class Tokenizer
             else if (TryRead('>')) tag = TokenType.GREATER_THAN;
             else if (TryRead('[')) tag = TokenType.LBRACKET;
             else if (TryRead(']')) tag = TokenType.RBRACKET;
+            else if (TryRead('^')) tag = TokenType.CARET;
             else if (TryRead('{')) tag = TokenType.LBRACE;
+            else if (TryRead('|')) tag = TokenType.PIPE;
             else if (TryRead('}')) tag = TokenType.RBRACE;
+            else if (TryRead('~')) tag = TokenType.TILDE;
             else if (IsNameChar(GetNextChar()))
             {
                 // Parse identifiers and numeric literals:
@@ -350,9 +353,11 @@ enum TokenType
     GREATER_THAN,
     LBRACKET,
     RBRACKET,
+    CARET,
     LBRACE,
     PIPE,
     RBRACE,
+    TILDE,
 
     INT,
     NAME,

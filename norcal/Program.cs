@@ -413,6 +413,10 @@ static class Tag
     public static readonly string PredecrementGeneric = "$predecr";
     public static readonly string LessThanGeneric = "$less_than";
     public static readonly string GreaterThanGeneric = "$greater_than";
+    public static readonly string BitwiseAndGeneric = "$bitwise_and";
+    public static readonly string BitwiseOrGeneric = "$bitwise_or";
+    public static readonly string BitwiseXorGeneric = "$bitwise_xor";
+    public static readonly string BitwiseNotGeneric = "$bitwise_not";
 
     // Runtime functions:
     public static readonly string AddU8 = "_rt_add_u8";
@@ -432,6 +436,14 @@ static class Tag
     public static readonly string BoolFromU16 = "_rt_bool_from_u16";
     public static readonly string PredecrementU8 = "_rt_predecr_u8";
     public static readonly string PredecrementU16 = "_rt_predecr_u16";
+    public static readonly string BitwiseAndU8 = "_rt_bitwise_and_u8";
+    public static readonly string BitwiseAndU16 = "_rt_bitwise_and_u16";
+    public static readonly string BitwiseOrU8 = "_rt_bitwise_or_u8";
+    public static readonly string BitwiseOrU16 = "_rt_bitwise_or_u16";
+    public static readonly string BitwiseXorU8 = "_rt_bitwise_xor_u8";
+    public static readonly string BitwiseXorU16 = "_rt_bitwise_xor_u16";
+    public static readonly string BitwiseNotU8 = "_rt_bitwise_not_u8";
+    public static readonly string BitwiseNotU16 = "_rt_bitwise_not_u16";
 }
 
 enum Opcode
@@ -441,7 +453,9 @@ enum Opcode
     ORA_ABS      = 0x0D,
     CLC          = 0x18,
     JSR          = 0x20,
+    AND_ZP       = 0x25,
     SEC          = 0x38,
+    EOR_ZP       = 0x45,
     JMP_ABS      = 0x4C,
     RTS          = 0x60,
     ADC_ZP       = 0x65,

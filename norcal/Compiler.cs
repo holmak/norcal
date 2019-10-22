@@ -50,6 +50,14 @@ partial class Compiler
         DeclareFunction(Tag.GreaterThanU8, new[] { CType.UInt8, CType.UInt8 }, CType.UInt8, BuiltinParamAddresses(2));
         DeclareFunction(Tag.GreaterThanU16, new[] { CType.UInt16, CType.UInt16 }, CType.UInt16, BuiltinParamAddresses(2));
         DeclareFunction(Tag.BoolFromU16, new[] { CType.UInt16 }, CType.UInt8, BuiltinParamAddresses(1));
+        DeclareFunction(Tag.BitwiseAndU8, new[] { CType.UInt8, CType.UInt8 }, CType.UInt8, BuiltinParamAddresses(2));
+        DeclareFunction(Tag.BitwiseAndU16, new[] { CType.UInt16, CType.UInt16 }, CType.UInt16, BuiltinParamAddresses(2));
+        DeclareFunction(Tag.BitwiseOrU8, new[] { CType.UInt8, CType.UInt8 }, CType.UInt8, BuiltinParamAddresses(2));
+        DeclareFunction(Tag.BitwiseOrU16, new[] { CType.UInt16, CType.UInt16 }, CType.UInt16, BuiltinParamAddresses(2));
+        DeclareFunction(Tag.BitwiseXorU8, new[] { CType.UInt8, CType.UInt8 }, CType.UInt8, BuiltinParamAddresses(2));
+        DeclareFunction(Tag.BitwiseXorU16, new[] { CType.UInt16, CType.UInt16 }, CType.UInt16, BuiltinParamAddresses(2));
+        DeclareFunction(Tag.BitwiseNotU8, new[] { CType.UInt8 }, CType.UInt8, BuiltinParamAddresses(1));
+        DeclareFunction(Tag.BitwiseNotU16, new[] { CType.UInt16 }, CType.UInt16, BuiltinParamAddresses(1));
 
         // Pass: Declare global symbols and replace symbols with addresses
         program = ApplyFirstPass(program);
@@ -428,6 +436,18 @@ partial class Compiler
             else Program.NYI();
 
             return Expr.Make(specificName, left);
+        }
+        else if (e.Match(Tag.BitwiseAndGeneric, out left, out right))
+        {
+            CType leftType = TypeOf(left);
+            if (!TryToChangeType(ref right, leftType)) Program.Error("types in binary expression must match");
+
+            string specificName = null;
+            if (leftType == CType.UInt8) specificName = Tag.BitwiseAndU8;
+            else if (leftType == CType.UInt16) specificName = Tag.BitwiseAndU16;
+            else Program.NYI();
+
+            return Expr.Make(specificName, left, right);
         }
         else
         {
@@ -926,6 +946,21 @@ partial class Compiler
                     if (args.Length != 1) Program.Panic("wrong number of arguments to unary operator");
                     Emit_U8(Opcode.LDA_ZP, T0);
                     Emit_U8(Opcode.ORA_ZP, T1);
+                }
+                else if (functionName == Tag.BitwiseAndU8)
+                {
+                    if (args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
+                    Emit_U8(Opcode.LDA_ZP, T0);
+                    Emit_U8(Opcode.AND_ZP, T2);
+                }
+                else if (functionName == Tag.BitwiseAndU16)
+                {
+                    if (args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
+                    Emit_U8(Opcode.LDA_ZP, T1);
+                    Emit_U8(Opcode.AND_ZP, T3);
+                    Emit(Opcode.TAX);
+                    Emit_U8(Opcode.LDA_ZP, T0);
+                    Emit_U8(Opcode.AND_ZP, T2);
                 }
                 else
                 {

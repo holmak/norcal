@@ -262,13 +262,52 @@ partial class Parser
     // |
     Expr ParseBitwiseOrExpr()
     {
-        return ParseBitwiseAndExpr();
+        Expr e = ParseBitwiseXorExpr();
+        while (true)
+        {
+            if (TryParse(TokenType.PIPE))
+            {
+                e = Expr.Make(Tag.BitwiseOrGeneric, e, ParseBitwiseXorExpr());
+            }
+            else
+            {
+                return e;
+            }
+        }
+    }
+
+    // ^
+    Expr ParseBitwiseXorExpr()
+    {
+        Expr e = ParseBitwiseAndExpr();
+        while (true)
+        {
+            if (TryParse(TokenType.CARET))
+            {
+                e = Expr.Make(Tag.BitwiseXorGeneric, e, ParseBitwiseAndExpr());
+            }
+            else
+            {
+                return e;
+            }
+        }
     }
 
     // &
     Expr ParseBitwiseAndExpr()
     {
-        return ParseEqualityExpr();
+        Expr e = ParseEqualityExpr();
+        while (true)
+        {
+            if (TryParse(TokenType.AMPERSAND))
+            {
+                e = Expr.Make(Tag.BitwiseAndGeneric, e, ParseEqualityExpr());
+            }
+            else
+            {
+                return e;
+            }
+        }
     }
 
     // == !=
@@ -347,6 +386,10 @@ partial class Parser
         else if (TryParse(TokenType.AMPERSAND))
         {
             return Expr.Make(Tag.AddressOf, ParseUnaryPrefixExpr());
+        }
+        else if (TryParse(TokenType.TILDE))
+        {
+            return Expr.Make(Tag.BitwiseNotGeneric, ParseUnaryPrefixExpr());
         }
         else
         {

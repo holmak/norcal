@@ -531,3 +531,74 @@ void reset()
     uint8_t b = 255;
     *OUTB = a > b;
 }
+
+@ bitwise operators
+@out 0xA0
+#include "test.h"
+void reset()
+{
+    uint8_t a = 0xAB;
+    uint8_t b = 0xF0;
+    *OUTB = a & b;
+}
+
+@out 0xA0C0
+#include "test.h"
+void reset()
+{
+    uint16_t a = 0xABCD;
+    uint16_t b = 0xF0F0;
+    *OUT = a & b;
+}
+
+@out 0xAB
+#include "test.h"
+void reset()
+{
+    uint8_t a = 0xA0;
+    uint8_t b = 0x0B;
+    *OUTB = a | b;
+}
+
+@out 0xABCD
+#include "test.h"
+void reset()
+{
+    uint16_t a = 0xA0C0;
+    uint16_t b = 0x0B0D;
+    *OUT = a | b;
+}
+
+@out 0x5A
+#include "test.h"
+void reset()
+{
+    uint8_t a = 0xA5;
+    uint8_t b = 0xFF;
+    *OUTB = a ^ b;
+}
+
+@out 0xAA55
+#include "test.h"
+void reset()
+{
+    uint16_t a = 0xA5A5;
+    uint16_t b = 0x0FF0;
+    *OUT = a ^ b;
+}
+
+@out 0x3C
+#include "test.h"
+void reset()
+{
+    uint8_t a = 0xC3;
+    *OUTB = ~a;
+}
+
+@out 0x3C5A
+#include "test.h"
+void reset()
+{
+    uint16_t a = 0xC3A5;
+    *OUT = ~a;
+}
