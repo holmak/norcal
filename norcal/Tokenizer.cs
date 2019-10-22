@@ -126,7 +126,9 @@ class Tokenizer
                 }
             }
             else if (TryRead(';')) tag = TokenType.SEMICOLON;
+            else if (TryRead('<')) tag = TokenType.LESS_THAN;
             else if (TryRead('=')) tag = TokenType.EQUALS;
+            else if (TryRead('>')) tag = TokenType.GREATER_THAN;
             else if (TryRead('[')) tag = TokenType.LBRACKET;
             else if (TryRead(']')) tag = TokenType.RBRACKET;
             else if (TryRead('{')) tag = TokenType.LBRACE;
@@ -340,6 +342,8 @@ enum TokenType
     MINUS,
     PERIOD,
     SLASH,
+    LESS_THAN,
+    GREATER_THAN,
     EQUALS,
     SEMICOLON,
     LBRACE,

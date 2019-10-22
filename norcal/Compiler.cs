@@ -45,6 +45,10 @@ partial class Compiler
         DeclareFunction(Tag.AddU16, new[] { CType.UInt16, CType.UInt16 }, CType.UInt16, BuiltinParamAddresses(2));
         DeclareFunction(Tag.SubtractU8, new[] { CType.UInt8, CType.UInt8 }, CType.UInt8, BuiltinParamAddresses(2));
         DeclareFunction(Tag.SubtractU16, new[] { CType.UInt16, CType.UInt16 }, CType.UInt16, BuiltinParamAddresses(2));
+        DeclareFunction(Tag.LessThanU8, new[] { CType.UInt8, CType.UInt8 }, CType.UInt8, BuiltinParamAddresses(2));
+        DeclareFunction(Tag.LessThanU16, new[] { CType.UInt16, CType.UInt16 }, CType.UInt16, BuiltinParamAddresses(2));
+        DeclareFunction(Tag.GreaterThanU8, new[] { CType.UInt8, CType.UInt8 }, CType.UInt8, BuiltinParamAddresses(2));
+        DeclareFunction(Tag.GreaterThanU16, new[] { CType.UInt16, CType.UInt16 }, CType.UInt16, BuiltinParamAddresses(2));
         DeclareFunction(Tag.BoolFromU16, new[] { CType.UInt16 }, CType.UInt8, BuiltinParamAddresses(1));
 
         // Pass: Declare global symbols and replace symbols with addresses
@@ -387,6 +391,30 @@ partial class Compiler
             string specificName = null;
             if (leftType == CType.UInt8) specificName = Tag.SubtractU8;
             else if (leftType == CType.UInt16) specificName = Tag.SubtractU16;
+            else Program.NYI();
+
+            return Expr.Make(specificName, left, right);
+        }
+        else if (e.Match(Tag.LessThanGeneric, out left, out right))
+        {
+            CType leftType = TypeOf(left);
+            if (!TryToChangeType(ref right, leftType)) Program.Error("types in binary expression must match");
+
+            string specificName = null;
+            if (leftType == CType.UInt8) specificName = Tag.LessThanU8;
+            else if (leftType == CType.UInt16) specificName = Tag.LessThanU16;
+            else Program.NYI();
+
+            return Expr.Make(specificName, left, right);
+        }
+        else if (e.Match(Tag.GreaterThanGeneric, out left, out right))
+        {
+            CType leftType = TypeOf(left);
+            if (!TryToChangeType(ref right, leftType)) Program.Error("types in binary expression must match");
+
+            string specificName = null;
+            if (leftType == CType.UInt8) specificName = Tag.GreaterThanU8;
+            else if (leftType == CType.UInt16) specificName = Tag.GreaterThanU16;
             else Program.NYI();
 
             return Expr.Make(specificName, left, right);
@@ -851,6 +879,30 @@ partial class Compiler
                     Emit_U8(Opcode.SBC_ZP, T3);
                     Emit(Opcode.TAX);
                     Emit_U8(Opcode.LDA_ZP, T0);
+                }
+                else if (functionName == Tag.LessThanU8)
+                {
+                    if (args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
+                    Emit(Opcode.SEC);
+                    Emit_U8(Opcode.LDA_ZP, T0);
+                    Emit_U8(Opcode.CMP_ZP, T2);
+                    // The carry flag will be *clear* if T0 < T2.
+                    // Load the corresponding boolean value:
+                    Emit_U8(Opcode.LDA_IMM, 0);
+                    Emit_U8(Opcode.BCS, 2);
+                    Emit_U8(Opcode.LDA_IMM, 1);
+                }
+                else if (functionName == Tag.GreaterThanU8)
+                {
+                    if (args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
+                    Emit(Opcode.SEC);
+                    Emit_U8(Opcode.LDA_ZP, T2);
+                    Emit_U8(Opcode.CMP_ZP, T0);
+                    // The carry flag will be *clear* if T0 > T2.
+                    // Load the corresponding boolean value:
+                    Emit_U8(Opcode.LDA_IMM, 0);
+                    Emit_U8(Opcode.BCS, 2);
+                    Emit_U8(Opcode.LDA_IMM, 1);
                 }
                 else if (functionName == Tag.StoreU16)
                 {

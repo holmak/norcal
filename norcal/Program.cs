@@ -411,6 +411,8 @@ static class Tag
     public static readonly string StoreGeneric = "$store";
     public static readonly string BoolFromGeneric = "$bool_from";
     public static readonly string PredecrementGeneric = "$predecr";
+    public static readonly string LessThanGeneric = "$less_than";
+    public static readonly string GreaterThanGeneric = "$greater_than";
 
     // Runtime functions:
     public static readonly string AddU8 = "_rt_add_u8";
@@ -419,6 +421,10 @@ static class Tag
     public static readonly string SubtractU8 = "_rt_sub_u8";
     public static readonly string SubtractU16 = "_rt_sub_u16";
     public static readonly string MultiplyU16 = "_rt_mul_u16";
+    public static readonly string LessThanU8 = "_rt_lt_u8";
+    public static readonly string LessThanU16 = "_rt_lt_u16";
+    public static readonly string GreaterThanU8 = "_rt_gt_u8";
+    public static readonly string GreaterThanU16 = "_rt_gt_u16";
     public static readonly string LoadU8 = "_rt_load_u8";
     public static readonly string LoadU16 = "_rt_load_u16";
     public static readonly string StoreU8 = "_rt_store_u8";
@@ -439,12 +445,14 @@ enum Opcode
     JMP_ABS      = 0x4C,
     RTS          = 0x60,
     ADC_ZP       = 0x65,
+    ADC_IMM      = 0x69,
     ADC_ZP_X     = 0x75,
     STA_ZP       = 0x85,
     STX_ZP       = 0x86,
     DEY          = 0x88,
     STA_ABS      = 0x8D,
     STX_ABS      = 0x8E,
+    BCC          = 0x90,
     STA_ZP_Y_IND = 0x91,
     STA_ZP_X     = 0x95,
     LDY_IMM      = 0xA0,
@@ -455,13 +463,16 @@ enum Opcode
     TAX          = 0xAA,
     LDA_ABS      = 0xAD,
     LDX_ABS      = 0xAE,
+    BCS          = 0xB0,
     LDA_ZP_Y_IND = 0xB1,
     LDA_ZP_X     = 0xB5,
+    CMP_ZP       = 0xC5,
     INY          = 0xC8,
     DEX          = 0xCA,
     BNE          = 0xD0,
     SBC_ZP       = 0xE5,
     INX          = 0xE8,
+    SBC_IMM      = 0xE9,
     BEQ          = 0xF0,
     SBC_ZP_X     = 0xF5,
 }

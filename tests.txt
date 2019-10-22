@@ -457,3 +457,77 @@ void reset()
     *OUT = factors[8];
     *STOP = 0;
 }
+
+@ comparison: less than
+@out 1
+#include "test.h"
+void reset()
+{
+    uint8_t a = 4;
+    uint8_t b = 5;
+    *OUTB = a < b;
+}
+
+@out 0
+#include "test.h"
+void reset()
+{
+    uint8_t a = 5;
+    uint8_t b = 5;
+    *OUTB = a < b;
+}
+
+@out 0
+#include "test.h"
+void reset()
+{
+    uint8_t a = 6;
+    uint8_t b = 5;
+    *OUTB = a < b;
+}
+
+@out 0
+#include "test.h"
+void reset()
+{
+    uint8_t a = 255;
+    uint8_t b = 0;
+    *OUTB = a < b;
+}
+
+@ comparison: greater than
+@out 0
+#include "test.h"
+void reset()
+{
+    uint8_t a = 4;
+    uint8_t b = 5;
+    *OUTB = a > b;
+}
+
+@out 0
+#include "test.h"
+void reset()
+{
+    uint8_t a = 5;
+    uint8_t b = 5;
+    *OUTB = a > b;
+}
+
+@out 1
+#include "test.h"
+void reset()
+{
+    uint8_t a = 6;
+    uint8_t b = 5;
+    *OUTB = a > b;
+}
+
+@out 0
+#include "test.h"
+void reset()
+{
+    uint8_t a = 0;
+    uint8_t b = 255;
+    *OUTB = a > b;
+}

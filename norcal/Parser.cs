@@ -280,7 +280,22 @@ partial class Parser
     // > >= etc.
     Expr ParseCompareExpr()
     {
-        return ParseShiftExpr();
+        Expr e = ParseShiftExpr();
+        while (true)
+        {
+            if (TryParse(TokenType.LESS_THAN))
+            {
+                e = Expr.Make(Tag.LessThanGeneric, e, ParseShiftExpr());
+            }
+            else if (TryParse(TokenType.GREATER_THAN))
+            {
+                e = Expr.Make(Tag.GreaterThanGeneric, e, ParseShiftExpr());
+            }
+            else
+            {
+                return e;
+            }
+        }
     }
 
     // << >>
