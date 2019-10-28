@@ -170,7 +170,7 @@ partial class Compiler
                 // TODO: Make sure the declared type matches the actual type.
                 CType type;
                 int value;
-                if (!EvaluateConstantExpression(decl.Body, out value, out type))
+                if (!decl.Body.Match(Tag.Int, out value, out type))
                 {
                     Program.Error("expression must be constant");
                 }
@@ -700,7 +700,7 @@ partial class Compiler
         CType type;
         Expr[] args;
         Expr test, then, init, induction, body, subexpr;
-        if (EvaluateConstantExpression(e, out value, out type))
+        if (e.Match(Tag.Int, out value, out type))
         {
             EmitLoadImmediate(value, type, dest, cont);
         }
@@ -776,7 +776,7 @@ partial class Compiler
         else if (e.MatchAny(out functionName, out args))
         {
             int addr;
-            if ((functionName == Tag.LoadU8 || functionName == Tag.LoadU16) && EvaluateConstantExpression(args[0], out addr, out type))
+            if ((functionName == Tag.LoadU8 || functionName == Tag.LoadU16) && args[0].Match(Tag.Int, out addr, out type))
             {
                 // Loads from constant addresses must be optimized, because this pattern is used to copy data from
                 // temporary variables into call frames; we can't generate a call to "load_***" in the middle of
@@ -784,7 +784,7 @@ partial class Compiler
 
                 EmitLoad(addr, type, dest, cont);
             }
-            else if ((functionName == Tag.StoreU8 || functionName == Tag.StoreU16) && EvaluateConstantExpression(args[0], out addr, out type))
+            else if ((functionName == Tag.StoreU8 || functionName == Tag.StoreU16) && args[0].Match(Tag.Int, out addr, out type))
             {
                 // This case is not essential, but generates better code.
 
@@ -833,7 +833,7 @@ partial class Compiler
                     int n;
                     CType ignored;
                     Expr simpleArg;
-                    if (EvaluateConstantExpression(arg, out n, out ignored))
+                    if (arg.Match(Tag.Int, out n, out ignored))
                     {
                         simpleArg = Expr.Make(Tag.Int, n, argType);
                     }
@@ -996,21 +996,6 @@ partial class Compiler
         {
             Program.UnhandledCase();
         }
-    }
-
-    // Return true if the expression was constant, and therefore able to be evaluated.
-    bool EvaluateConstantExpression(Expr e, out int value, out CType type)
-    {
-        // TODO: Evaluate more complex constant expressions, too.
-        // TODO: Should this be partly or entirely replaced by a constant-folding pass?
-        if (e.Match(Tag.Int, out value, out type))
-        {
-            return true;
-        }
-
-        value = 0;
-        type = null;
-        return false;
     }
 
     void EmitLoadImmediate(int imm, CType type, int dest, Continuation cont)
