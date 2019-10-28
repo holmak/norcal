@@ -7,12 +7,12 @@ using System.Threading.Tasks;
 
 partial class Compiler
 {
-    List<byte> Prg = new List<byte>();
-    List<byte> Chr = new List<byte>();
-    int PrgNext => Prg.Count;
-    List<string> Comments = new List<string>();
+    List<Expr> Assembly = new List<Expr>();
 
+    // PRG must be exactly 32k, and CHR must be exactly 8k.
+    static readonly int ChrRomSize = 0x2000;
     static readonly int PrgRomBase = 0x8000;
+    static readonly int PrgRomSize = 0x8000;
 
     // Documented at http://wiki.nesdev.com/w/index.php/INES
     static readonly byte[] Header = new byte[16]
@@ -25,113 +25,227 @@ partial class Compiler
         0x00, 0x00,
     };
 
-    void Append(byte b)
+    void Emit(params object[] args)
     {
-        if (PrgNext >= 0x8000) Program.Error("program size limit exceeded");
-        Prg.Add(b);
+        Expr e = Expr.Make(args);
+        Assembly.Add(e);
     }
 
-    void Append(Opcode op) => Append((byte)op);
-
-    void Emit(Opcode op)
+    void EmitComment(string message)
     {
-        Append(op);
+        Emit(Asm.Comment, message);
     }
 
-    void Emit_U8(Opcode op, int arg)
+    static readonly string[] ShortJumpInstructions = new string[]
     {
-        // TODO: Verify that "arg" is in range.
-        Append(op);
-        Append((byte)arg);
-    }
+        "BCC",
+        "BCS",
+        "BEQ",
+        "BMI",
+        "BNE",
+        "BPL",
+        "BVC",
+        "BVS",
+    };
 
-    void Emit_U16(Opcode op, int arg)
+    static readonly string[] LongJumpInstructions = new string[]
     {
-        // TODO: Verify that "arg" is in range.
-        Append(op);
-        Append((byte)arg);
-        Append((byte)(arg >> 8));
-    }
+        "JMP",
+        "JSR",
+    };
 
-    void EmitComment(string comment)
-    {
-        Comments.Add(string.Format("{0:X4}    {1}", (ushort)PrgNext, comment));
-    }
-
-    void EmitFix_S8(int address, int target)
-    {
-        int romOffset = address - PrgRomBase;
-        if (romOffset < 0 || romOffset >= PrgNext) Program.Panic("fixup address is out of bounds");
-        int offset = target - address - 1;
-        if (offset < sbyte.MinValue || offset > sbyte.MaxValue) Program.Panic("branch distance is too far");
-        Prg[romOffset] = (byte)offset;
-    }
-
-    void EmitFix_U16(int address, int target)
-    {
-        int romOffset = address - PrgRomBase;
-        if (romOffset < 0 || romOffset + 1 >= PrgNext) Program.Panic("fixup address is out of bounds");
-        Prg[romOffset] = LowByte(target);
-        Prg[romOffset + 1] = HighByte(target);
-    }
-
-    int GetCurrentCodeAddress()
-    {
-        return PrgRomBase + PrgNext;
-    }
-
-    public void WriteImage(string filename)
+    public void Assemble(string outputFilename)
     {
         // TODO: Use a specified CHR ROM input file.
+        byte[] chr = new byte[ChrRomSize];
+
+        // First pass: Calculate label values.
+        Dictionary<string, int> labels = new Dictionary<string, int>();
+        RunPass(
+            Assembly,
+            (label, address) =>
+            {
+                // TODO: Make sure the address is in the allowed range.
+                labels[label] = address;
+            },
+            (label, baseAddress) => 0);
+
+        // Second pass: Generate machine code.
+        List<byte> prg = RunPass(
+            Assembly,
+            (label, address) => { /* ignored */ },
+            (label, baseAddress) =>
+            {
+                int address;
+                if (labels.TryGetValue(label, out address)) return address - baseAddress;
+                Program.Panic("assembler: label not defined: {0}", label);
+                return 0;
+            });
+
         // TODO: Make sure that the PRG ROM size limit isn't exceeded. It must not overwrite the vector table.
+        if (prg.Count != PrgRomSize) Program.Error("assembler: program has wrong length");
 
-        // PRG must be exactly 32k, and CHR must be exactly 8k.
-        PadList(Prg, 32 * 1024);
-        PadList(Chr, 8 * 1024);
-
-        // Interrupts: nmi, reset, irq
-        int nmi = FindVectorFunction("nmi");
-        int reset = FindVectorFunction("reset");
-        int brk = FindVectorFunction("brk");
-        Prg[0x7FFA] = LowByte(nmi);
-        Prg[0x7FFB] = HighByte(nmi);
-        Prg[0x7FFC] = LowByte(reset);
-        Prg[0x7FFD] = HighByte(reset);
-        Prg[0x7FFE] = LowByte(brk);
-        Prg[0x7FFF] = HighByte(brk);
-
-        using (BinaryWriter w = new BinaryWriter(new FileStream(filename, FileMode.Create)))
+        using (BinaryWriter w = new BinaryWriter(new FileStream(outputFilename, FileMode.Create)))
         {
             w.Write(Header);
-            w.Write(Prg.ToArray());
-            w.Write(Chr.ToArray());
+            w.Write(prg.ToArray());
+            w.Write(chr);
         }
-
-        // Write the comment file:
-        Program.WriteDebugFile("comments.txt", string.Join("", Comments.Select(x => x + "\n")));
     }
 
-    void PadList(List<byte> list, int size)
+    enum LabelType
     {
-        if (list.Count > size) Program.Panic("ROM is too large");
-        while (list.Count < size) list.Add(0);
+        Relative,
+        Absolute,
     }
 
-    int FindVectorFunction(string name)
+    static List<byte> RunPass(List<Expr> input, Action<string, int> defineLabel, Func<string, int, int> findLabel)
     {
-        CFunctionInfo info;
-        if (Functions.TryGetValue(name, out info))
+        List<byte> prg = new List<byte>();
+
+        foreach (Expr e in input)
         {
-            // Vector functions must be functions that take no arguments and return nothing.
-            if (info.ParameterTypes.Length != 0) Program.Error("vectors cannot take arguments");
-            if (info.ReturnType != CType.Void) Program.Error("vectors cannot return a value");
-            if (!info.Address.HasValue) Program.Error("vector declared but not defined");
-            return info.Address.Value;
+            string label;
+            int skipTarget;
+
+            if (e.MatchTag(Asm.Comment))
+            {
+                // Ignore.
+            }
+            else if (e.Match(Asm.Function, out label) || e.Match(Asm.Label, out label))
+            {
+                defineLabel(label, PrgRomBase + prg.Count);
+            }
+            else if (e.Match(Asm.SkipTo, out skipTarget))
+            {
+                skipTarget -= PrgRomBase;
+
+                // Pad out the code until reaching the target address:
+                if (skipTarget > ushort.MaxValue) Program.Panic("assembler: skip address is too large");
+                if (prg.Count > skipTarget) Program.Panic("assembler: cannot skip backward");
+                while (prg.Count < skipTarget)
+                {
+                    prg.Add(0);
+                }
+            }
+            else if (e.Match(Asm.Word, out label))
+            {
+                int address = findLabel(label, 0);
+                prg.Add(LowByte(address));
+                prg.Add(HighByte(address));
+            }
+            else
+            {
+                string mnemonic = "???";
+                int operand = 0;
+                string modifier;
+                int operandFormat = AsmInfo.INV;
+                if (e.Match(out mnemonic))
+                {
+                    operandFormat = AsmInfo.IMP;
+                }
+                else if (e.Match(out mnemonic, out operand))
+                {
+                    operandFormat = AsmInfo.ABS;
+                }
+                else if (e.Match(out mnemonic, out operand, out modifier))
+                {
+                    if (modifier == Asm.Immediate) operandFormat = AsmInfo.IMM;
+                    else if (modifier == Asm.IndirectY) operandFormat = AsmInfo.ZYI;
+                    else Program.Panic("unknown assembly modifier: {0}", modifier);
+                }
+                else if (e.Match(out mnemonic, out label))
+                {
+                    int baseAddress;
+                    if (ShortJumpInstructions.Contains(mnemonic))
+                    {
+                        operandFormat = AsmInfo.REL;
+                        // Relative jumps are always relative to the address of the *following* instruction:
+                        baseAddress = PrgRomBase + prg.Count + 2;
+                    }
+                    else if (LongJumpInstructions.Contains(mnemonic))
+                    {
+                        operandFormat = AsmInfo.ABS;
+                        baseAddress = 0;
+                    }
+                    else
+                    {
+                        operandFormat = AsmInfo.INV;
+                        baseAddress = 0;
+                    }
+                    operand = findLabel(label, baseAddress);
+                }
+                else
+                {
+                    Program.Panic("invalid instruction format: {0}", e.Show());
+                }
+
+                int formalSize = AsmInfo.OperandSizes[operandFormat];
+
+                int actualSize;
+                if (operandFormat == AsmInfo.IMP) actualSize = 0;
+                else if (operand >= sbyte.MinValue && operand <= byte.MaxValue) actualSize = 1;
+                else if (operand >= short.MinValue && operand <= ushort.MaxValue) actualSize = 2;
+                else actualSize = 99;
+
+                if (actualSize > formalSize)
+                {
+                    Program.Panic("assembly operand is too large: {0}", e.Show());
+                }
+
+                // Search for a matching instruction:
+                List<byte> candidates = new List<byte>();
+                for (int opcode = 0; opcode < 256; opcode++)
+                {
+                    if (mnemonic == AsmInfo.Mnemonics[opcode] &&
+                        operandFormat == AsmInfo.OperandFormats[opcode])
+                    {
+                        candidates.Add((byte)opcode);
+                    }
+                }
+
+                if (candidates.Count == 1)
+                {
+                    prg.Add(candidates[0]);
+
+                    if (formalSize == 1)
+                    {
+                        prg.Add(LowByte(operand));
+                    }
+                    else if (formalSize == 2)
+                    {
+                        prg.Add(LowByte(operand));
+                        prg.Add(HighByte(operand));
+                    }
+                }
+                else
+                {
+                    Program.Panic("invalid or ambiguous instruction: {0}", e.Show());
+                }
+            }
         }
-        else
-        {
-            // TODO: Decide what to do if a vector-handling function is missing.
-            return 0;
-        }
+
+        return prg;
     }
+}
+
+public class Instruction
+{
+    public byte Opcode;
+    public int Operand;
+    public int OperandFormat;
+}
+
+public static class Asm
+{
+    // Directives:
+    public static readonly string Comment = "comment";
+    public static readonly string Function = "function";
+    public static readonly string Label = "label";
+    public static readonly string SkipTo = "skip_to";
+    public static readonly string Word = "word";
+
+    // Instruction modifiers:
+    public static readonly string Immediate = "immediate";
+    public static readonly string IndirectY = "indirect_y";
 }

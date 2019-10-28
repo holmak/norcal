@@ -11,27 +11,15 @@ static class Disassembler
     public static void Disassemble(string programPath)
     {
         Queue<byte> program = new Queue<byte>(File.ReadAllBytes(programPath));
-        string commentsPath = Path.Combine(Program.DebugOutputPath, "comments.txt");
-        Queue<string> comments = new Queue<string>(File.ReadAllLines(commentsPath));
         StringBuilder dis = new StringBuilder();
 
         // Skip the iNES header.
         for (int i = 0; i < 16; i++) program.Dequeue();
 
-        int commentAddress;
-        string comment;
-        ReadNextComment(comments, out commentAddress, out comment);
-
         // Read program bytes:
         const int CodeBaseAddress = 0x8000;
         for (int addr = 0; addr < 0x10000; addr++)
         {
-            while (addr >= commentAddress)
-            {
-                dis.AppendFormat("; {0}\n", comment);
-                ReadNextComment(comments, out commentAddress, out comment);
-            }
-
             byte opcode;
             if (!TryDequeue(program, out opcode))
             {
@@ -43,9 +31,9 @@ static class Disassembler
             // TODO: This assumes that BRK instructions won't occur in the middle of the program.
             if (opcode == 0x00) break;
 
-            string mnem = Mnemonics[opcode];
-            int format = OperandFormats[opcode];
-            int operandSize = OperandSizes[format];
+            string mnem = AsmInfo.Mnemonics[opcode];
+            int format = AsmInfo.OperandFormats[opcode];
+            int operandSize = AsmInfo.OperandSizes[format];
 
             dis.AppendFormat("{0:X4}    {1:X2}", (ushort)(CodeBaseAddress + addr), opcode);
 
@@ -62,12 +50,12 @@ static class Disassembler
                 }
                 else
                 {
-                    dis.Append( "   ");
+                    dis.Append("   ");
                 }
             }
 
             dis.AppendFormat("    {0}", mnem);
-            dis.AppendFormat(OperandFormatStrings[format], operand);
+            dis.AppendFormat(AsmInfo.OperandFormatStrings[format], operand);
             dis.Append("\n");
         }
 
@@ -87,29 +75,13 @@ static class Disassembler
             return false;
         }
     }
+}
 
-    static void ReadNextComment(Queue<string> comments, out int address, out string text)
-    {
-        if (comments.Count > 0)
-        {
-            string comment = comments.Dequeue();
-            string[] parts = comment.Split(new char[] { ' ', '\t' }, 2, StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length == 2 &&
-                int.TryParse(parts[0], NumberStyles.HexNumber, null, out address) &&
-                parts[1].Trim().Length > 0)
-            {
-                text = parts[1].Trim();
-                return;
-            }
-        }
-
-        // Return an invalid comment that won't be printed:
-        address = int.MaxValue;
-        text = null;
-    }
-
+public static class AsmInfo
+{
     // "???" indicates an invalid opcode.
-    static string[] Mnemonics = {
+    public static string[] Mnemonics = new string[]
+    {
         "BRK", "ORA", "???", "???", "???", "ORA", "ASL", "???", "PHP", "ORA", "ASL", "???", "???", "ORA", "ASL", "???",
         "BPL", "ORA", "???", "???", "???", "ORA", "ASL", "???", "CLC", "ORA", "???", "???", "???", "ORA", "ASL", "???",
         "JSR", "AND", "???", "???", "BIT", "AND", "ROL", "???", "PLP", "AND", "ROL", "???", "BIT", "AND", "ROL", "???",
@@ -129,27 +101,28 @@ static class Disassembler
     };
 
     // Operand formats:
-    const int INV = 0;  // unknown
-    const int IMP = 1;  // none/implicit
-    const int IMM = 2;  // immediate
-    const int ZPG = 3;  // zero page
-    const int ABS = 4;  // absolute (two bytes)
-    const int ZPX = 5;  // zp,X
-    const int ZPY = 6;  // zp,Y
-    const int ABX = 7;  // abs,X
-    const int ABY = 8;  // abs,Y
-    const int ZXI = 9;  // (zp,X)
-    const int ZYI = 10; // (zp),Y
-    const int REL = 11; // relative (branch)
+    public const int INV = 0;  // invalid instruction
+    public const int IMP = 1;  // none/implicit
+    public const int IMM = 2;  // immediate
+    public const int ZPG = 3;  // zero page
+    public const int ABS = 4;  // absolute (two bytes)
+    public const int ZPX = 5;  // zp,X
+    public const int ZPY = 6;  // zp,Y
+    public const int ABX = 7;  // abs,X
+    public const int ABY = 8;  // abs,Y
+    public const int ZXI = 9;  // (zp,X)
+    public const int ZYI = 10; // (zp),Y
+    public const int REL = 11; // relative (branch)
+    public const int ABI = 12;  // absolute indirect (two bytes)
 
-    static byte[] OperandFormats = {
+    public static byte[] OperandFormats = {
         IMM, ZXI, INV, INV, INV, ZPG, ZPG, INV, IMP, IMM, IMP, INV, INV, ABS, ABS, INV,
         REL, ZYI, INV, INV, INV, ZPX, ZPX, INV, IMP, ABY, INV, INV, INV, ABX, ABX, INV,
         ABS, ZXI, INV, INV, ZPG, ZPG, ZPG, INV, IMP, IMM, IMP, INV, ABS, ABS, ABS, INV,
         REL, ZYI, INV, INV, INV, ZPX, ZPX, INV, IMP, ABY, INV, INV, INV, ABX, ABX, INV,
         IMP, ZXI, INV, INV, INV, ZPG, ZPG, INV, IMP, IMM, IMP, INV, ABS, ABS, ABS, INV,
         REL, ZYI, INV, INV, INV, ZPX, ZPX, INV, IMP, ABY, INV, INV, INV, ABX, ABX, INV,
-        IMP, ZXI, INV, INV, INV, ZPG, ZPG, INV, IMP, IMM, IMP, INV, ABS, ABS, ABS, INV,
+        IMP, ZXI, INV, INV, INV, ZPG, ZPG, INV, IMP, IMM, IMP, INV, ABI, ABS, ABS, INV,
         REL, ZYI, INV, INV, INV, ZPX, ZPX, INV, IMP, ABY, INV, INV, INV, ABX, ABX, INV,
         REL, ZXI, INV, INV, ZPG, ZPG, ZPG, INV, IMP, INV, IMP, INV, ABS, ABS, ABS, INV,
         REL, ZYI, INV, INV, ZPX, ZPX, ZPX, INV, IMP, ABY, IMP, INV, INV, ABX, INV, INV,
@@ -162,7 +135,7 @@ static class Disassembler
     };
 
     // Operand size in bytes; between zero and two. Indexed by OperandFormat.
-    static byte[] OperandSizes = {
+    public static byte[] OperandSizes = {
         0,
         0,
         1,
@@ -175,10 +148,11 @@ static class Disassembler
         1,
         1,
         1,
+        2,
     };
 
     // Indexed by OperandFormat.
-    static string[] OperandFormatStrings = {
+    public static string[] OperandFormatStrings = {
         " ???",
         "",
         " #${0:X2}",
@@ -191,5 +165,6 @@ static class Disassembler
         " (${0:X2},X)",
         " (${0:X2}),Y",
         " {0:X2}",
+        " (${0:X4})",
     };
 }

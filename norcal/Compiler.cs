@@ -11,7 +11,6 @@ partial class Compiler
     int RamNext = RamStart;
     int NextLabelNumber = 0;
     Dictionary<string, CFunctionInfo> Functions = new Dictionary<string, CFunctionInfo>();
-    List<Fixup> Fixups = new List<Fixup>();
     Dictionary<string, CStructInfo> StructTypes = new Dictionary<string, CStructInfo>();
 
     static readonly int RamStart = 0x300;
@@ -59,6 +58,12 @@ partial class Compiler
         DeclareFunction(Tag.BitwiseNotU8, new[] { CType.UInt8 }, CType.UInt8, BuiltinParamAddresses(1));
         DeclareFunction(Tag.BitwiseNotU16, new[] { CType.UInt16 }, CType.UInt16, BuiltinParamAddresses(1));
 
+        // HACK: If you don't define an interrupt handler, it will target address zero.
+        // TODO: What should the compiler do if an interrupt handler isn't defined? Is it an error?
+        Emit(Asm.Label, "nmi");
+        Emit(Asm.Label, "reset");
+        Emit(Asm.Label, "brk");
+
         // Pass: Declare global symbols and replace symbols with addresses
         program = ApplyFirstPass(program);
 
@@ -86,32 +91,39 @@ partial class Compiler
         {
             if (decl.Tag == DeclarationTag.Function)
             {
-                // Record the address of this function's code:
-                CFunctionInfo functionInfo = GetFunctionInfo(decl.Name);
-                functionInfo.Address = GetCurrentCodeAddress();
-
+                Emit(Asm.Function, decl.Name);
                 CompileExpression(decl.Body, DestinationDiscard, Continuation.Fallthrough);
-                Emit(Opcode.RTS);
+                Emit("RTS");
             }
         }
 
-        // Fix references to functions:
-        foreach (Fixup fixup in Fixups)
+        // TODO: Make sure interrupt-handling functions have the right type signature and are defined.
+
+        // Put the interrupt vector table at the end of ROM:
+        Emit(Asm.SkipTo, 0xFFFA);
+        Emit(Asm.Word, "nmi");
+        Emit(Asm.Word, "reset");
+        Emit(Asm.Word, "brk");
+
+        // Show the final assembly code:
+        StringBuilder sb = new StringBuilder();
+        foreach (Expr e in Assembly)
         {
-            if (fixup.Tag != FixupTag.None)
-            {
-                CFunctionInfo functionInfo = GetFunctionInfo(fixup.Target);
-                if (!functionInfo.Address.HasValue) Program.Error("function declared but never defined: " + fixup.Target);
-                int target = functionInfo.Address.Value;
+            string line;
 
-                if (fixup.Tag != FixupTag.Absolute) Program.Panic("function fixups should always be absolute");
-                EmitFix_U16(fixup.Location, target);
-                fixup.Tag = FixupTag.None;
-            }
+            string mnemonic, text;
+            int operand;
+            if (e.Match(Asm.Comment, out text)) line = "\t; " + text;
+            else if (e.Match(Asm.Label, out text)) line = text + ":";
+            else if (e.Match(Asm.Function, out text)) line = string.Format("function {0}:", text);
+            else if (e.Match(out mnemonic)) line = string.Format("\t{0}", mnemonic);
+            else if (e.Match(out mnemonic, out operand)) line = string.Format("\t{0} ${1:X}", mnemonic, operand);
+            else if (e.Match(out mnemonic, out text)) line = string.Format("\t{0} {1}", mnemonic, text);
+            else line = '\t' + e.Show();
+
+            sb.AppendLine(line);
         }
-
-        // All fixups should now be fixed.
-        if (Fixups.Any(x => x.Tag != FixupTag.None)) Program.Panic("some fixups remain");
+        Program.WritePassOutputToFile("assembly", sb.ToString());
     }
 
     List<Declaration> ApplyFirstPass(List<Declaration> program)
@@ -725,13 +737,13 @@ partial class Compiler
                 // If the condition was true, execute the clause body:
                 CompileExpression(then, dest, cont);
                 // After executing the body of a clause, skip the rest of the clauses:
-                EmitJump(end);
+                Emit("JMP", end);
                 EmitComment("end of switch clause");
-                FixReferencesTo(nextClause);
+                Emit(Asm.Label, nextClause);
             }
 
             EmitComment("end of switch");
-            FixReferencesTo(end);
+            Emit(Asm.Label, end);
         }
         else if (e.Match(Tag.For, out init, out test, out induction, out body))
         {
@@ -740,13 +752,14 @@ partial class Compiler
             EmitComment("for loop (prologue)");
             CompileExpression(init, DestinationDiscard, Continuation.Fallthrough);
             EmitComment("for loop");
-            int top = GetCurrentCodeAddress();
+            string top = MakeUniqueLabel();
+            Emit(Asm.Label, top);
             CompileExpression(test, DestinationDiscard, new Continuation(JumpCondition.IfFalse, bottom));
             CompileExpression(body, DestinationDiscard, Continuation.Fallthrough);
             CompileExpression(induction, DestinationDiscard, Continuation.Fallthrough);
-            EmitJump(top);
+            Emit("JMP", top);
             EmitComment("for loop (end)");
-            FixReferencesTo(bottom);
+            Emit(Asm.Label, bottom);
 
             if (cont.When != JumpCondition.Never) Program.NYI();
         }
@@ -754,7 +767,7 @@ partial class Compiler
         {
             EmitComment("return");
             CompileExpression(subexpr, DestinationAcc, Continuation.Fallthrough);
-            Emit(Opcode.RTS);
+            Emit("RTS");
         }
         else if (e.Match(Tag.Cast, out type, out subexpr))
         {
@@ -848,125 +861,128 @@ partial class Compiler
                 {
                     if (args.Length != 1) Program.Panic("wrong number of arguments to unary operator");
                     // TODO: This would be more efficient if it loaded the high byte first.
-                    Emit_U8(Opcode.LDY_IMM, 0);
-                    Emit_U8(Opcode.LDA_ZP_Y_IND, T0);
-                    Emit_U8(Opcode.STA_ZP, T2);
-                    Emit(Opcode.INY);
-                    Emit_U8(Opcode.LDA_ZP_Y_IND, T0);
-                    Emit(Opcode.TAX);
-                    Emit_U8(Opcode.LDA_ZP, T2);
+                    Emit("LDY", 0, Asm.Immediate);
+                    Emit("LDA", T0, Asm.IndirectY);
+                    Emit("STA", T2);
+                    Emit("INY");
+                    Emit("LDA", T0, Asm.IndirectY);
+                    Emit("TAX");
+                    Emit("LDA", T2);
                 }
                 else if (functionName == Tag.LoadU8)
                 {
                     if (args.Length != 1) Program.Panic("wrong number of arguments to unary operator");
-                    Emit_U8(Opcode.LDY_IMM, 0);
-                    Emit_U8(Opcode.LDA_ZP_Y_IND, T0);
+                    Emit("LDY", 0, Asm.Immediate);
+                    Emit("LDA", T0, Asm.IndirectY);
                 }
                 else if (functionName == Tag.AddU8)
                 {
                     if (args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
-                    Emit(Opcode.CLC);
-                    Emit_U8(Opcode.LDA_ZP, T0);
-                    Emit_U8(Opcode.ADC_ZP, T2);
+                    Emit("CLC");
+                    Emit("LDA", T0);
+                    Emit("ADC", T2);
                 }
                 else if (functionName == Tag.AddU16 || functionName == Tag.AddU8Ptr)
                 {
                     if (args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
-                    Emit(Opcode.CLC);
-                    Emit_U8(Opcode.LDA_ZP, T0);
-                    Emit_U8(Opcode.ADC_ZP, T2);
-                    Emit_U8(Opcode.STA_ZP, T0);
-                    Emit_U8(Opcode.LDA_ZP, T1);
-                    Emit_U8(Opcode.ADC_ZP, T3);
-                    Emit(Opcode.TAX);
-                    Emit_U8(Opcode.LDA_ZP, T0);
+                    Emit("CLC");
+                    Emit("LDA", T0);
+                    Emit("ADC", T2);
+                    Emit("STA", T0);
+                    Emit("LDA", T1);
+                    Emit("ADC", T3);
+                    Emit("TAX");
+                    Emit("LDA", T0);
                 }
                 else if (functionName == Tag.SubtractU8)
                 {
                     if (args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
-                    Emit(Opcode.SEC);
-                    Emit_U8(Opcode.LDA_ZP, T0);
-                    Emit_U8(Opcode.SBC_ZP, T2);
+                    Emit("SEC");
+                    Emit("LDA", T0);
+                    Emit("SBC", T2);
                 }
                 else if (functionName == Tag.SubtractU16)
                 {
                     if (args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
-                    Emit(Opcode.SEC);
-                    Emit_U8(Opcode.LDA_ZP, T0);
-                    Emit_U8(Opcode.SBC_ZP, T2);
-                    Emit_U8(Opcode.STA_ZP, T0);
-                    Emit_U8(Opcode.LDA_ZP, T1);
-                    Emit_U8(Opcode.SBC_ZP, T3);
-                    Emit(Opcode.TAX);
-                    Emit_U8(Opcode.LDA_ZP, T0);
+                    Emit("SEC");
+                    Emit("LDA", T0);
+                    Emit("SBC", T2);
+                    Emit("STA", T0);
+                    Emit("LDA", T1);
+                    Emit("SBC", T3);
+                    Emit("TAX");
+                    Emit("LDA", T0);
                 }
                 else if (functionName == Tag.LessThanU8)
                 {
                     if (args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
-                    Emit(Opcode.SEC);
-                    Emit_U8(Opcode.LDA_ZP, T0);
-                    Emit_U8(Opcode.CMP_ZP, T2);
+                    Emit("SEC");
+                    Emit("LDA", T0);
+                    Emit("CMP", T2);
                     // The carry flag will be *clear* if T0 < T2.
                     // Load the corresponding boolean value:
-                    Emit_U8(Opcode.LDA_IMM, 0);
-                    Emit_U8(Opcode.BCS, 2);
-                    Emit_U8(Opcode.LDA_IMM, 1);
+                    Emit("LDA", 0, Asm.Immediate);
+                    string skip = MakeUniqueLabel();
+                    Emit("BCS", skip);
+                    Emit("LDA", 1, Asm.Immediate);
+                    Emit(Asm.Label, skip);
                 }
                 else if (functionName == Tag.GreaterThanU8)
                 {
                     if (args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
-                    Emit(Opcode.SEC);
-                    Emit_U8(Opcode.LDA_ZP, T2);
-                    Emit_U8(Opcode.CMP_ZP, T0);
+                    Emit("SEC");
+                    Emit("LDA", T2);
+                    Emit("CMP", T0);
                     // The carry flag will be *clear* if T0 > T2.
                     // Load the corresponding boolean value:
-                    Emit_U8(Opcode.LDA_IMM, 0);
-                    Emit_U8(Opcode.BCS, 2);
-                    Emit_U8(Opcode.LDA_IMM, 1);
+                    Emit("LDA", 0, Asm.Immediate);
+                    string skip = MakeUniqueLabel();
+                    Emit("BCS", skip);
+                    Emit("LDA", 1, Asm.Immediate);
+                    Emit(Asm.Label, skip);
                 }
                 else if (functionName == Tag.StoreU16)
                 {
                     if (args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
-                    Emit_U8(Opcode.LDY_IMM, 0);
-                    Emit_U8(Opcode.LDA_ZP, T2);
-                    Emit_U8(Opcode.STA_ZP_Y_IND, T0);
-                    Emit(Opcode.INY);
-                    Emit_U8(Opcode.LDA_ZP, T3);
-                    Emit_U8(Opcode.STA_ZP_Y_IND, T0);
+                    Emit("LDY", 0, Asm.Immediate);
+                    Emit("LDA", T2);
+                    Emit("STA", T0, Asm.IndirectY);
+                    Emit("INY");
+                    Emit("LDA", T3);
+                    Emit("STA", T0, Asm.IndirectY);
                 }
                 else if (functionName == Tag.StoreU8)
                 {
                     if (args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
-                    Emit_U8(Opcode.LDY_IMM, 0);
-                    Emit_U8(Opcode.LDA_ZP, T2);
-                    Emit_U8(Opcode.STA_ZP_Y_IND, T0);
+                    Emit("LDY", 0, Asm.Immediate);
+                    Emit("LDA", T2);
+                    Emit("STA", T0, Asm.IndirectY);
                 }
                 else if (functionName == Tag.BoolFromU16)
                 {
                     if (args.Length != 1) Program.Panic("wrong number of arguments to unary operator");
-                    Emit_U8(Opcode.LDA_ZP, T0);
-                    Emit_U8(Opcode.ORA_ZP, T1);
+                    Emit("LDA", T0);
+                    Emit("ORA", T1);
                 }
                 else if (functionName == Tag.BitwiseAndU8)
                 {
                     if (args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
-                    Emit_U8(Opcode.LDA_ZP, T0);
-                    Emit_U8(Opcode.AND_ZP, T2);
+                    Emit("LDA", T0);
+                    Emit("AND", T2);
                 }
                 else if (functionName == Tag.BitwiseAndU16)
                 {
                     if (args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
-                    Emit_U8(Opcode.LDA_ZP, T1);
-                    Emit_U8(Opcode.AND_ZP, T3);
-                    Emit(Opcode.TAX);
-                    Emit_U8(Opcode.LDA_ZP, T0);
-                    Emit_U8(Opcode.AND_ZP, T2);
+                    Emit("LDA", T1);
+                    Emit("AND", T3);
+                    Emit("TAX");
+                    Emit("LDA", T0);
+                    Emit("AND", T2);
                 }
                 else
                 {
                     // JSR to the function:
-                    Emit_U16(Opcode.JSR, 0);
-                    Fixups.Add(new Fixup(FixupTag.Absolute, GetCurrentCodeAddress() - 2, functionName));
+                    Emit("JSR", functionName);
                 }
 
                 // The return value is placed in the accumulator.
@@ -997,18 +1013,6 @@ partial class Compiler
         return false;
     }
 
-    void EmitJump(int target)
-    {
-        Emit_U16(Opcode.JMP_ABS, target);
-    }
-
-    void EmitJump(string label)
-    {
-        Emit_U16(Opcode.JMP_ABS, 0);
-        int fixupAddress = GetCurrentCodeAddress() - 2;
-        Fixups.Add(new Fixup(FixupTag.Absolute, fixupAddress, label));
-    }
-
     void EmitLoadImmediate(int imm, CType type, int dest, Continuation cont)
     {
         int width = SizeOf(type);
@@ -1018,24 +1022,24 @@ partial class Compiler
         }
         else if (dest == DestinationAcc)
         {
-            Emit_U8(Opcode.LDA_IMM, LowByte(imm));
-            if (width == 2) Emit_U8(Opcode.LDX_IMM, HighByte(imm));
+            Emit("LDA", (int)LowByte(imm), Asm.Immediate);
+            if (width == 2) Emit("LDX", (int)HighByte(imm), Asm.Immediate);
         }
         else
         {
-            Emit_U8(Opcode.LDA_IMM, LowByte(imm));
-            Emit_U16(Opcode.STA_ABS, dest);
+            Emit("LDA", (int)LowByte(imm), Asm.Immediate);
+            Emit("STA", dest);
             if (width == 2)
             {
-                Emit_U8(Opcode.LDX_IMM, HighByte(imm));
-                Emit_U16(Opcode.STX_ABS, dest + 1);
+                Emit("LDX", (int)HighByte(imm), Asm.Immediate);
+                Emit("STX", dest + 1);
             }
         }
 
         if ((cont.When == JumpCondition.IfTrue && imm != 0) ||
             (cont.When == JumpCondition.IfFalse && imm == 0))
         {
-            EmitJump(cont.Target);
+            Emit("JMP", cont.Target);
         }
     }
 
@@ -1048,8 +1052,8 @@ partial class Compiler
         else
         {
             int width = SizeOf(type);
-            Emit_U16(Opcode.STA_ABS, dest);
-            if (width == 2) Emit_U16(Opcode.STX_ABS, dest + 1);
+            Emit("STA", dest);
+            if (width == 2) Emit("STX", dest + 1);
         }
     }
 
@@ -1059,11 +1063,9 @@ partial class Compiler
         {
             // TODO: Values used as branch conditions must have a single-byte type, for easy comparison against zero.
             EmitComment("branch on ACC");
-            Emit_U8(Opcode.ORA_IMM, 0);
-            Opcode op = (cont.When == JumpCondition.IfTrue) ? Opcode.BNE : Opcode.BEQ;
-            Emit_U8(op, 0);
-            int fixupAddress = GetCurrentCodeAddress() - 1;
-            Fixups.Add(new Fixup(FixupTag.Relative, fixupAddress, cont.Target));
+            Emit("ORA", 0, Asm.Immediate);
+            string op = (cont.When == JumpCondition.IfTrue) ? "BNE" : "BEQ";
+            Emit(op, cont.Target);
         }
     }
 
@@ -1071,32 +1073,10 @@ partial class Compiler
     {
         int width = SizeOf(type);
         // Even if the value is unused, always read the address; it might be a hardware register.
-        Emit_U16(Opcode.LDA_ABS, address);
-        if (width == 2) Emit_U16(Opcode.LDX_ABS, address + 1);
+        Emit("LDA", address);
+        if (width == 2) Emit("LDX", address + 1);
         EmitStoreAcc(type, dest);
         EmitBranchOnAcc(cont);
-    }
-
-    // Fix up jumps that forward-referenced a label:
-    void FixReferencesTo(string label)
-    {
-        int target = GetCurrentCodeAddress();
-        foreach (Fixup fixup in Fixups)
-        {
-            if (fixup.Target == label)
-            {
-                if (fixup.Tag == FixupTag.Relative)
-                {
-                    EmitFix_S8(fixup.Location, target);
-                    fixup.Tag = FixupTag.None;
-                }
-                else if (fixup.Tag == FixupTag.Absolute)
-                {
-                    EmitFix_U16(fixup.Location, target);
-                    fixup.Tag = FixupTag.None;
-                }
-            }
-        }
     }
 
     void DefineVariable(LexicalScope scope, CType type, string name)
@@ -1110,12 +1090,12 @@ partial class Compiler
         return string.Format("@L{0}", NextLabelNumber++);
     }
 
-    byte LowByte(int n)
+    static byte LowByte(int n)
     {
         return (byte)(n & 0xFF);
     }
 
-    byte HighByte(int n)
+    static byte HighByte(int n)
     {
         return (byte)((n >> 8) & 0xFF);
     }
@@ -1176,7 +1156,6 @@ partial class Compiler
             ParameterTypes = paramTypes,
             ReturnType = returnType,
             ParameterAddresses = paramAddresses,
-            Address = Maybe.Nothing,
         };
     }
 
@@ -1292,27 +1271,6 @@ enum SymbolTag
     Variable,
 }
 
-class Fixup
-{
-    public FixupTag Tag;
-    public readonly int Location;
-    public readonly string Target;
-
-    public Fixup(FixupTag tag, int location, string target)
-    {
-        Tag = tag;
-        Location = location;
-        Target = target;
-    }
-}
-
-enum FixupTag
-{
-    None,
-    Relative,
-    Absolute,
-}
-
 // type Destination = Discard | Accumulator | AbsoluteAddress Int
 
 enum JumpCondition
@@ -1384,7 +1342,6 @@ partial class CFunctionInfo
     public CType[] ParameterTypes;
     public CType ReturnType;
     public int[] ParameterAddresses;
-    public Maybe<int> Address;
 }
 
 [DebuggerDisplay("{Show(),nq}")]

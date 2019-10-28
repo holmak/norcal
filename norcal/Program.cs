@@ -26,7 +26,7 @@ static class Program
 
         Compiler compiler = new Compiler();
         compiler.CompileProgram(program);
-        compiler.WriteImage(outputPath);
+        compiler.Assemble(outputPath);
 
         if (EnableDebugOutput)
         {
@@ -45,7 +45,12 @@ static class Program
 
     public static void WritePassOutputToFile(string passName, List<Declaration> program)
     {
-        WriteDebugFile(string.Format("pass{0}-{1}.txt", NextPassNumber, passName), ShowProgram(program));
+        WritePassOutputToFile(passName, ShowProgram(program));
+    }
+
+    public static void WritePassOutputToFile(string passName, string output)
+    {
+        WriteDebugFile(string.Format("pass{0}-{1}.txt", NextPassNumber, passName), output);
         NextPassNumber += 1;
     }
 
@@ -146,6 +151,20 @@ class Expr
         return (string)Args[0] == tag;
     }
 
+    public bool MatchAnyTag(out string tag)
+    {
+        if (Args.Length >= 1 && Args[0] is string)
+        {
+            tag = (string)Args[0];
+            return true;
+        }
+        else
+        {
+            tag = null;
+            return false;
+        }
+    }
+
     public bool Match(string tag)
     {
         if (Args.Length == 1 &&
@@ -154,6 +173,54 @@ class Expr
             return true;
         }
 
+        return false;
+    }
+
+    public bool Match<T0>(out T0 var0)
+    {
+        if (Args.Length == 1 &&
+            Args[0] is T0)
+        {
+            var0 = (T0)Args[0];
+            return true;
+        }
+
+        var0 = default(T0);
+        return false;
+    }
+
+    public bool Match<T0, T1>(out T0 var0, out T1 var1)
+    {
+        if (Args.Length == 2 &&
+            Args[0] is T0 &&
+            Args[1] is T1)
+        {
+            var0 = (T0)Args[0];
+            var1 = (T1)Args[1];
+            return true;
+        }
+
+        var0 = default(T0);
+        var1 = default(T1);
+        return false;
+    }
+
+    public bool Match<T0, T1, T2>(out T0 var0, out T1 var1, out T2 var2)
+    {
+        if (Args.Length == 3 &&
+            Args[0] is T0 &&
+            Args[1] is T1 &&
+            Args[2] is T2)
+        {
+            var0 = (T0)Args[0];
+            var1 = (T1)Args[1];
+            var2 = (T2)Args[2];
+            return true;
+        }
+
+        var0 = default(T0);
+        var1 = default(T1);
+        var2 = default(T2);
         return false;
     }
 
@@ -310,7 +377,7 @@ class Expr
             if (integer != null)
             {
                 int n = integer.Value;
-                tree[i] = n.ToString((n < 512) ? "G" : "X");
+                tree[i] = (n < 128) ? n.ToString() : "$" + n.ToString("X");
             }
             else if (name != null)
             {
@@ -444,49 +511,4 @@ static class Tag
     public static readonly string BitwiseXorU16 = "_rt_bitwise_xor_u16";
     public static readonly string BitwiseNotU8 = "_rt_bitwise_not_u8";
     public static readonly string BitwiseNotU16 = "_rt_bitwise_not_u16";
-}
-
-enum Opcode
-{
-    ORA_ZP       = 0x05,
-    ORA_IMM      = 0x09,
-    ORA_ABS      = 0x0D,
-    CLC          = 0x18,
-    JSR          = 0x20,
-    AND_ZP       = 0x25,
-    SEC          = 0x38,
-    EOR_ZP       = 0x45,
-    JMP_ABS      = 0x4C,
-    RTS          = 0x60,
-    ADC_ZP       = 0x65,
-    ADC_IMM      = 0x69,
-    ADC_ZP_X     = 0x75,
-    STA_ZP       = 0x85,
-    STX_ZP       = 0x86,
-    DEY          = 0x88,
-    STA_ABS      = 0x8D,
-    STX_ABS      = 0x8E,
-    BCC          = 0x90,
-    STA_ZP_Y_IND = 0x91,
-    STA_ZP_X     = 0x95,
-    LDY_IMM      = 0xA0,
-    LDA_ZP_X_IND = 0xA1,
-    LDX_IMM      = 0xA2,
-    LDA_ZP       = 0xA5,
-    LDA_IMM      = 0xA9,
-    TAX          = 0xAA,
-    LDA_ABS      = 0xAD,
-    LDX_ABS      = 0xAE,
-    BCS          = 0xB0,
-    LDA_ZP_Y_IND = 0xB1,
-    LDA_ZP_X     = 0xB5,
-    CMP_ZP       = 0xC5,
-    INY          = 0xC8,
-    DEX          = 0xCA,
-    BNE          = 0xD0,
-    SBC_ZP       = 0xE5,
-    INX          = 0xE8,
-    SBC_IMM      = 0xE9,
-    BEQ          = 0xF0,
-    SBC_ZP_X     = 0xF5,
 }
