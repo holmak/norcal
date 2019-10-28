@@ -466,6 +466,7 @@ void reset()
     uint8_t a = 4;
     uint8_t b = 5;
     *OUTB = a < b;
+    *STOP = 0;
 }
 
 @out 0
@@ -475,6 +476,7 @@ void reset()
     uint8_t a = 5;
     uint8_t b = 5;
     *OUTB = a < b;
+    *STOP = 0;
 }
 
 @out 0
@@ -484,6 +486,7 @@ void reset()
     uint8_t a = 6;
     uint8_t b = 5;
     *OUTB = a < b;
+    *STOP = 0;
 }
 
 @out 0
@@ -493,6 +496,7 @@ void reset()
     uint8_t a = 255;
     uint8_t b = 0;
     *OUTB = a < b;
+    *STOP = 0;
 }
 
 @ comparison: greater than
@@ -503,6 +507,7 @@ void reset()
     uint8_t a = 4;
     uint8_t b = 5;
     *OUTB = a > b;
+    *STOP = 0;
 }
 
 @out 0
@@ -512,6 +517,7 @@ void reset()
     uint8_t a = 5;
     uint8_t b = 5;
     *OUTB = a > b;
+    *STOP = 0;
 }
 
 @out 1
@@ -521,6 +527,7 @@ void reset()
     uint8_t a = 6;
     uint8_t b = 5;
     *OUTB = a > b;
+    *STOP = 0;
 }
 
 @out 0
@@ -530,6 +537,7 @@ void reset()
     uint8_t a = 0;
     uint8_t b = 255;
     *OUTB = a > b;
+    *STOP = 0;
 }
 
 @ bitwise operators
@@ -540,6 +548,7 @@ void reset()
     uint8_t a = 0xAB;
     uint8_t b = 0xF0;
     *OUTB = a & b;
+    *STOP = 0;
 }
 
 @out 0xA0C0
@@ -549,6 +558,7 @@ void reset()
     uint16_t a = 0xABCD;
     uint16_t b = 0xF0F0;
     *OUT = a & b;
+    *STOP = 0;
 }
 
 @out 0xAB
@@ -558,6 +568,7 @@ void reset()
     uint8_t a = 0xA0;
     uint8_t b = 0x0B;
     *OUTB = a | b;
+    *STOP = 0;
 }
 
 @out 0xABCD
@@ -567,6 +578,7 @@ void reset()
     uint16_t a = 0xA0C0;
     uint16_t b = 0x0B0D;
     *OUT = a | b;
+    *STOP = 0;
 }
 
 @out 0x5A
@@ -576,6 +588,7 @@ void reset()
     uint8_t a = 0xA5;
     uint8_t b = 0xFF;
     *OUTB = a ^ b;
+    *STOP = 0;
 }
 
 @out 0xAA55
@@ -585,6 +598,7 @@ void reset()
     uint16_t a = 0xA5A5;
     uint16_t b = 0x0FF0;
     *OUT = a ^ b;
+    *STOP = 0;
 }
 
 @out 0x3C
@@ -593,6 +607,7 @@ void reset()
 {
     uint8_t a = 0xC3;
     *OUTB = ~a;
+    *STOP = 0;
 }
 
 @out 0x3C5A
@@ -601,4 +616,5 @@ void reset()
 {
     uint16_t a = 0xC3A5;
     *OUT = ~a;
+    *STOP = 0;
 }
