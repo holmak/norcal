@@ -209,7 +209,15 @@ partial class Compiler
         return newProgram;
     }
 
+    /// <summary>
+    /// This overload is for the majority of passes which don't need to know the function's return type.
+    /// </summary>
     List<Declaration> ApplyPass(string passName, Func<Expr, Expr> apply, List<Declaration> program)
+    {
+        return ApplyPass(passName, (expr, returnType) => apply(expr), program);
+    }
+
+    List<Declaration> ApplyPass(string passName, Func<Expr, CType, Expr> apply, List<Declaration> program)
     {
         List<Declaration> newProgram = new List<Declaration>();
         foreach (Declaration decl in program)
@@ -221,7 +229,7 @@ partial class Compiler
                     Tag = decl.Tag,
                     Type = decl.Type,
                     Name = decl.Name,
-                    Body = apply(decl.Body),
+                    Body = apply(decl.Body, decl.Type),
                     Fields = decl.Fields,
                 });
             }
@@ -338,18 +346,23 @@ partial class Compiler
         }
     }
 
-    Expr ReplaceGenericFunctions(Expr e)
+    Expr ReplaceGenericFunctions(Expr e, CType returnType)
     {
         // Recursively apply this pass to all arguments:
-        e = e.Map(ReplaceGenericFunctions);
+        e = e.Map(x => ReplaceGenericFunctions(x, returnType));
 
         Expr left, right;
-        if (e.Match(Tag.LoadGeneric, out left))
+        if (e.Match(Tag.Return, out left))
+        {
+            if (!TryToChangeType(ref left, returnType)) Program.Error("return expression has wrong type");
+            return Expr.Make(Tag.Return, left);
+        }
+        else if (e.Match(Tag.LoadGeneric, out left))
         {
             CType addressType = TypeOf(left);
             if (addressType.Tag != CTypeTag.Pointer) Program.Error("load address must have pointer type");
-            CType returnType = addressType.Subtype;
-            return Expr.Make(GetLoadFunctionForType(returnType), left);
+            CType resultType = addressType.Subtype;
+            return Expr.Make(GetLoadFunctionForType(resultType), left);
         }
         else if (e.Match(Tag.StoreGeneric, out left, out right))
         {
@@ -534,7 +547,7 @@ partial class Compiler
         else if (e.Match(Tag.Return, out arg))
         {
             CType actual = TypeOf(arg);
-            if (actual != returnType) Program.Error("incorrect return type");
+            if (actual != returnType) Program.Error("return expression has wrong type");
         }
         else if (e.Match(Tag.Cast, out type, out arg))
         {
