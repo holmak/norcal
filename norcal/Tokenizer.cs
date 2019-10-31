@@ -16,6 +16,7 @@ class Tokenizer
     {
         Tokenizer tokenizer = new Tokenizer();
         tokenizer.Input = File.ReadAllText(filename);
+        tokenizer.InputPos.Filename = filename;
         List<Token> tokens = tokenizer.Tokenize();
         List<Token> preprocessed = new List<Token>();
 
@@ -47,8 +48,7 @@ class Tokenizer
     {
         List<Token> tokens = new List<Token>();
         FilePosition pos, lastPos;
-        pos.Line = 0;
-        pos.Column = 0;
+        pos = InputPos;
         while (true)
         {
             TokenType tag = TokenType.INVALID;
@@ -366,5 +366,6 @@ enum TokenType
 
 struct FilePosition
 {
+    public string Filename;
     public int Line, Column;
 }
