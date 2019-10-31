@@ -13,24 +13,64 @@ static class Program
 
     public static readonly string DebugOutputPath = "debug_output";
 
-    static void Main(string[] args)
+    static void Main(string[] argsArray)
     {
-        if (args.Length < 2) Error("usage: norcal src.c output.nes [--debug-output]");
+        Queue<string> args = new Queue<string>(argsArray);
 
-        string sourcePath = args[0];
-        string outputPath = args[1];
-        EnableDebugOutput = args.Contains("--debug-output");
+        List<string> sourceFilenames = new List<string>();
+        string outputFilename = "out.nes";
+        bool help = (args.Count == 0);
 
-        List<Declaration> program = Parser.ParseFile(sourcePath);
+        while (args.Count > 0)
+        {
+            string arg = args.Dequeue();
+            if (arg == "-?" || arg == "-h" || arg == "--help")
+            {
+                help = true;
+            }
+            else if (arg == "--debug-output")
+            {
+                EnableDebugOutput = true;
+            }
+            else if (arg == "-o")
+            {
+                if (args.Count > 0) outputFilename = args.Dequeue();
+                else Error("error: -o option requires a filename");
+            }
+            else if (arg.StartsWith("-"))
+            {
+                Error("error: unknown option: " + arg);
+            }
+            else
+            {
+                sourceFilenames.Add(arg);
+            }
+        }
+
+        if (help)
+        {
+            Error("usage: norcal first.c second.c ... [-o out.nes] [--debug-output]");
+        }
+
+        if (sourceFilenames.Count == 0)
+        {
+            Error("error: no source files provided");
+        }
+
+        List<Declaration> program = new List<Declaration>();
+        foreach (string file in sourceFilenames)
+        {
+            program.AddRange(Parser.ParseFile(file));
+        }
         WritePassOutputToFile("parse", program);
 
         Compiler compiler = new Compiler();
         compiler.CompileProgram(program);
-        compiler.Assemble(outputPath);
+        compiler.Assemble(outputFilename);
 
         if (EnableDebugOutput)
         {
-            Disassembler.Disassemble(outputPath);
+            Disassembler.Disassemble(outputFilename);
         }
     }
 

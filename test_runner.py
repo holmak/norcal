@@ -91,7 +91,7 @@ for test in tests:
     # Compile:
     with open(SOURCE_FILE, 'w') as f:
         f.write(test.source)
-    process = run_process([COMPILER, SOURCE_FILE, IMAGE_FILE, '--debug-output'])
+    process = run_process([COMPILER, SOURCE_FILE, "-o", IMAGE_FILE, '--debug-output'])
     if process == TIMED_OUT:
         test.actual_output = '(compiler timed out)'
         test.passed = False
