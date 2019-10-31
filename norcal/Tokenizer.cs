@@ -17,31 +17,7 @@ class Tokenizer
         Tokenizer tokenizer = new Tokenizer();
         tokenizer.Input = File.ReadAllText(filename);
         tokenizer.InputPos.Filename = filename;
-        List<Token> tokens = tokenizer.Tokenize();
-        List<Token> preprocessed = new List<Token>();
-
-        // Replace #include directives with the content of the specified file:
-        for (int i = 0; i < tokens.Count; i++)
-        {
-            if (tokens[i].Tag == TokenType.NAME && tokens[i].Name == "#include")
-            {
-                i += 1;
-                if (i >= tokens.Count) Error(tokens[i].Position, "expected filename after #include");
-                Token next = tokens[i];
-                if (next.Tag != TokenType.STRING) Error(tokens[i].Position, "argument to #include must be a string");
-                string includedFilename = next.Name;
-                List<Token> includedTokens = TokenizeFile(includedFilename);
-                // Remove the final EOF token:
-                includedTokens.RemoveAt(includedTokens.Count - 1);
-                preprocessed.AddRange(includedTokens);
-            }
-            else
-            {
-                preprocessed.Add(tokens[i]);
-            }
-        }
-
-        return preprocessed;
+        return tokenizer.Tokenize();
     }
 
     public List<Token> Tokenize()
@@ -90,13 +66,9 @@ class Tokenizer
                 tag = TokenType.NAME;
                 tokenName = "#define";
             }
-            else if (TryRead("#include"))
-            {
-                tag = TokenType.NAME;
-                tokenName = "#include";
-            }
             else if (TryRead('#'))
             {
+                Warning(InputPos, "preprocessor directives are ignored");
                 SkipToNextLine();
                 continue;
             }
@@ -309,9 +281,14 @@ class Tokenizer
         return s.Substring(start, length);
     }
 
+    static void Warning(FilePosition pos, string message)
+    {
+        Program.Warning("warning (\"{0}\", line {1}, column {2}): {3}", pos.Filename, pos.Line, pos.Column, message);
+    }
+
     static void Error(FilePosition pos, string message)
     {
-        Program.Error("syntax error (line {0}, column {1}): {2}", pos.Line, pos.Column, message);
+        Program.Error("syntax error (\"{0}\", line {1}, column {2}): {3}", pos.Filename, pos.Line, pos.Column, message);
     }
 }
 

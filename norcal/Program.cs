@@ -131,6 +131,12 @@ static class Program
         return sb.ToString();
     }
 
+    public static void Warning(string format, params object[] args)
+    {
+        string message = string.Format(format, args);
+        Console.Error.WriteLine(message);
+    }
+
     public static void Error(string format, params object[] args)
     {
         string message = string.Format(format, args);
