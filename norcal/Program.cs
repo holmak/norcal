@@ -221,7 +221,6 @@ static class Tag
 
     // Runtime functions:
     public static readonly string AddU8 = "_rt_add_u8";
-    public static readonly string AddU8Ptr = "_rt_add_u8_ptr";
     public static readonly string AddU16 = "_rt_add_u16";
     public static readonly string SubtractU8 = "_rt_sub_u8";
     public static readonly string SubtractU16 = "_rt_sub_u16";

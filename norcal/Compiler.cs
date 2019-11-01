@@ -40,7 +40,6 @@ partial class Compiler
         DeclareFunction(Tag.StoreU8, new[] { CType.MakePointer(CType.UInt8), CType.UInt8 }, CType.UInt8, BuiltinParamAddresses(2));
         DeclareFunction(Tag.StoreU16, new[] { CType.MakePointer(CType.UInt16), CType.UInt16 }, CType.UInt16, BuiltinParamAddresses(2));
         DeclareFunction(Tag.AddU8, new[] { CType.UInt8, CType.UInt8 }, CType.UInt8, BuiltinParamAddresses(2));
-        DeclareFunction(Tag.AddU8Ptr, new[] { CType.UInt8Ptr, CType.UInt16 }, CType.UInt8Ptr, BuiltinParamAddresses(2));
         DeclareFunction(Tag.AddU16, new[] { CType.UInt16, CType.UInt16 }, CType.UInt16, BuiltinParamAddresses(2));
         DeclareFunction(Tag.SubtractU8, new[] { CType.UInt8, CType.UInt8 }, CType.UInt8, BuiltinParamAddresses(2));
         DeclareFunction(Tag.SubtractU16, new[] { CType.UInt16, CType.UInt16 }, CType.UInt16, BuiltinParamAddresses(2));
@@ -895,7 +894,7 @@ partial class Compiler
                     Emit("LDA", T0);
                     Emit("ADC", T2);
                 }
-                else if (functionName == Tag.AddU16 || functionName == Tag.AddU8Ptr)
+                else if (functionName == Tag.AddU16)
                 {
                     if (args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
                     Emit("CLC");
