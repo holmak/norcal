@@ -660,6 +660,6 @@ partial class Parser
     {
         Token token = PeekToken();
         FilePosition pos = token.Position;
-        Program.Error("syntax error (\"{0}\", line {1}, column {2}): {3}", pos.Filename, pos.Line, pos.Column, message);
+        Program.Error("syntax error (\"{0}\", line {1}, column {2}): {3}", pos.Filename, pos.Line + 1, pos.Column + 1, message);
     }
 }
