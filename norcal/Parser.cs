@@ -40,37 +40,37 @@ partial class Parser
         if (TryParseName("define"))
         {
             d.Tag = DeclarationTag.Constant;
-            if (!TryParseType(out d.Type)) ParserError("expected a type");
-            if (!TryParseAnyName(out d.Name)) ParserError("expected a name");
-            if (!TryParse(TokenType.EQUALS)) ParserError("expected =");
+            d.Type = ExpectType();
+            d.Name = ExpectAnyName();
+            Expect(TokenType.EQUALS);
             d.Body = ParseExpr();
-            if (!TryParse(TokenType.SEMICOLON)) ParserError("expected ;");
+            Expect(TokenType.SEMICOLON);
         }
         else if (TryParseName("struct"))
         {
             d.Tag = DeclarationTag.Struct;
-            if (!TryParseAnyName(out d.Name)) ParserError("expected a name");
-            if (!TryParse(TokenType.LBRACE)) ParserError("expected {");
+            d.Name = ExpectAnyName();
+            Expect(TokenType.LBRACE);
             d.Fields = new List<NamedField>();
             while (!TryParse(TokenType.RBRACE))
             {
                 string fieldName;
                 CType fieldType;
-                if (!TryParseType(out fieldType)) ParserError("expected a type");
-                if (!TryParseAnyName(out fieldName)) ParserError("expected a name");
+                fieldType = ExpectType();
+                fieldName = ExpectAnyName();
                 d.Fields.Add(new NamedField(fieldType, fieldName));
                 while (TryParse(TokenType.COMMA))
                 {
-                    if (!TryParseAnyName(out fieldName)) ParserError("expected a name");
+                    fieldName = ExpectAnyName();
                     d.Fields.Add(new NamedField(fieldType, fieldName));
                 }
-                if (!TryParse(TokenType.SEMICOLON)) ParserError("expected ;");
+                Expect(TokenType.SEMICOLON);
             }
         }
         else
         {
-            if (!TryParseType(out d.Type)) ParserError("expected a type");
-            if (!TryParseAnyName(out d.Name)) ParserError("expected a name");
+            d.Type = ExpectType();
+            d.Name = ExpectAnyName();
 
             if (TryParse(TokenType.LPAREN))
             {
@@ -82,14 +82,14 @@ partial class Parser
                     {
                         CType type;
                         string name;
-                        if (!TryParseType(out type)) ParserError("expected type for parameter");
-                        if (!TryParseAnyName(out name)) ParserError("expected name for parameter");
+                        type = ExpectType();
+                        name = ExpectAnyName();
                         d.Fields.Add(new NamedField(type, name));
                         if (TryParse(TokenType.RPAREN)) break;
-                        if (!TryParse(TokenType.COMMA)) ParserError("expected ,");
+                        Expect(TokenType.COMMA);
                     }
                 }
-                if (!TryParse(TokenType.LBRACE)) ParserError("expected {");
+                Expect(TokenType.LBRACE);
                 List<object> args = new List<object>();
                 args.Add(Tag.Sequence);
                 while (!TryParse(TokenType.RBRACE))
@@ -103,7 +103,7 @@ partial class Parser
                 d.Tag = DeclarationTag.Variable;
                 ParseArrayDeclaration(ref d.Type);
                 if (TryParse(TokenType.EQUALS)) ParserError("global variables cannot be initialized");
-                if (!TryParse(TokenType.SEMICOLON)) ParserError("expected ;");
+                Expect(TokenType.SEMICOLON);
             }
         }
         return d;
@@ -115,7 +115,7 @@ partial class Parser
         {
             int dimension;
             if (!TryParseInt(out dimension)) ParserError("expected array size");
-            if (!TryParse(TokenType.RBRACKET)) ParserError("expected ]");
+            Expect(TokenType.RBRACKET);
             type = CType.MakeArray(type, dimension);
         }
     }
@@ -129,7 +129,7 @@ partial class Parser
         {
             // Declare a local variable:
             string localname;
-            if (!TryParseAnyName(out localname)) ParserError("expected variable name");
+            localname = ExpectAnyName();
             ParseArrayDeclaration(ref type);
             // Optionally, an initial value can be assigned:
             if (TryParse(TokenType.EQUALS))
@@ -146,27 +146,27 @@ partial class Parser
             {
                 stmt = Expr.Make(Tag.Local, type, localname);
             }
-            if (!TryParse(TokenType.SEMICOLON)) ParserError("expected ;");
+            Expect(TokenType.SEMICOLON);
         }
         else if (TryParseName("if"))
         {
             if (!allowLong) Error_NotAllowedInFor();
-            if (!TryParse(TokenType.LPAREN)) ParserError("expected (");
+            Expect(TokenType.LPAREN);
             Expr test = ParseExpr();
             test = Expr.Make(Tag.BoolFromGeneric, test);
-            if (!TryParse(TokenType.RPAREN)) ParserError("expected )");
+            Expect(TokenType.RPAREN);
             Expr then = ParseStatementBlock();
             stmt = Expr.Make(Tag.Switch, test, then);
         }
         else if (TryParseName("for"))
         {
             if (!allowLong) Error_NotAllowedInFor();
-            if (!TryParse(TokenType.LPAREN)) ParserError("expected (");
+            Expect(TokenType.LPAREN);
             Expr init = ParseStatement(false);
             Expr test = ParseExpr();
-            if (!TryParse(TokenType.SEMICOLON)) ParserError("expected ;");
+            Expect(TokenType.SEMICOLON);
             Expr next = ParseExpr();
-            if (!TryParse(TokenType.RPAREN)) ParserError("expected )");
+            Expect(TokenType.RPAREN);
             Expr body = ParseStatementBlock();
             stmt = Expr.Make(Tag.For, init, test, next, body);
         }
@@ -174,31 +174,31 @@ partial class Parser
         {
             if (!allowLong) Error_NotAllowedInFor();
             stmt = Expr.Make(Tag.Return, ParseExpr());
-            if (!TryParse(TokenType.SEMICOLON)) ParserError("expected ;");
+            Expect(TokenType.SEMICOLON);
         }
         else if (TryParseName("__asm"))
         {
             if (!allowLong) Error_NotAllowedInFor();
-            if (!TryParse(TokenType.LBRACE)) ParserError("expected {");
+            Expect(TokenType.LBRACE);
             List<object> args = new List<object>();
             args.Add(Tag.Sequence);
             while (!TryParse(TokenType.RBRACE))
             {
                 string mnemonic, variable;
-                if (!TryParseAnyName(out mnemonic)) ParserError("expected mnemonic");
+                mnemonic = ExpectAnyName();
                 if (TryParse(TokenType.SEMICOLON))
                 {
                     args.Add(Expr.Make(Tag.Asm, mnemonic));
                 }
                 else
                 {
-                    if (!TryParseAnyName(out variable)) ParserError("expected operand");
+                    variable = ExpectAnyName();
                     int offset = 0;
                     if (TryParse(TokenType.PLUS))
                     {
                         if (!TryParseInt(out offset)) ParserError("expected integer offset");
                     }
-                    if (!TryParse(TokenType.SEMICOLON)) ParserError("expected ;");
+                    Expect(TokenType.SEMICOLON);
                     args.Add(Expr.Make(Tag.Asm, mnemonic, Expr.Make(Tag.AsmOperand, variable, offset)));
                 }
             }
@@ -208,7 +208,7 @@ partial class Parser
         {
             // An expression-statement:
             stmt = ParseExpr();
-            if (!TryParse(TokenType.SEMICOLON)) ParserError("expected ;");
+            Expect(TokenType.SEMICOLON);
         }
         return stmt;
     }
@@ -439,7 +439,7 @@ partial class Parser
                     {
                         args.Add(ParseExpr());
                         if (TryParse(TokenType.RPAREN)) break;
-                        if (!TryParse(TokenType.COMMA)) ParserError("expected ,");
+                        Expect(TokenType.COMMA);
                     }
                 }
 
@@ -448,20 +448,20 @@ partial class Parser
             else if (TryParse(TokenType.PERIOD))
             {
                 string fieldName;
-                if (!TryParseAnyName(out fieldName)) ParserError("expected a field name");
+                fieldName = ExpectAnyName();
                 e = Expr.Make(Tag.LoadGeneric, Expr.Make(Tag.Field, e, fieldName));
             }
             else if (TryParse(TokenType.ARROW))
             {
                 string fieldName;
-                if (!TryParseAnyName(out fieldName)) ParserError("expected a field name");
+                fieldName = ExpectAnyName();
                 e = Expr.Make(Tag.LoadGeneric, Expr.Make(Tag.Field, Expr.Make(Tag.LoadGeneric, e), fieldName));
             }
             else if (TryParse(TokenType.LBRACKET))
             {
                 Expr index = ParseExpr();
                 e = Expr.Make(Tag.LoadGeneric, Expr.Make(Tag.Index, e, index));
-                if (!TryParse(TokenType.RBRACKET)) ParserError("expected ]");
+                Expect(TokenType.RBRACKET);
             }
             else
             {
@@ -488,7 +488,7 @@ partial class Parser
         else if (TryParse(TokenType.LPAREN))
         {
             Expr e = ParseExpr();
-            if (!TryParse(TokenType.RPAREN)) ParserError("expected )");
+            Expect(TokenType.RPAREN);
             return e;
         }
         else
@@ -544,6 +544,11 @@ partial class Parser
         }
     }
 
+    void Expect(TokenType expected)
+    {
+        if (!TryParse(expected)) ParserError("expected {0}", TokenInfo.TokenNames[(int)expected]);
+    }
+
     bool TryParseInt(out int n)
     {
         Token token = PeekToken();
@@ -560,6 +565,13 @@ partial class Parser
         }
     }
 
+    int ExpectInt()
+    {
+        int n;
+        if (!TryParseInt(out n)) ParserError("expected an integer literal");
+        return n;
+    }
+
     bool TryParseAnyName(out string name)
     {
         Token token = PeekToken();
@@ -574,6 +586,13 @@ partial class Parser
             name = null;
             return false;
         }
+    }
+
+    string ExpectAnyName()
+    {
+        string name;
+        if (!TryParseAnyName(out name)) ParserError("expected an identifier");
+        return name;
     }
 
     bool TryParseName(string name)
@@ -607,7 +626,7 @@ partial class Parser
         else if (TryParseName("struct"))
         {
             string name;
-            if (!TryParseAnyName(out name)) ParserError("expected a name");
+            name = ExpectAnyName();
             type = CType.MakeStruct(name);
         }
         else
@@ -627,6 +646,15 @@ partial class Parser
 
         return true;
     }
+
+    CType ExpectType()
+    {
+        CType type;
+        if (!TryParseType(out type)) ParserError("expected a type");
+        return type;
+    }
+
+    void ParserError(string format, params object[] args) => ParserError(string.Format(format, args));
 
     void ParserError(string message)
     {

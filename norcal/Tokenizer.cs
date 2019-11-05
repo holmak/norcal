@@ -336,6 +336,41 @@ enum TokenType
     STRING,
 }
 
+static class TokenInfo
+{
+    public static string[] TokenNames = new string[]
+    {
+        "(invalid)",
+        "EOF",
+
+        "&",
+        "(",
+        ")",
+        "*",
+        "+",
+        ",",
+        "-",
+        "->",
+        ".",
+        "/",
+        ";",
+        "<",
+        "=",
+        ">",
+        "[",
+        "]",
+        "^",
+        "{",
+        "|",
+        "{",
+        "~",
+
+        "(int)",
+        "(name)",
+        "(string)",
+    };
+}
+
 struct FilePosition
 {
     public string Filename;
