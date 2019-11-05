@@ -39,8 +39,6 @@ partial class Compiler
         DeclareFunction(Tag.LoadU16, new[] { CType.MakePointer(CType.UInt16) }, CType.UInt16, BuiltinParamAddresses(1));
         DeclareFunction(Tag.StoreU8, new[] { CType.MakePointer(CType.UInt8), CType.UInt8 }, CType.UInt8, BuiltinParamAddresses(2));
         DeclareFunction(Tag.StoreU16, new[] { CType.MakePointer(CType.UInt16), CType.UInt16 }, CType.UInt16, BuiltinParamAddresses(2));
-        DeclareFunction(Tag.AddU8, new[] { CType.UInt8, CType.UInt8 }, CType.UInt8, BuiltinParamAddresses(2));
-        DeclareFunction(Tag.AddU16, new[] { CType.UInt16, CType.UInt16 }, CType.UInt16, BuiltinParamAddresses(2));
         DeclareFunction(Tag.SubtractU8, new[] { CType.UInt8, CType.UInt8 }, CType.UInt8, BuiltinParamAddresses(2));
         DeclareFunction(Tag.SubtractU16, new[] { CType.UInt16, CType.UInt16 }, CType.UInt16, BuiltinParamAddresses(2));
         DeclareFunction(Tag.LessThanU8, new[] { CType.UInt8, CType.UInt8 }, CType.UInt8, BuiltinParamAddresses(2));
@@ -243,9 +241,10 @@ partial class Compiler
 
     Expr ReplaceNamedVariables(Expr e, LexicalScope scope)
     {
-        string name;
-        Expr body;
+        string name, mnemonic;
+        Expr body, operand;
         CType type;
+        int offset;
         if (e.Match(Tag.Name, out name))
         {
             Symbol sym;
@@ -273,6 +272,25 @@ partial class Compiler
             DefineVariable(scope, type, name);
             // There is no need to keep the declaration node:
             return Expr.Make(Tag.Empty);
+        }
+        else if (e.Match(Tag.Asm, out mnemonic, out operand) && operand.Match(Tag.AsmOperand, out name, out offset))
+        {
+            Symbol sym;
+            if (!FindSymbol(scope, name, out sym)) Program.Error("symbol not defined: {0}", name);
+
+            int address;
+            if (sym.Tag == SymbolTag.Constant || sym.Tag == SymbolTag.Variable)
+            {
+                // TODO: Make sure the constant value fits in the specified type.
+                address = sym.Value;
+            }
+            else
+            {
+                Program.UnhandledCase();
+                address = 0;
+            }
+
+            return Expr.Make(Tag.Asm, mnemonic, address + offset);
         }
         else
         {
@@ -552,6 +570,10 @@ partial class Compiler
         {
             // TODO: Make sure that the cast is allowed.
         }
+        else if (e.MatchTag(Tag.Asm))
+        {
+            // Ignore inline assembly.
+        }
         else if (e.MatchAny(out name, out args))
         {
             // Don't try to typecheck special AST nodes, which start with "$".
@@ -707,8 +729,8 @@ partial class Compiler
 
     void CompileExpression(Expr e, int dest, Continuation cont)
     {
-        int value;
-        string functionName;
+        int value, operand;
+        string functionName, mnemonic;
         CType type;
         Expr[] args;
         Expr test, then, init, induction, body, subexpr;
@@ -784,6 +806,14 @@ partial class Compiler
         else if (e.Match(Tag.Cast, out type, out subexpr))
         {
             CompileExpression(subexpr, dest, cont);
+        }
+        else if (e.Match(Tag.Asm, out mnemonic))
+        {
+            Emit(mnemonic);
+        }
+        else if (e.Match(Tag.Asm, out mnemonic, out operand))
+        {
+            Emit(mnemonic, operand);
         }
         else if (e.MatchAny(out functionName, out args))
         {
@@ -886,25 +916,6 @@ partial class Compiler
                     if (args.Length != 1) Program.Panic("wrong number of arguments to unary operator");
                     Emit("LDY", 0, Asm.Immediate);
                     Emit("LDA", T0, Asm.IndirectY);
-                }
-                else if (functionName == Tag.AddU8)
-                {
-                    if (args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
-                    Emit("CLC");
-                    Emit("LDA", T0);
-                    Emit("ADC", T2);
-                }
-                else if (functionName == Tag.AddU16)
-                {
-                    if (args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
-                    Emit("CLC");
-                    Emit("LDA", T0);
-                    Emit("ADC", T2);
-                    Emit("STA", T0);
-                    Emit("LDA", T1);
-                    Emit("ADC", T3);
-                    Emit("TAX");
-                    Emit("LDA", T0);
                 }
                 else if (functionName == Tag.SubtractU8)
                 {

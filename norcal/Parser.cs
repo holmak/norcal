@@ -185,6 +185,34 @@ partial class Parser
             stmt = Expr.Make(Tag.Return, ParseExpr());
             if (!TryParse(TokenType.SEMICOLON)) ParserError("expected ;");
         }
+        else if (TryParseName("__asm"))
+        {
+            if (!allowLong) Error_NotAllowedInFor();
+            if (!TryParse(TokenType.LBRACE)) ParserError("expected {");
+            List<object> args = new List<object>();
+            args.Add(Tag.Sequence);
+            while (!TryParse(TokenType.RBRACE))
+            {
+                string mnemonic, variable;
+                if (!TryParseAnyName(out mnemonic)) ParserError("expected mnemonic");
+                if (TryParse(TokenType.SEMICOLON))
+                {
+                    args.Add(Expr.Make(Tag.Asm, mnemonic));
+                }
+                else
+                {
+                    if (!TryParseAnyName(out variable)) ParserError("expected operand");
+                    int offset = 0;
+                    if (TryParse(TokenType.PLUS))
+                    {
+                        if (!TryParseInt(out offset)) ParserError("expected integer offset");
+                    }
+                    if (!TryParse(TokenType.SEMICOLON)) ParserError("expected ;");
+                    args.Add(Expr.Make(Tag.Asm, mnemonic, Expr.Make(Tag.AsmOperand, variable, offset)));
+                }
+            }
+            return Expr.Make(args.ToArray());
+        }
         else
         {
             // An expression-statement:

@@ -18,6 +18,7 @@ static class Program
         Queue<string> args = new Queue<string>(argsArray);
 
         List<string> sourceFilenames = new List<string>();
+        sourceFilenames.Add("runtime.c");
         string outputFilename = "out.nes";
         bool help = (args.Count == 0);
 
@@ -204,6 +205,8 @@ static class Tag
     public static readonly string Cast = "$cast";
     public static readonly string Field = "$field";
     public static readonly string Index = "$index";
+    public static readonly string Asm = "$asm";
+    public static readonly string AsmOperand = "$asm_operand";
 
     // Type-generic pseudo-functions:
     public static readonly string AddGeneric = "$add";
