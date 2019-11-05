@@ -46,15 +46,6 @@ partial class Parser
             d.Body = ParseExpr();
             if (!TryParse(TokenType.SEMICOLON)) ParserError("expected ;");
         }
-        else if (TryParseName("#define"))
-        {
-            // A preprocessor-style constant, for backward compatibility.
-            d.Tag = DeclarationTag.Constant;
-            // TODO: Infer a type for this constant.
-            d.Type = CType.UInt16;
-            if (!TryParseAnyName(out d.Name)) ParserError("expected a name");
-            d.Body = ParseExpr();
-        }
         else if (TryParseName("struct"))
         {
             d.Tag = DeclarationTag.Struct;

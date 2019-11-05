@@ -61,11 +61,6 @@ class Tokenizer
                     FetchChar();
                 }
             }
-            else if (TryRead("#define"))
-            {
-                tag = TokenType.NAME;
-                tokenName = "#define";
-            }
             else if (TryRead('#'))
             {
                 Warning(InputPos, "preprocessor directives are ignored");

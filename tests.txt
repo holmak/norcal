@@ -217,11 +217,11 @@ void brk()
 @in
 @out 0x4433
 #pragma pack(push, 8)
-#define ANSWER 0x4433
+#define RESPONSE 0x7788
 
 void reset()
 {
-    *OUT = ANSWER;
+    *OUT = 0x4433;
     *STOP = 0;
 }
 
