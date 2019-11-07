@@ -18,7 +18,6 @@ static class Program
         Queue<string> args = new Queue<string>(argsArray);
 
         List<string> sourceFilenames = new List<string>();
-        sourceFilenames.Add("runtime.c");
         string outputFilename = "out.nes";
         bool help = (args.Count == 0);
 
