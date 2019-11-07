@@ -8,6 +8,7 @@ TEST_DIR = 'test_files'
 DEBUG_DIR = 'debug_output'
 TEST_HEADER = 'test.h'
 TESTS_FILE = 'tests.txt'
+RUNTIME_FILE = 'runtime.c'
 SOURCE_FILE = joinpaths(TEST_DIR, 'source.c')
 IMAGE_FILE = joinpaths(TEST_DIR, 'program.nes')
 INPUT_FILE = joinpaths(TEST_DIR, 'input.bin')
@@ -92,7 +93,7 @@ for test in tests:
     # Compile:
     with open(SOURCE_FILE, 'w') as f:
         f.write(test.source)
-    process = run_process([COMPILER, TEST_HEADER, SOURCE_FILE, "-o", IMAGE_FILE, '--debug-output'])
+    process = run_process([COMPILER, RUNTIME_FILE, TEST_HEADER, SOURCE_FILE, "-o", IMAGE_FILE, '--debug-output'])
     if process == TIMED_OUT:
         test.actual_output = '(compiler timed out)'
         test.passed = False
