@@ -2,6 +2,6 @@
 <Project ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|AnyCPU'">
     <StartWorkingDirectory>C:\Repos\NORCAL\</StartWorkingDirectory>
-    <StartArguments>test.h ignore/repro.c -o program.nes --debug-output</StartArguments>
+    <StartArguments>test.h runtime.c ignore/repro.c -o program.nes --debug-output</StartArguments>
   </PropertyGroup>
 </Project>
