@@ -4,11 +4,13 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 static class Program
 {
     public static bool EnableDebugOutput { get; private set; } = false;
+    private static bool AttachDebuggerOnError = false;
     private static int NextPassNumber = 0;
 
     public static readonly string DebugOutputPath = "debug_output";
@@ -31,6 +33,10 @@ static class Program
             else if (arg == "--debug-output")
             {
                 EnableDebugOutput = true;
+            }
+            else if (arg == "--attach")
+            {
+                AttachDebuggerOnError = true;
             }
             else if (arg == "-o")
             {
@@ -141,14 +147,24 @@ static class Program
     {
         string message = string.Format(format, args);
         Console.Error.WriteLine(message);
-        Environment.Exit(1);
+        Exit(1);
     }
 
     public static void Panic(string format, params object[] args)
     {
         string message = string.Format(format, args);
         Console.Error.WriteLine(message);
-        Environment.Exit(2);
+        Exit(2);
+    }
+
+    static void Exit(int code)
+    {
+        if (AttachDebuggerOnError)
+        {
+            Debugger.Launch();
+        }
+
+        Environment.Exit(code);
     }
 
     public static void NYI() => Panic("not yet implemented");
