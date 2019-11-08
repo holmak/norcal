@@ -39,19 +39,11 @@ partial class Compiler
         DeclareFunction(Tag.LoadU16, new[] { CType.MakePointer(CType.UInt16) }, CType.UInt16, BuiltinParamAddresses(1));
         DeclareFunction(Tag.StoreU8, new[] { CType.MakePointer(CType.UInt8), CType.UInt8 }, CType.UInt8, BuiltinParamAddresses(2));
         DeclareFunction(Tag.StoreU16, new[] { CType.MakePointer(CType.UInt16), CType.UInt16 }, CType.UInt16, BuiltinParamAddresses(2));
-        DeclareFunction(Tag.SubtractU8, new[] { CType.UInt8, CType.UInt8 }, CType.UInt8, BuiltinParamAddresses(2));
-        DeclareFunction(Tag.SubtractU16, new[] { CType.UInt16, CType.UInt16 }, CType.UInt16, BuiltinParamAddresses(2));
         DeclareFunction(Tag.LessThanU8, new[] { CType.UInt8, CType.UInt8 }, CType.UInt8, BuiltinParamAddresses(2));
         DeclareFunction(Tag.LessThanU16, new[] { CType.UInt16, CType.UInt16 }, CType.UInt16, BuiltinParamAddresses(2));
         DeclareFunction(Tag.GreaterThanU8, new[] { CType.UInt8, CType.UInt8 }, CType.UInt8, BuiltinParamAddresses(2));
         DeclareFunction(Tag.GreaterThanU16, new[] { CType.UInt16, CType.UInt16 }, CType.UInt16, BuiltinParamAddresses(2));
         DeclareFunction(Tag.BoolFromU16, new[] { CType.UInt16 }, CType.UInt8, BuiltinParamAddresses(1));
-        DeclareFunction(Tag.BitwiseAndU8, new[] { CType.UInt8, CType.UInt8 }, CType.UInt8, BuiltinParamAddresses(2));
-        DeclareFunction(Tag.BitwiseAndU16, new[] { CType.UInt16, CType.UInt16 }, CType.UInt16, BuiltinParamAddresses(2));
-        DeclareFunction(Tag.BitwiseOrU8, new[] { CType.UInt8, CType.UInt8 }, CType.UInt8, BuiltinParamAddresses(2));
-        DeclareFunction(Tag.BitwiseOrU16, new[] { CType.UInt16, CType.UInt16 }, CType.UInt16, BuiltinParamAddresses(2));
-        DeclareFunction(Tag.BitwiseXorU8, new[] { CType.UInt8, CType.UInt8 }, CType.UInt8, BuiltinParamAddresses(2));
-        DeclareFunction(Tag.BitwiseXorU16, new[] { CType.UInt16, CType.UInt16 }, CType.UInt16, BuiltinParamAddresses(2));
         DeclareFunction(Tag.BitwiseNotU8, new[] { CType.UInt8 }, CType.UInt8, BuiltinParamAddresses(1));
         DeclareFunction(Tag.BitwiseNotU16, new[] { CType.UInt16 }, CType.UInt16, BuiltinParamAddresses(1));
 
@@ -363,11 +355,22 @@ partial class Compiler
         }
     }
 
+    static Dictionary<string, string> SymmetricBinaryOperators = new Dictionary<string, string>
+    {
+        { Tag.SubtractGeneric, "sub" },
+        { Tag.LessThanGeneric, "lt" },
+        { Tag.GreaterThanGeneric, "gt" },
+        { Tag.BitwiseAndGeneric, "bitwise_and" },
+        { Tag.BitwiseOrGeneric, "bitwise_or" },
+        { Tag.BitwiseXorGeneric, "bitwise_xor" },
+    };
+
     Expr ReplaceGenericFunctions(Expr e, CType returnType)
     {
         // Recursively apply this pass to all arguments:
         e = e.Map(x => ReplaceGenericFunctions(x, returnType));
 
+        string tag, functionBaseName;
         Expr left, right;
         if (e.Match(Tag.Return, out left))
         {
@@ -433,41 +436,17 @@ partial class Compiler
                 return Expr.Make(specificName, left, right);
             }
         }
-        else if (e.Match(Tag.SubtractGeneric, out left, out right))
+        else if (e.Match(out tag, out left, out right) && SymmetricBinaryOperators.TryGetValue(tag, out functionBaseName))
         {
             CType leftType = TypeOf(left);
             if (!TryToChangeType(ref right, leftType)) Program.Error("types in binary expression must match");
 
-            string specificName = null;
-            if (leftType == CType.UInt8) specificName = Tag.SubtractU8;
-            else if (leftType == CType.UInt16) specificName = Tag.SubtractU16;
+            string typeSuffix = null;
+            if (leftType == CType.UInt8) typeSuffix = "u8";
+            else if (leftType == CType.UInt16) typeSuffix = "u16";
             else Program.NYI();
 
-            return Expr.Make(specificName, left, right);
-        }
-        else if (e.Match(Tag.LessThanGeneric, out left, out right))
-        {
-            CType leftType = TypeOf(left);
-            if (!TryToChangeType(ref right, leftType)) Program.Error("types in binary expression must match");
-
-            string specificName = null;
-            if (leftType == CType.UInt8) specificName = Tag.LessThanU8;
-            else if (leftType == CType.UInt16) specificName = Tag.LessThanU16;
-            else Program.NYI();
-
-            return Expr.Make(specificName, left, right);
-        }
-        else if (e.Match(Tag.GreaterThanGeneric, out left, out right))
-        {
-            CType leftType = TypeOf(left);
-            if (!TryToChangeType(ref right, leftType)) Program.Error("types in binary expression must match");
-
-            string specificName = null;
-            if (leftType == CType.UInt8) specificName = Tag.GreaterThanU8;
-            else if (leftType == CType.UInt16) specificName = Tag.GreaterThanU16;
-            else Program.NYI();
-
-            return Expr.Make(specificName, left, right);
+            return Expr.Make(string.Format("_rt_{0}_{1}", functionBaseName, typeSuffix), left, right);
         }
         else if (e.Match(Tag.BoolFromGeneric, out left))
         {
@@ -478,18 +457,6 @@ partial class Compiler
             else Program.NYI();
 
             return Expr.Make(specificName, left);
-        }
-        else if (e.Match(Tag.BitwiseAndGeneric, out left, out right))
-        {
-            CType leftType = TypeOf(left);
-            if (!TryToChangeType(ref right, leftType)) Program.Error("types in binary expression must match");
-
-            string specificName = null;
-            if (leftType == CType.UInt8) specificName = Tag.BitwiseAndU8;
-            else if (leftType == CType.UInt16) specificName = Tag.BitwiseAndU16;
-            else Program.NYI();
-
-            return Expr.Make(specificName, left, right);
         }
         else
         {
@@ -917,25 +884,6 @@ partial class Compiler
                     Emit("LDY", 0, Asm.Immediate);
                     Emit("LDA", T0, Asm.IndirectY);
                 }
-                else if (functionName == Tag.SubtractU8)
-                {
-                    if (args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
-                    Emit("SEC");
-                    Emit("LDA", T0);
-                    Emit("SBC", T2);
-                }
-                else if (functionName == Tag.SubtractU16)
-                {
-                    if (args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
-                    Emit("SEC");
-                    Emit("LDA", T0);
-                    Emit("SBC", T2);
-                    Emit("STA", T0);
-                    Emit("LDA", T1);
-                    Emit("SBC", T3);
-                    Emit("TAX");
-                    Emit("LDA", T0);
-                }
                 else if (functionName == Tag.LessThanU8)
                 {
                     if (args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
@@ -986,21 +934,6 @@ partial class Compiler
                     if (args.Length != 1) Program.Panic("wrong number of arguments to unary operator");
                     Emit("LDA", T0);
                     Emit("ORA", T1);
-                }
-                else if (functionName == Tag.BitwiseAndU8)
-                {
-                    if (args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
-                    Emit("LDA", T0);
-                    Emit("AND", T2);
-                }
-                else if (functionName == Tag.BitwiseAndU16)
-                {
-                    if (args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
-                    Emit("LDA", T1);
-                    Emit("AND", T3);
-                    Emit("TAX");
-                    Emit("LDA", T0);
-                    Emit("AND", T2);
                 }
                 else
                 {

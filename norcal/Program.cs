@@ -224,8 +224,6 @@ static class Tag
     // Runtime functions:
     public static readonly string AddU8 = "_rt_add_u8";
     public static readonly string AddU16 = "_rt_add_u16";
-    public static readonly string SubtractU8 = "_rt_sub_u8";
-    public static readonly string SubtractU16 = "_rt_sub_u16";
     public static readonly string MultiplyU16 = "_rt_mul_u16";
     public static readonly string LessThanU8 = "_rt_lt_u8";
     public static readonly string LessThanU16 = "_rt_lt_u16";
@@ -238,12 +236,6 @@ static class Tag
     public static readonly string BoolFromU16 = "_rt_bool_from_u16";
     public static readonly string PredecrementU8 = "_rt_predecr_u8";
     public static readonly string PredecrementU16 = "_rt_predecr_u16";
-    public static readonly string BitwiseAndU8 = "_rt_bitwise_and_u8";
-    public static readonly string BitwiseAndU16 = "_rt_bitwise_and_u16";
-    public static readonly string BitwiseOrU8 = "_rt_bitwise_or_u8";
-    public static readonly string BitwiseOrU16 = "_rt_bitwise_or_u16";
-    public static readonly string BitwiseXorU8 = "_rt_bitwise_xor_u8";
-    public static readonly string BitwiseXorU16 = "_rt_bitwise_xor_u16";
     public static readonly string BitwiseNotU8 = "_rt_bitwise_not_u8";
     public static readonly string BitwiseNotU16 = "_rt_bitwise_not_u16";
 }
