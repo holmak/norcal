@@ -67,6 +67,7 @@ class Tokenizer
                 SkipToNextLine();
                 continue;
             }
+            else if (TryRead('%')) tag = TokenType.MODULUS;
             else if (TryRead('&')) tag = TokenType.AMPERSAND;
             else if (TryRead('(')) tag = TokenType.LPAREN;
             else if (TryRead(')')) tag = TokenType.RPAREN;
@@ -309,6 +310,7 @@ enum TokenType
     INVALID,
     EOF,
 
+    MODULUS,
     AMPERSAND,
     LPAREN,
     RPAREN,
@@ -343,6 +345,7 @@ static class TokenInfo
         "(invalid)",
         "EOF",
 
+        "%",
         "&",
         "(",
         ")",
