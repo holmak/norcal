@@ -42,7 +42,11 @@ class Tokenizer
             // (Unprintable characters shouldn't be in the file, and whitespace was already skipped.)
             if (TryRead('\0')) tag = TokenType.EOF;
             else if (GetNextChar() <= ' ') tag = TokenType.INVALID;
-            else if (TryRead('!')) Program.NYI();
+            else if (TryRead('!'))
+            {
+                if (TryRead("=")) tag = TokenType.NOT_EQUALS;
+                else tag = TokenType.NOT;
+            }
             else if (TryRead('"'))
             {
                 tag = TokenType.STRING;
@@ -93,10 +97,16 @@ class Tokenizer
                     tag = TokenType.SLASH;
                 }
             }
+            else if (TryRead(':')) tag = TokenType.COLON;
             else if (TryRead(';')) tag = TokenType.SEMICOLON;
             else if (TryRead('<')) tag = TokenType.LESS_THAN;
-            else if (TryRead('=')) tag = TokenType.EQUALS;
+            else if (TryRead('='))
+            {
+                if (TryRead('=')) tag = TokenType.DOUBLE_EQUALS;
+                else tag = TokenType.EQUALS;
+            }
             else if (TryRead('>')) tag = TokenType.GREATER_THAN;
+            else if (TryRead('?')) tag = TokenType.QUESTION_MARK;
             else if (TryRead('[')) tag = TokenType.LBRACKET;
             else if (TryRead(']')) tag = TokenType.RBRACKET;
             else if (TryRead('^')) tag = TokenType.CARET;
@@ -310,6 +320,8 @@ enum TokenType
     INVALID,
     EOF,
 
+    NOT,
+    NOT_EQUALS,
     MODULUS,
     AMPERSAND,
     LPAREN,
@@ -321,10 +333,13 @@ enum TokenType
     ARROW,
     PERIOD,
     SLASH,
+    COLON,
     SEMICOLON,
     LESS_THAN,
     EQUALS,
+    DOUBLE_EQUALS,
     GREATER_THAN,
+    QUESTION_MARK,
     LBRACKET,
     RBRACKET,
     CARET,
@@ -345,6 +360,8 @@ static class TokenInfo
         "(invalid)",
         "EOF",
 
+        "!",
+        "!=",
         "%",
         "&",
         "(",
@@ -356,10 +373,13 @@ static class TokenInfo
         "->",
         ".",
         "/",
+        ":",
         ";",
         "<",
         "=",
+        "==",
         ">",
+        "?",
         "[",
         "]",
         "^",
