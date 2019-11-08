@@ -113,8 +113,7 @@ partial class Parser
     {
         if (TryParse(TokenType.LBRACKET))
         {
-            int dimension;
-            if (!TryParseInt(out dimension)) ParserError("expected array size");
+            int dimension = ExpectInt();
             Expect(TokenType.RBRACKET);
             type = CType.MakeArray(type, dimension);
         }
@@ -196,7 +195,7 @@ partial class Parser
                     int offset = 0;
                     if (TryParse(TokenType.PLUS))
                     {
-                        if (!TryParseInt(out offset)) ParserError("expected integer offset");
+                        offset = ExpectInt();
                     }
                     Expect(TokenType.SEMICOLON);
                     args.Add(Expr.Make(Tag.Asm, mnemonic, Expr.Make(Tag.AsmOperand, variable, offset)));
