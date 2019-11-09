@@ -402,6 +402,21 @@ void reset()
     *STOP = 0;
 }
 
+@ structs as globals
+@in
+@out 45
+
+struct Range { uint8_t a, z; }
+struct Range r;
+
+void reset()
+{
+    r.a = 15;
+    r.z = 60;
+    *OUTB = r.z - r.a;
+    *STOP = 0;
+}
+
 @ arrays
 @in
 @out 42

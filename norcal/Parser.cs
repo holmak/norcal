@@ -46,64 +46,68 @@ partial class Parser
             d.Body = ParseExpr();
             Expect(TokenType.SEMICOLON);
         }
-        else if (TryParseName("struct"))
-        {
-            d.Tag = DeclarationTag.Struct;
-            d.Name = ExpectAnyName();
-            Expect(TokenType.LBRACE);
-            d.Fields = new List<NamedField>();
-            while (!TryParse(TokenType.RBRACE))
-            {
-                string fieldName;
-                CType fieldType;
-                fieldType = ExpectType();
-                fieldName = ExpectAnyName();
-                d.Fields.Add(new NamedField(fieldType, fieldName));
-                while (TryParse(TokenType.COMMA))
-                {
-                    fieldName = ExpectAnyName();
-                    d.Fields.Add(new NamedField(fieldType, fieldName));
-                }
-                Expect(TokenType.SEMICOLON);
-            }
-        }
         else
         {
             d.Type = ExpectType();
-            d.Name = ExpectAnyName();
 
-            if (TryParse(TokenType.LPAREN))
+            if (d.Type.IsStruct && TryParse(TokenType.LBRACE))
             {
-                d.Tag = DeclarationTag.Function;
+                d.Tag = DeclarationTag.Struct;
+                d.Name = d.Type.Name;
+                d.Type = null;
                 d.Fields = new List<NamedField>();
-                if (!TryParse(TokenType.RPAREN))
-                {
-                    while (true)
-                    {
-                        CType type;
-                        string name;
-                        type = ExpectType();
-                        name = ExpectAnyName();
-                        d.Fields.Add(new NamedField(type, name));
-                        if (TryParse(TokenType.RPAREN)) break;
-                        Expect(TokenType.COMMA);
-                    }
-                }
-                Expect(TokenType.LBRACE);
-                List<object> args = new List<object>();
-                args.Add(Tag.Sequence);
                 while (!TryParse(TokenType.RBRACE))
                 {
-                    args.Add(ParseStatement(true));
+                    string fieldName;
+                    CType fieldType;
+                    fieldType = ExpectType();
+                    fieldName = ExpectAnyName();
+                    d.Fields.Add(new NamedField(fieldType, fieldName));
+                    while (TryParse(TokenType.COMMA))
+                    {
+                        fieldName = ExpectAnyName();
+                        d.Fields.Add(new NamedField(fieldType, fieldName));
+                    }
+                    Expect(TokenType.SEMICOLON);
                 }
-                d.Body = Expr.Make(Tag.Scope, Expr.Make(args.ToArray()));
             }
             else
             {
-                d.Tag = DeclarationTag.Variable;
-                ParseArrayDeclaration(ref d.Type);
-                if (TryParse(TokenType.EQUALS)) ParserError("global variables cannot be initialized");
-                Expect(TokenType.SEMICOLON);
+                d.Name = ExpectAnyName();
+
+                if (TryParse(TokenType.LPAREN))
+                {
+                    d.Tag = DeclarationTag.Function;
+                    d.Fields = new List<NamedField>();
+                    if (!TryParse(TokenType.RPAREN))
+                    {
+                        while (true)
+                        {
+                            CType type;
+                            string name;
+                            type = ExpectType();
+                            name = ExpectAnyName();
+                            d.Fields.Add(new NamedField(type, name));
+                            if (TryParse(TokenType.RPAREN)) break;
+                            Expect(TokenType.COMMA);
+                        }
+                    }
+                    Expect(TokenType.LBRACE);
+                    List<object> args = new List<object>();
+                    args.Add(Tag.Sequence);
+                    while (!TryParse(TokenType.RBRACE))
+                    {
+                        args.Add(ParseStatement(true));
+                    }
+                    d.Body = Expr.Make(Tag.Scope, Expr.Make(args.ToArray()));
+                }
+                else
+                {
+                    d.Tag = DeclarationTag.Variable;
+                    ParseArrayDeclaration(ref d.Type);
+                    if (TryParse(TokenType.EQUALS)) ParserError("global variables cannot be initialized");
+                    Expect(TokenType.SEMICOLON);
+                }
             }
         }
         return d;
