@@ -85,6 +85,7 @@ def run_process(*args, **kwargs):
         return TIMED_OUT
 
 next_html_id = 0
+previously_attached = False
 for test in tests:
     test.disasm = 'N/A'
     test.passed = False
@@ -93,7 +94,15 @@ for test in tests:
     # Compile:
     with open(SOURCE_FILE, 'w') as f:
         f.write(test.source)
-    process = run_process([COMPILER, RUNTIME_FILE, TEST_HEADER, SOURCE_FILE, "-o", IMAGE_FILE, '--debug-output'])
+    args = [COMPILER, RUNTIME_FILE, TEST_HEADER, SOURCE_FILE, "-o", IMAGE_FILE, '--debug-output']
+    # Automatically attach the debugger if a test fails.
+    # However, only do this for the first failure, to avoid a cascade of
+    # debugger prompt windows.
+    # Also, don't attach if the test *expects* an error to occur.
+    attach = not test.expect_error and not previously_attached
+    if attach:
+        args.append('--attach')
+    process = run_process(args)
     if process == TIMED_OUT:
         test.actual_output = '(compiler timed out)'
         test.passed = False
@@ -101,10 +110,13 @@ for test in tests:
     elif process.returncode == 1:
         test.actual_output = 'compiler error:\n' + process.stderr.decode('utf_8')
         test.passed = test.expect_error
+        if attach and not test.passed:
+            previously_attached = True
         continue
     elif process.returncode > 1:
         test.actual_output = 'compiler panic:\n' + process.stderr.decode('utf_8')
         test.passed = False
+        previously_attached = True
         continue
     test.disasm = read_text_file(DISASM_FILE)
     # Run:
