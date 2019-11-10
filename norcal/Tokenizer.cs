@@ -125,7 +125,7 @@ class Tokenizer
                 }
                 string name = sb.ToString();
 
-                if (TryConvertInt(name, out tokenInt))
+                if (TryConvertInt(pos, name, out tokenInt))
                 {
                     tag = TokenType.INT;
                 }
@@ -159,7 +159,7 @@ class Tokenizer
 
     static bool IsNameChar(char c)
     {
-        return (c == '_') || (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
+        return (c == '_') || (c == '$') || (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
     }
 
     void SkipSpaces()
@@ -182,58 +182,49 @@ class Tokenizer
         }
     }
 
-    static bool TryConvertInt(string name, out int integer)
+    static bool TryConvertInt(FilePosition pos, string original, out int integer)
     {
         string decimalDigits = "0123456789";
+        string hexDigits = "0123456789ABCDEF";
 
-        if (name.Length == 0) Program.Panic("names must not be empty");
+        if (original.Length == 0) Program.Panic("names must not be empty");
+        string literal = original.ToUpperInvariant();
 
         // If the token doesn't start with a digit, it isn't a number.
         integer = 0;
-        if (!decimalDigits.Contains(name[0])) return false;
+        char first = literal[0];
+        if (!decimalDigits.Contains(first) && first != '$') return false;
 
-        // TODO: Improve this function.
         bool isHex = false;
-        int n = 0;
-        foreach (char c in name)
+        if (literal.StartsWith("0X"))
         {
-            if (isHex)
-            {
-                // TODO: Allow lowercase hex digits.
-                string hexDigits = "0123456789ABCDEF";
-                int index = hexDigits.IndexOf(c);
-                if (index >= 0)
-                {
-                    n = 16 * n + index;
-                }
-                else
-                {
-                    return false;
-                }
-            }
-            else
-            {
-                int index = decimalDigits.IndexOf(c);
-                if (index >= 0)
-                {
-                    n = 10 * n + index;
-                }
-                else if (c == 'x')
-                {
-                    // TODO: This will allow any number of digits to appear before
-                    // the "x"; hex numbers should really be required to start
-                    // as exactly "0x".
-                    isHex = true;
-                    n = 0;
-                }
-                else
-                {
-                    return false;
-                }
-            }
+            literal = literal.Substring(2);
+            isHex = true;
+        }
+        else if (literal.StartsWith("$"))
+        {
+            literal = literal.Substring(1);
+            isHex = true;
         }
 
-        integer = n;
+        if (literal.Length == 0)
+        {
+            Error(pos, "number contains no digits: " + original);
+        }
+
+        string allowedDigits = isHex ? hexDigits : decimalDigits;
+        if (!literal.All(x => allowedDigits.Contains(x)))
+        {
+            Error(pos, "number contains invalid characters: " + original);
+        }
+
+        int numberBase = isHex ? 16 : 10;
+        integer = 0;
+        foreach (char c in literal)
+        {
+            int index = allowedDigits.IndexOf(c);
+            integer = numberBase * integer + index;
+        }
         return true;
     }
 

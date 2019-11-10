@@ -25,6 +25,126 @@ void reset()
     *STOP = 0;
 }
 
+@ Integer parsing
+@out 0
+void reset()
+{
+    *OUT = 0;
+    *STOP = 0;
+}
+
+@error
+void reset()
+{
+    *OUT = 0x;
+    *STOP = 0;
+}
+
+@error
+void reset()
+{
+    *OUT = 0x0x0x33;
+    *STOP = 0;
+}
+
+@out 0
+void reset()
+{
+    *OUT = 0x00000000;
+    *STOP = 0;
+}
+
+@out 0
+void reset()
+{
+    *OUT = $00;
+    *STOP = 0;
+}
+
+@out 1
+void reset()
+{
+    *OUT = 1;
+    *STOP = 0;
+}
+
+@out 2
+void reset()
+{
+    *OUT = 0x02;
+    *STOP = 0;
+}
+
+@out 3
+void reset()
+{
+    *OUT = $3;
+    *STOP = 0;
+}
+
+@out 20
+void reset()
+{
+    *OUT = 20;
+    *STOP = 0;
+}
+
+@out 32
+void reset()
+{
+    *OUT = 0x20;
+    *STOP = 0;
+}
+
+@out 42
+void reset()
+{
+    *OUT = 42;
+    *STOP = 0;
+}
+
+@out 43
+void reset()
+{
+    *OUT = 0x2B;
+    *STOP = 0;
+}
+
+@out 255
+void reset()
+{
+    *OUT = 255;
+    *STOP = 0;
+}
+
+@out 255
+void reset()
+{
+    *OUT = 0xFF;
+    *STOP = 0;
+}
+
+@out 255
+void reset()
+{
+    *OUT = $FF;
+    *STOP = 0;
+}
+
+@out 65535
+void reset()
+{
+    *OUT = 65535;
+    *STOP = 0;
+}
+
+@out 65535
+void reset()
+{
+    *OUT = $FFFF;
+    *STOP = 0;
+}
+
 @ Binary operators
 @out 0x5100 0x1125
 void reset()
