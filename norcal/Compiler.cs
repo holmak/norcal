@@ -44,8 +44,6 @@ partial class Compiler
         DeclareFunction(Tag.GreaterThanU8, new[] { CType.UInt8, CType.UInt8 }, CType.UInt8, BuiltinParamAddresses(2));
         DeclareFunction(Tag.GreaterThanU16, new[] { CType.UInt16, CType.UInt16 }, CType.UInt16, BuiltinParamAddresses(2));
         DeclareFunction(Tag.BoolFromU16, new[] { CType.UInt16 }, CType.UInt8, BuiltinParamAddresses(1));
-        DeclareFunction(Tag.BitwiseNotU8, new[] { CType.UInt8 }, CType.UInt8, BuiltinParamAddresses(1));
-        DeclareFunction(Tag.BitwiseNotU16, new[] { CType.UInt16 }, CType.UInt16, BuiltinParamAddresses(1));
 
         // HACK: If you don't define an interrupt handler, it will target address zero.
         // TODO: What should the compiler do if an interrupt handler isn't defined? Is it an error?
