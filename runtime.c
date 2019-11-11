@@ -100,6 +100,38 @@ uint16_t _rt_mod_u16(uint16_t a, uint16_t b)
     }
 }
 
+uint8_t _rt_eq_u8(uint8_t a, uint8_t b)
+{
+    __asm
+    {
+        LDA #0
+    }
+}
+
+uint8_t _rt_eq_u16(uint16_t a, uint16_t b)
+{
+    __asm
+    {
+        LDA #0
+    }
+}
+
+uint8_t _rt_ne_u8(uint8_t a, uint8_t b)
+{
+    __asm
+    {
+        LDA #0
+    }
+}
+
+uint8_t _rt_ne_u16(uint16_t a, uint16_t b)
+{
+    __asm
+    {
+        LDA #0
+    }
+}
+
 uint8_t _rt_bitwise_and_u8(uint8_t a, uint8_t b)
 {
     __asm

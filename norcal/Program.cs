@@ -233,6 +233,8 @@ static class Tag
     public static readonly string StoreGeneric = "$store";
     public static readonly string BoolFromGeneric = "$bool_from";
     public static readonly string PredecrementGeneric = "$predecr";
+    public static readonly string EqualGeneric = "$equal";
+    public static readonly string NotEqualGeneric = "$not_equal";
     public static readonly string LessThanGeneric = "$less_than";
     public static readonly string GreaterThanGeneric = "$greater_than";
     public static readonly string BitwiseAndGeneric = "$bitwise_and";

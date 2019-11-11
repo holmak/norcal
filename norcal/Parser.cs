@@ -352,7 +352,22 @@ partial class Parser
     // == !=
     Expr ParseEqualityExpr()
     {
-        return ParseCompareExpr();
+        Expr e = ParseCompareExpr();
+        while (true)
+        {
+            if (TryParse(TokenType.DOUBLE_EQUAL))
+            {
+                e = Expr.Make(Tag.EqualGeneric, e, ParseCompareExpr());
+            }
+            else if (TryParse(TokenType.NOT_EQUAL))
+            {
+                e = Expr.Make(Tag.NotEqualGeneric, e, ParseCompareExpr());
+            }
+            else
+            {
+                return e;
+            }
+        }
     }
 
     // < > <= >=

@@ -364,6 +364,8 @@ partial class Compiler
         { Tag.MultiplyGeneric, "mul" },
         { Tag.DivideGeneric, "div" },
         { Tag.ModulusGeneric, "mod" },
+        { Tag.EqualGeneric, "eq" },
+        { Tag.NotEqualGeneric, "ne" },
         { Tag.LessThanGeneric, "lt" },
         { Tag.GreaterThanGeneric, "gt" },
         { Tag.BitwiseAndGeneric, "bitwise_and" },

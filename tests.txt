@@ -562,6 +562,80 @@ void reset()
     *STOP = 0;
 }
 
+@ comparison: equal
+@out 0
+void reset()
+{
+    uint8_t a = 4;
+    uint8_t b = 5;
+    *OUTB = a == b;
+    *STOP = 0;
+}
+
+@out 1
+void reset()
+{
+    uint8_t a = 5;
+    uint8_t b = 5;
+    *OUTB = a == b;
+    *STOP = 0;
+}
+
+@out 0
+void reset()
+{
+    uint8_t a = 6;
+    uint8_t b = 5;
+    *OUTB = a == b;
+    *STOP = 0;
+}
+
+@out 0
+void reset()
+{
+    uint8_t a = 255;
+    uint8_t b = 0;
+    *OUTB = a == b;
+    *STOP = 0;
+}
+
+@ comparison: not equal
+@out 0
+void reset()
+{
+    uint8_t a = 4;
+    uint8_t b = 5;
+    *OUTB = a != b;
+    *STOP = 0;
+}
+
+@out 1
+void reset()
+{
+    uint8_t a = 5;
+    uint8_t b = 5;
+    *OUTB = a != b;
+    *STOP = 0;
+}
+
+@out 1
+void reset()
+{
+    uint8_t a = 6;
+    uint8_t b = 5;
+    *OUTB = a != b;
+    *STOP = 0;
+}
+
+@out 1
+void reset()
+{
+    uint8_t a = 255;
+    uint8_t b = 0;
+    *OUTB = a != b;
+    *STOP = 0;
+}
+
 @ comparison: less than
 @out 1
 void reset()
