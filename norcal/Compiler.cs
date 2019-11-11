@@ -723,7 +723,6 @@ partial class Compiler
         {
             for (int i = 0; i < args.Length; i++)
             {
-                EmitComment("begin new statement");
                 // Drop the result of each expression except the last.
                 bool isLast = (i == args.Length - 1);
                 if (!isLast)
