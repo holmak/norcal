@@ -772,13 +772,10 @@ partial class Compiler
         {
             CompileExpression(subexpr, dest, cont);
         }
-        else if (e.Match(Tag.Asm, out mnemonic))
+        else if (e.MatchTag(Tag.Asm))
         {
-            Emit(mnemonic);
-        }
-        else if (e.Match(Tag.Asm, out mnemonic, out operand))
-        {
-            Emit(mnemonic, operand);
+            // Copy assembly instructions almost verbatim:
+            Emit(e.GetArgs().Skip(1).ToArray());
         }
         else if (e.MatchAny(out functionName, out args))
         {

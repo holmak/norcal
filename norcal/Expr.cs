@@ -29,6 +29,8 @@ class Expr
 
     public static Expr Make(params object[] args) => new Expr(args);
 
+    public IEnumerable<object> GetArgs() => Args;
+
     public bool MatchTag(string tag)
     {
         return (string)Args[0] == tag;

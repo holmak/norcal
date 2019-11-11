@@ -182,27 +182,44 @@ partial class Parser
         else if (TryParseName("__asm"))
         {
             if (!allowLong) Error_NotAllowedInFor();
+            while (TryParse(TokenType.NEWLINE)) { /* Skip any number of newlines. */ }
             Expect(TokenType.LBRACE);
             List<object> args = new List<object>();
             args.Add(Tag.Sequence);
             while (!TryParse(TokenType.RBRACE))
             {
                 string mnemonic, variable;
-                mnemonic = ExpectAnyName();
-                if (TryParse(TokenType.SEMICOLON))
+                if (TryParse(TokenType.NEWLINE))
                 {
-                    args.Add(Expr.Make(Tag.Asm, mnemonic));
+                    // Ignore blank lines.
                 }
                 else
                 {
-                    variable = ExpectAnyName();
-                    int offset = 0;
-                    if (TryParse(TokenType.PLUS))
+                    mnemonic = ExpectAnyName();
+                    if (TryParse(TokenType.NEWLINE))
                     {
-                        offset = ExpectInt();
+                        args.Add(Expr.Make(Tag.Asm, mnemonic));
                     }
-                    Expect(TokenType.SEMICOLON);
-                    args.Add(Expr.Make(Tag.Asm, mnemonic, Expr.Make(Tag.AsmOperand, variable, offset)));
+                    else if (TryParse(TokenType.NUMBER_SIGN))
+                    {
+                        int operand = ExpectInt();
+                        Expect(TokenType.NEWLINE);
+                        args.Add(Expr.Make(Tag.Asm, mnemonic, operand, Asm.Immediate));
+                    }
+                    else if (TryParseAnyName(out variable))
+                    {
+                        int offset = 0;
+                        if (TryParse(TokenType.PLUS))
+                        {
+                            offset = ExpectInt();
+                        }
+                        Expect(TokenType.NEWLINE);
+                        args.Add(Expr.Make(Tag.Asm, mnemonic, Expr.Make(Tag.AsmOperand, variable, offset)));
+                    }
+                    else
+                    {
+                        ParserError("expected operand or ;");
+                    }
                 }
             }
             return Expr.Make(args.ToArray());

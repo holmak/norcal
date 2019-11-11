@@ -11,6 +11,7 @@ class Tokenizer
     string Input;
     int Next = 0;
     FilePosition InputPos;
+    bool InAssembly;
 
     public static List<Token> TokenizeFile(string filename)
     {
@@ -41,6 +42,7 @@ class Tokenizer
 
             // (Unprintable characters shouldn't be in the file, and whitespace was already skipped.)
             if (TryRead('\0')) tag = TokenType.EOF;
+            else if (TryRead("\n")) tag = TokenType.NEWLINE;
             else if (GetNextChar() <= ' ') tag = TokenType.INVALID;
             else if (TryRead('!'))
             {
@@ -67,9 +69,16 @@ class Tokenizer
             }
             else if (TryRead('#'))
             {
-                Warning(InputPos, "preprocessor directives are ignored");
-                SkipToNextLine();
-                continue;
+                if (InAssembly)
+                {
+                    tag = TokenType.NUMBER_SIGN;
+                }
+                else
+                {
+                    Warning(InputPos, "preprocessor directives are ignored");
+                    SkipToNextLine();
+                    continue;
+                }
             }
             else if (TryRead('%')) tag = TokenType.MODULUS;
             else if (TryRead('&')) tag = TokenType.AMPERSAND;
@@ -152,6 +161,16 @@ class Tokenizer
             {
                 break;
             }
+
+            if (!InAssembly && tag == TokenType.NAME && tokenName == "__asm")
+            {
+                InAssembly = true;
+            }
+
+            if (InAssembly && tag == TokenType.RBRACE)
+            {
+                InAssembly = false;
+            }
         }
 
         return tokens;
@@ -164,10 +183,11 @@ class Tokenizer
 
     void SkipSpaces()
     {
+        string whitespace = InAssembly ? " \t\r" : " \t\r\n";
         while (true)
         {
             char c = GetNextChar();
-            if (c != ' ' && c != '\t' && c != '\r' && c != '\n') return;
+            if (!whitespace.Contains(c)) return;
             FetchChar();
         }
     }
@@ -310,9 +330,11 @@ enum TokenType
 {
     INVALID,
     EOF,
+    NEWLINE,
 
     NOT,
     NOT_EQUALS,
+    NUMBER_SIGN,
     MODULUS,
     AMPERSAND,
     LPAREN,
@@ -350,9 +372,11 @@ static class TokenInfo
     {
         "(invalid)",
         "EOF",
+        "newline",
 
         "!",
         "!=",
+        "#",
         "%",
         "&",
         "(",
