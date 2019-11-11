@@ -255,6 +255,4 @@ static class Tag
     public static readonly string BoolFromU16 = "_rt_bool_from_u16";
     public static readonly string PredecrementU8 = "_rt_predecr_u8";
     public static readonly string PredecrementU16 = "_rt_predecr_u16";
-    public static readonly string BitwiseNotU8 = "_rt_bitwise_not_u8";
-    public static readonly string BitwiseNotU16 = "_rt_bitwise_not_u16";
 }
