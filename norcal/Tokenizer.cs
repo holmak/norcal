@@ -80,7 +80,7 @@ class Tokenizer
                     continue;
                 }
             }
-            else if (TryRead('%')) tag = TokenType.MODULUS;
+            else if (TryRead('%')) tag = TokenType.PERCENT;
             else if (TryRead('&')) tag = TokenType.AMPERSAND;
             else if (TryRead('(')) tag = TokenType.LPAREN;
             else if (TryRead(')')) tag = TokenType.RPAREN;
@@ -335,7 +335,7 @@ enum TokenType
     NOT,
     NOT_EQUALS,
     NUMBER_SIGN,
-    MODULUS,
+    PERCENT,
     AMPERSAND,
     LPAREN,
     RPAREN,
