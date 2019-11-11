@@ -353,6 +353,11 @@ partial class Compiler
         }
     }
 
+    static Dictionary<string, string> UnaryOperators = new Dictionary<string, string>
+    {
+        { Tag.BitwiseNotGeneric, "bitwise_not" },
+    };
+
     static Dictionary<string, string> SymmetricBinaryOperators = new Dictionary<string, string>
     {
         { Tag.SubtractGeneric, "sub" },
@@ -434,17 +439,16 @@ partial class Compiler
                 return Expr.Make(specificName, left, right);
             }
         }
+        else if (e.Match(out tag, out left) && UnaryOperators.TryGetValue(tag, out functionBaseName))
+        {
+            CType leftType = TypeOf(left);
+            return Expr.Make(string.Format("_rt_{0}_{1}", functionBaseName, GetTypeCode(leftType)), left);
+        }
         else if (e.Match(out tag, out left, out right) && SymmetricBinaryOperators.TryGetValue(tag, out functionBaseName))
         {
             CType leftType = TypeOf(left);
             if (!TryToChangeType(ref right, leftType)) Program.Error("types in binary expression must match");
-
-            string typeSuffix = null;
-            if (leftType == CType.UInt8) typeSuffix = "u8";
-            else if (leftType == CType.UInt16) typeSuffix = "u16";
-            else Program.NYI();
-
-            return Expr.Make(string.Format("_rt_{0}_{1}", functionBaseName, typeSuffix), left, right);
+            return Expr.Make(string.Format("_rt_{0}_{1}", functionBaseName, GetTypeCode(leftType)), left, right);
         }
         else if (e.Match(Tag.BoolFromGeneric, out left))
         {
@@ -461,6 +465,14 @@ partial class Compiler
             ReportInvalidNodes(e, Tag.Name, Tag.Scope, Tag.Local);
             return e;
         }
+    }
+
+    static string GetTypeCode(CType type)
+    {
+        if (type == CType.UInt8) return "u8";
+        else if (type == CType.UInt16) return "u16";
+        Program.NYI();
+        return null;
     }
 
     /// <summary>
