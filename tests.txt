@@ -794,6 +794,19 @@ void reset()
     *STOP = 0;
 }
 
+@ arithmetic
+@out 403 397 1200 133 1
+void reset()
+{
+    uint16_t n = 400;
+    *OUT = n + 3;
+    *OUT = n - 3;
+    *OUT = n * 3;
+    *OUT = n / 3;
+    *OUT = n % 3;
+    *STOP = 0;
+}
+
 @ Exhaustive math
 void reset()
 {
