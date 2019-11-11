@@ -406,7 +406,26 @@ partial class Parser
     // * / %
     Expr ParseMultiplyExpr()
     {
-        return ParseCastExpr();
+        Expr e = ParseCastExpr();
+        while (true)
+        {
+            if (TryParse(TokenType.STAR))
+            {
+                e = Expr.Make(Tag.MultiplyGeneric, e, ParseCastExpr());
+            }
+            else if (TryParse(TokenType.SLASH))
+            {
+                e = Expr.Make(Tag.DivideGeneric, e, ParseCastExpr());
+            }
+            else if (TryParse(TokenType.PERCENT))
+            {
+                e = Expr.Make(Tag.ModulusGeneric, e, ParseCastExpr());
+            }
+            else
+            {
+                return e;
+            }
+        }
     }
 
     // (casts)

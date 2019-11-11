@@ -361,6 +361,9 @@ partial class Compiler
     static Dictionary<string, string> SymmetricBinaryOperators = new Dictionary<string, string>
     {
         { Tag.SubtractGeneric, "sub" },
+        { Tag.MultiplyGeneric, "mul" },
+        { Tag.DivideGeneric, "div" },
+        { Tag.ModulusGeneric, "mod" },
         { Tag.LessThanGeneric, "lt" },
         { Tag.GreaterThanGeneric, "gt" },
         { Tag.BitwiseAndGeneric, "bitwise_and" },

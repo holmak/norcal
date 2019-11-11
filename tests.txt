@@ -707,6 +707,19 @@ void reset()
     *STOP = 0;
 }
 
+@ arithmetic
+@out 23 17 60 6 2
+void reset()
+{
+    uint8_t n = 20;
+    *OUTB = n + 3;
+    *OUTB = n - 3;
+    *OUTB = n * 3;
+    *OUTB = n / 3;
+    *OUTB = n % 3;
+    *STOP = 0;
+}
+
 @ Exhaustive math
 void reset()
 {

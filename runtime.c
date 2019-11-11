@@ -49,6 +49,57 @@ uint16_t _rt_sub_u16(uint16_t a, uint16_t b)
     }
 }
 
+uint8_t _rt_mul_u8(uint8_t a, uint8_t b)
+{
+    __asm
+    {
+        LDA #$EE
+    }
+}
+
+uint16_t _rt_mul_u16(uint16_t a, uint16_t b)
+{
+    __asm
+    {
+        LDA #$EE
+        TAX
+    }
+}
+
+uint8_t _rt_div_u8(uint8_t a, uint8_t b)
+{
+    __asm
+    {
+        LDA #$EE
+    }
+}
+
+uint16_t _rt_div_u16(uint16_t a, uint16_t b)
+{
+    __asm
+    {
+        LDA #$EE
+        TAX
+    }
+}
+
+uint8_t _rt_mod_u8(uint8_t a, uint8_t b)
+{
+    __asm
+    {
+        LDA #$EE
+    }
+}
+
+uint16_t _rt_mod_u16(uint16_t a, uint16_t b)
+{
+    __asm
+    {
+        LDA #$EE
+        TAX
+    }
+}
+
 uint8_t _rt_bitwise_and_u8(uint8_t a, uint8_t b)
 {
     __asm

@@ -226,6 +226,9 @@ static class Tag
     // Type-generic pseudo-functions:
     public static readonly string AddGeneric = "$add";
     public static readonly string SubtractGeneric = "$sub";
+    public static readonly string MultiplyGeneric = "$mul";
+    public static readonly string DivideGeneric = "$div";
+    public static readonly string ModulusGeneric = "$mod";
     public static readonly string LoadGeneric = "$load";
     public static readonly string StoreGeneric = "$store";
     public static readonly string BoolFromGeneric = "$bool_from";
