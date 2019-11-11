@@ -586,3 +586,25 @@ void reset()
     *OUT = ~a;
     *STOP = 0;
 }
+
+@ Exhaustive math
+void reset()
+{
+    for (uint16_t i = 0; true; i = i + 1)
+    {
+        for (uint16_t j = 0; true; j = j + 1)
+        {
+            *OUT = i + j;
+            *OUT = i - j;
+            *OUT = i * j;
+            *OUT = i / j;
+            //if (j == 0xFFFF) break;
+            if (j == 0xF) break;
+        }
+
+        //if (i == 0xFFFF) break;
+        if (i == 0xF) break;
+    }
+
+    *STOP = 0;
+}
