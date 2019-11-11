@@ -694,8 +694,8 @@ partial class Compiler
 
     void CompileExpression(Expr e, int dest, Continuation cont)
     {
-        int value, operand;
-        string functionName, mnemonic;
+        int value;
+        string functionName;
         CType type;
         Expr[] args;
         Expr test, then, init, induction, body, subexpr;
