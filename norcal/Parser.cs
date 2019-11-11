@@ -42,7 +42,7 @@ partial class Parser
             d.Tag = DeclarationTag.Constant;
             d.Type = ExpectType();
             d.Name = ExpectAnyName();
-            Expect(TokenType.EQUALS);
+            Expect(TokenType.EQUAL);
             d.Body = ParseExpr();
             Expect(TokenType.SEMICOLON);
         }
@@ -105,7 +105,7 @@ partial class Parser
                 {
                     d.Tag = DeclarationTag.Variable;
                     ParseArrayDeclaration(ref d.Type);
-                    if (TryParse(TokenType.EQUALS)) ParserError("global variables cannot be initialized");
+                    if (TryParse(TokenType.EQUAL)) ParserError("global variables cannot be initialized");
                     Expect(TokenType.SEMICOLON);
                 }
             }
@@ -135,7 +135,7 @@ partial class Parser
             localname = ExpectAnyName();
             ParseArrayDeclaration(ref type);
             // Optionally, an initial value can be assigned:
-            if (TryParse(TokenType.EQUALS))
+            if (TryParse(TokenType.EQUAL))
             {
                 Expr value = ParseExpr();
                 stmt = Expr.Make(new object[]
@@ -272,7 +272,7 @@ partial class Parser
     Expr ParseAssignExpr()
     {
         Expr e = ParseLogicalOrExpr();
-        if (TryParse(TokenType.EQUALS))
+        if (TryParse(TokenType.EQUAL))
         {
             e = MakeAssignExpr(e, ParseAssignExpr());
         }

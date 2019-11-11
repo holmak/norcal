@@ -46,7 +46,7 @@ class Tokenizer
             else if (GetNextChar() <= ' ') tag = TokenType.INVALID;
             else if (TryRead('!'))
             {
-                if (TryRead("=")) tag = TokenType.NOT_EQUALS;
+                if (TryRead("=")) tag = TokenType.NOT_EQUAL;
                 else tag = TokenType.NOT;
             }
             else if (TryRead('"'))
@@ -111,8 +111,8 @@ class Tokenizer
             else if (TryRead('<')) tag = TokenType.LESS_THAN;
             else if (TryRead('='))
             {
-                if (TryRead('=')) tag = TokenType.DOUBLE_EQUALS;
-                else tag = TokenType.EQUALS;
+                if (TryRead('=')) tag = TokenType.DOUBLE_EQUAL;
+                else tag = TokenType.EQUAL;
             }
             else if (TryRead('>')) tag = TokenType.GREATER_THAN;
             else if (TryRead('?')) tag = TokenType.QUESTION_MARK;
@@ -333,7 +333,7 @@ enum TokenType
     NEWLINE,
 
     NOT,
-    NOT_EQUALS,
+    NOT_EQUAL,
     NUMBER_SIGN,
     PERCENT,
     AMPERSAND,
@@ -349,8 +349,8 @@ enum TokenType
     COLON,
     SEMICOLON,
     LESS_THAN,
-    EQUALS,
-    DOUBLE_EQUALS,
+    EQUAL,
+    DOUBLE_EQUAL,
     GREATER_THAN,
     QUESTION_MARK,
     LBRACKET,
