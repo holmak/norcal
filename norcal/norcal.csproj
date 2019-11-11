@@ -45,6 +45,7 @@
   <ItemGroup>
     <Compile Include="Coder.cs" />
     <Compile Include="Compiler.cs" />
+    <Compile Include="CType.cs" />
     <Compile Include="Disassembler.cs" />
     <Compile Include="Expr.cs" />
     <Compile Include="Maybe.cs" />
