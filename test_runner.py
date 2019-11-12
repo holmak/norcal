@@ -113,13 +113,13 @@ for test in tests:
         test.passed = False
         continue
     elif process.returncode == 1:
-        test.actual_output = 'compiler error:\n' + process.stderr.decode('utf_8')
+        test.actual_output = 'compiler error:<br>' + process.stderr.decode('utf_8')
         test.passed = test.expect_error
         if attach and not test.passed:
             previously_attached = True
         continue
     elif process.returncode > 1:
-        test.actual_output = 'compiler panic:\n' + process.stderr.decode('utf_8')
+        test.actual_output = 'compiler panic:<br>' + process.stderr.decode('utf_8')
         test.passed = False
         previously_attached = True
         continue
@@ -137,7 +137,7 @@ for test in tests:
         test.actual_output = '(simulator timed out)'
         continue
     elif process.returncode != 0:
-        test.actual_output = 'simulator error:\n' + process.stderr.decode('utf_8')
+        test.actual_output = 'simulator error:<br>' + process.stderr.decode('utf_8')
         continue
     test.actual_output = parse_number_list(process.stdout.decode('utf_8'))
     if test.expect_error:
@@ -164,6 +164,10 @@ th, td {
     padding: 0.25em;
 }
 pre {
+    font-size: 10pt;
+}
+.console {
+    font-family: monospace;
     font-size: 10pt;
 }
 .success {
@@ -216,16 +220,15 @@ def format_int(n):
     else:
         return str(n)
 
-def pre(text):
-    return text.replace('\r', '').strip()
-
-def pre_data(data):
+def monospace(data):
+    text = None
     if type(data) is str:
-        return pre(data)
+        text = data
     elif len(data) > 0:
-        return ', '.join([format_int(n) for n in data])
+        text = ', '.join([format_int(n) for n in data])
     else:
-        return '(none)'
+        text = '(none)'
+    return '<span class="console">{}</span>'.format(text.strip())
 
 first_error_id = None
 with open(REPORT_FILE, 'w') as report:
@@ -248,15 +251,15 @@ with open(REPORT_FILE, 'w') as report:
         else:
             report.write('<td bgcolor="#E9322E"></td>\n')
         report.write('<td id="{}">{}</td>\n'.format(test.html_id, test.description))
-        report.write('<td><pre>' + pre(test.source) + '</pre></td>\n')
-        report.write('<td><details><summary>Show</summary><pre>' + pre(test.disasm) + '</pre></details></td>\n')
-        report.write('<td><pre>' + pre_data(test.input) + '</pre></td>\n')
-        report.write('<td><pre>' + pre_data(test.actual_output) + '</pre></td>\n')
+        report.write('<td><pre>' + test.source.strip() + '</pre></td>\n')
+        report.write('<td><details><summary>Show</summary><pre>' + test.disasm.strip() + '</pre></details></td>\n')
+        report.write('<td>' + monospace(test.input) + '</td>\n')
+        report.write('<td>' + monospace(test.actual_output) + '</td>\n')
         if test.expect_error:
-            expected_output = pre('(error)')
+            expected_output = monospace('(error)')
         else:
-            expected_output = pre_data(test.expected_output)
-        report.write('<td><pre>' + expected_output + '</pre></td>\n')
+            expected_output = monospace(test.expected_output)
+        report.write('<td>' + expected_output + '</td>\n')
         report.write('</tr>\n')
     report.write(html_footer1)
     if first_error_id is not None:
