@@ -1,5 +1,6 @@
 import os
 import subprocess
+import time
 
 joinpaths = os.path.join
 
@@ -86,6 +87,7 @@ def run_process(*args, **kwargs):
 
 next_html_id = 0
 previously_attached = False
+time_in_compiler = 0
 for test in tests:
     test.disasm = 'N/A'
     test.passed = False
@@ -102,7 +104,10 @@ for test in tests:
     attach = not test.expect_error and not previously_attached
     if attach:
         args.append('--attach')
+    time_before = time.perf_counter()
     process = run_process(args)
+    time_after = time.perf_counter()
+    time_in_compiler += (time_after - time_before)
     if process == TIMED_OUT:
         test.actual_output = '(compiler timed out)'
         test.passed = False
@@ -171,6 +176,11 @@ pre {
     font-weight: bold;
     padding: 0.3em 0.7em;
 }
+.info {
+    background-color: #AAAAEE;
+    font-weight: normal;
+    padding: 0.3em 0.7em;
+}
 </style>
 <h1>Test Results</h1>
 </tr>
@@ -227,6 +237,7 @@ with open(REPORT_FILE, 'w') as report:
         plural = 's' if failures > 1 else ''
         report.write('<p class="problem">{} test{} failed.</p>\n'.format(
             failures, plural))
+    report.write('<p class="info">{:.3f} seconds spent in compiler; {:.3f} per test.</p>\n'.format(time_in_compiler, time_in_compiler / len(tests)))
     report.write(html_middle)
     for test in tests:
         if not test.passed and first_error_id is None:
