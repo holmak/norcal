@@ -254,7 +254,6 @@ static class Tag
     public static readonly string LoadU16 = "_rt_load_u16";
     public static readonly string StoreU8 = "_rt_store_u8";
     public static readonly string StoreU16 = "_rt_store_u16";
-    public static readonly string BoolFromU16 = "_rt_bool_from_u16";
     public static readonly string PredecrementU8 = "_rt_predecr_u8";
     public static readonly string PredecrementU16 = "_rt_predecr_u16";
 }

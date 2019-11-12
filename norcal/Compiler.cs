@@ -43,7 +43,6 @@ partial class Compiler
         DeclareFunction(Tag.LessThanU16, new[] { CType.UInt16, CType.UInt16 }, CType.UInt16, BuiltinParamAddresses(2));
         DeclareFunction(Tag.GreaterThanU8, new[] { CType.UInt8, CType.UInt8 }, CType.UInt8, BuiltinParamAddresses(2));
         DeclareFunction(Tag.GreaterThanU16, new[] { CType.UInt16, CType.UInt16 }, CType.UInt16, BuiltinParamAddresses(2));
-        DeclareFunction(Tag.BoolFromU16, new[] { CType.UInt16 }, CType.UInt8, BuiltinParamAddresses(1));
 
         // HACK: If you don't define an interrupt handler, it will target address zero.
         // TODO: What should the compiler do if an interrupt handler isn't defined? Is it an error?
@@ -355,6 +354,7 @@ partial class Compiler
 
     static Dictionary<string, string> UnaryOperators = new Dictionary<string, string>
     {
+        { Tag.BoolFromGeneric, "bool" },
         { Tag.BitwiseNotGeneric, "bitwise_not" },
     };
 
@@ -454,16 +454,6 @@ partial class Compiler
             CType leftType = TypeOf(left);
             if (!TryToChangeType(ref right, leftType)) Program.Error("types in binary expression must match");
             return Expr.Make(string.Format("_rt_{0}_{1}", functionBaseName, GetTypeCode(leftType)), left, right);
-        }
-        else if (e.Match(Tag.BoolFromGeneric, out left))
-        {
-            CType sourceType = TypeOf(left);
-
-            string specificName = null;
-            if (sourceType == CType.UInt16) specificName = Tag.BoolFromU16;
-            else Program.NYI();
-
-            return Expr.Make(specificName, left);
         }
         else
         {
@@ -939,12 +929,6 @@ partial class Compiler
                     Emit("LDY", 0, Asm.Immediate);
                     Emit("LDA", T2);
                     Emit("STA", T0, Asm.IndirectY);
-                }
-                else if (functionName == Tag.BoolFromU16)
-                {
-                    if (args.Length != 1) Program.Panic("wrong number of arguments to unary operator");
-                    Emit("LDA", T0);
-                    Emit("ORA", T1);
                 }
                 else
                 {

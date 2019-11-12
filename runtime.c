@@ -100,6 +100,23 @@ uint16_t _rt_mod_u16(uint16_t a, uint16_t b)
     }
 }
 
+uint8_t _rt_bool_u8(uint8_t a)
+{
+    __asm
+    {
+        LDA a
+    }
+}
+
+uint8_t _rt_bool_u16(uint16_t a)
+{
+    __asm
+    {
+        LDA a
+        ORA a+1
+    }
+}
+
 uint8_t _rt_eq_u8(uint8_t a, uint8_t b)
 {
     __asm
