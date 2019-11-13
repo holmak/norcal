@@ -144,13 +144,10 @@ partial class Compiler
                 {
                     operandFormat = AsmInfo.IMP;
                 }
-                else if (e.Match(out mnemonic, out operand))
-                {
-                    operandFormat = AsmInfo.ABS;
-                }
                 else if (e.Match(out mnemonic, out operand, out modifier))
                 {
-                    if (modifier == Asm.Immediate) operandFormat = AsmInfo.IMM;
+                    if (modifier == Asm.Absolute) operandFormat = AsmInfo.ABS;
+                    else if (modifier == Asm.Immediate) operandFormat = AsmInfo.IMM;
                     else if (modifier == Asm.IndirectY) operandFormat = AsmInfo.ZYI;
                     else Program.Panic("unknown assembly modifier: {0}", modifier);
                 }
@@ -246,6 +243,7 @@ public static class Asm
     public static readonly string Word = "word";
 
     // Instruction modifiers:
+    public static readonly string Absolute = "absolute";
     public static readonly string Immediate = "immediate";
     public static readonly string IndirectY = "indirect_y";
 }

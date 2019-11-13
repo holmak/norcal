@@ -104,12 +104,12 @@ partial class Compiler
             else if (e.Match(Asm.Label, out text)) line = text + ":";
             else if (e.Match(Asm.Function, out text)) line = string.Format("function {0}:", text);
             else if (e.Match(out mnemonic)) line = string.Format("\t{0}", mnemonic);
-            else if (e.Match(out mnemonic, out operand)) line = string.Format("\t{0} ${1:X}", mnemonic, operand);
             else if (e.Match(out mnemonic, out text)) line = string.Format("\t{0} {1}", mnemonic, text);
             else if (e.Match(out mnemonic, out operand, out mode))
             {
                 string format;
-                if (mode == Asm.Immediate) format = "\t{0} #${1:X}";
+                if (mode == Asm.Absolute) format = "\t{0} ${1:X}";
+                else if (mode == Asm.Immediate) format = "\t{0} #${1:X}";
                 else format = "\t{0} ${1:X} ???";
                 line = string.Format(format, mnemonic, operand);
             }
@@ -238,7 +238,7 @@ partial class Compiler
 
     Expr ReplaceNamedVariables(Expr e, LexicalScope scope)
     {
-        string name, mnemonic;
+        string name, mnemonic, mode;
         Expr body, operand;
         CType type;
         int offset;
@@ -270,7 +270,7 @@ partial class Compiler
             // There is no need to keep the declaration node:
             return Expr.Make(Tag.Empty);
         }
-        else if (e.Match(Tag.Asm, out mnemonic, out operand) && operand.Match(Tag.AsmOperand, out name, out offset))
+        else if (e.Match(Tag.Asm, out mnemonic, out operand, out mode) && operand.Match(Tag.AsmOperand, out name, out offset))
         {
             Symbol sym;
             if (!FindSymbol(scope, name, out sym)) Program.Error("symbol not defined: {0}", name);
@@ -287,7 +287,7 @@ partial class Compiler
                 address = 0;
             }
 
-            return Expr.Make(Tag.Asm, mnemonic, address + offset);
+            return Expr.Make(Tag.Asm, mnemonic, address + offset, mode);
         }
         else
         {
@@ -917,11 +917,11 @@ partial class Compiler
                     // TODO: This would be more efficient if it loaded the high byte first.
                     Emit("LDY", 0, Asm.Immediate);
                     Emit("LDA", T0, Asm.IndirectY);
-                    Emit("STA", T2);
+                    Emit("STA", T2, Asm.Absolute);
                     Emit("INY");
                     Emit("LDA", T0, Asm.IndirectY);
                     Emit("TAX");
-                    Emit("LDA", T2);
+                    Emit("LDA", T2, Asm.Absolute);
                 }
                 else if (functionName == Tag.LoadU8)
                 {
@@ -933,8 +933,8 @@ partial class Compiler
                 {
                     if (args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
                     Emit("SEC");
-                    Emit("LDA", T0);
-                    Emit("CMP", T2);
+                    Emit("LDA", T0, Asm.Absolute);
+                    Emit("CMP", T2, Asm.Absolute);
                     // The carry flag will be *clear* if T0 < T2.
                     // Load the corresponding boolean value:
                     Emit("LDA", 0, Asm.Immediate);
@@ -947,8 +947,8 @@ partial class Compiler
                 {
                     if (args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
                     Emit("SEC");
-                    Emit("LDA", T2);
-                    Emit("CMP", T0);
+                    Emit("LDA", T2, Asm.Absolute);
+                    Emit("CMP", T0, Asm.Absolute);
                     // The carry flag will be *clear* if T0 > T2.
                     // Load the corresponding boolean value:
                     Emit("LDA", 0, Asm.Immediate);
@@ -961,17 +961,17 @@ partial class Compiler
                 {
                     if (args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
                     Emit("LDY", 0, Asm.Immediate);
-                    Emit("LDA", T2);
+                    Emit("LDA", T2, Asm.Absolute);
                     Emit("STA", T0, Asm.IndirectY);
                     Emit("INY");
-                    Emit("LDA", T3);
+                    Emit("LDA", T3, Asm.Absolute);
                     Emit("STA", T0, Asm.IndirectY);
                 }
                 else if (functionName == Tag.StoreU8)
                 {
                     if (args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
                     Emit("LDY", 0, Asm.Immediate);
-                    Emit("LDA", T2);
+                    Emit("LDA", T2, Asm.Absolute);
                     Emit("STA", T0, Asm.IndirectY);
                 }
                 else
@@ -1014,11 +1014,11 @@ partial class Compiler
         else
         {
             Emit("LDA", (int)LowByte(imm), Asm.Immediate);
-            Emit("STA", dest);
+            Emit("STA", dest, Asm.Absolute);
             if (width == 2)
             {
                 Emit("LDX", (int)HighByte(imm), Asm.Immediate);
-                Emit("STX", dest + 1);
+                Emit("STX", dest + 1, Asm.Absolute);
             }
         }
 
@@ -1038,8 +1038,8 @@ partial class Compiler
         else
         {
             int width = SizeOf(type);
-            Emit("STA", dest);
-            if (width == 2) Emit("STX", dest + 1);
+            Emit("STA", dest, Asm.Absolute);
+            if (width == 2) Emit("STX", dest + 1, Asm.Absolute);
         }
     }
 
@@ -1059,8 +1059,8 @@ partial class Compiler
     {
         int width = SizeOf(type);
         // Even if the value is unused, always read the address; it might be a hardware register.
-        Emit("LDA", address);
-        if (width == 2) Emit("LDX", address + 1);
+        Emit("LDA", address, Asm.Absolute);
+        if (width == 2) Emit("LDX", address + 1, Asm.Absolute);
         EmitStoreAcc(type, dest);
         EmitBranchOnAcc(cont);
     }

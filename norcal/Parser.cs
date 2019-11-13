@@ -200,7 +200,7 @@ partial class Parser
             args.Add(Tag.Sequence);
             while (!TryParse(TokenType.RBRACE))
             {
-                string mnemonic, variable;
+                string mnemonic;
                 if (TryParse(TokenType.NEWLINE))
                 {
                     // Ignore blank lines.
@@ -214,23 +214,15 @@ partial class Parser
                     }
                     else if (TryParse(TokenType.NUMBER_SIGN))
                     {
-                        int operand = ExpectInt();
+                        object operand = ParseAssemblyOperand();
                         Expect(TokenType.NEWLINE);
                         args.Add(Expr.Make(Tag.Asm, mnemonic, operand, Asm.Immediate));
                     }
-                    else if (TryParseAnyName(out variable))
-                    {
-                        int offset = 0;
-                        if (TryParse(TokenType.PLUS))
-                        {
-                            offset = ExpectInt();
-                        }
-                        Expect(TokenType.NEWLINE);
-                        args.Add(Expr.Make(Tag.Asm, mnemonic, Expr.Make(Tag.AsmOperand, variable, offset)));
-                    }
                     else
                     {
-                        ParserError("expected operand or ;");
+                        object operand = ParseAssemblyOperand();
+                        Expect(TokenType.NEWLINE);
+                        args.Add(Expr.Make(Tag.Asm, mnemonic, operand, Asm.Absolute));
                     }
                 }
             }
@@ -243,6 +235,31 @@ partial class Parser
             Expect(TokenType.SEMICOLON);
         }
         return stmt;
+    }
+
+    object ParseAssemblyOperand()
+    {
+        // Possible formats: "number", "name+number"
+        int number;
+        string name;
+        if (TryParseInt(out number))
+        {
+            return number;
+        }
+        else if (TryParseAnyName(out name))
+        {
+            number = 0;
+            if (TryParse(TokenType.PLUS))
+            {
+                number = ExpectInt();
+            }
+            return Expr.Make(Tag.AsmOperand, name, number);
+        }
+        else
+        {
+            ParserError("expected an operand");
+            return null;
+        }
     }
 
     void Error_NotAllowedInFor()
