@@ -220,6 +220,12 @@ static class Tag
     public static readonly string Cast = "$cast";
     public static readonly string Field = "$field";
     public static readonly string Index = "$index";
+    public static readonly string Label = "$label";
+    public static readonly string Goto = "$goto";
+    public static readonly string GotoIf = "$goto_if";
+    public static readonly string GotoIfNot = "$goto_if_not";
+    public static readonly string Continue = "$continue";
+    public static readonly string Break = "$break";
     public static readonly string Asm = "$asm";
     public static readonly string AsmOperand = "$asm_operand";
 

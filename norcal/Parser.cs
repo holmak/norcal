@@ -173,6 +173,18 @@ partial class Parser
             Expr body = ParseStatementBlock();
             stmt = Expr.Make(Tag.For, init, test, next, body);
         }
+        else if (TryParseName("continue"))
+        {
+            if (!allowLong) Error_NotAllowedInFor();
+            stmt = Expr.Make(Tag.Continue);
+            Expect(TokenType.SEMICOLON);
+        }
+        else if (TryParseName("break"))
+        {
+            if (!allowLong) Error_NotAllowedInFor();
+            stmt = Expr.Make(Tag.Break);
+            Expect(TokenType.SEMICOLON);
+        }
         else if (TryParseName("return"))
         {
             if (!allowLong) Error_NotAllowedInFor();

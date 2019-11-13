@@ -69,6 +69,7 @@ partial class Compiler
         }
 
         // Post-typechecking passes:
+        program = ApplyPass("replace-loops", x => ReplaceLoops(x, null), program);
         program = ApplyPass("fold-constants", SimplifyConstantExpressions, program);
         program = ApplyPass("simplify-casts", SimplifyCasts, program);
 
@@ -567,6 +568,42 @@ partial class Compiler
         }
     }
 
+    Expr ReplaceLoops(Expr e, LoopScope loop)
+    {
+        Expr init, test, induction, body;
+        if (e.Match(Tag.Continue))
+        {
+            return Expr.Make(Tag.Goto, loop.ContinueLabel);
+        }
+        else if (e.Match(Tag.Break))
+        {
+            return Expr.Make(Tag.Goto, loop.BreakLabel);
+        }
+        else if (e.Match(Tag.For, out init, out test, out induction, out body))
+        {
+            loop = new LoopScope
+            {
+                Outer = loop,
+                ContinueLabel = MakeUniqueLabel("for_top_"),
+                BreakLabel = MakeUniqueLabel("for_bottom_"),
+            };
+
+            return Expr.Make(Tag.Sequence,
+                init,
+                Expr.Make(Tag.Label, loop.ContinueLabel),
+                Expr.Make(Tag.GotoIfNot, test, loop.BreakLabel),
+                ReplaceLoops(body, loop),
+                induction,
+                Expr.Make(Tag.Goto, loop.ContinueLabel),
+                Expr.Make(Tag.Label, loop.BreakLabel));
+        }
+        else
+        {
+            // Recursively apply this pass to all arguments:
+            return e.Map(x => ReplaceLoops(x, loop));
+        }
+    }
+
     Expr SimplifyConstantExpressions(Expr e)
     {
         // Recursively apply this pass to all arguments:
@@ -702,10 +739,10 @@ partial class Compiler
     void CompileExpression(Expr e, int dest, Continuation cont)
     {
         int value;
-        string functionName;
+        string functionName, target;
         CType type, pointerType;
         Expr[] args;
-        Expr test, then, init, induction, body, subexpr;
+        Expr test, then, subexpr;
         if (e.Match(Tag.Int, out value, out type))
         {
             EmitLoadImmediate(value, type, dest, cont);
@@ -750,24 +787,6 @@ partial class Compiler
             EmitComment("end of switch");
             Emit(Asm.Label, end);
         }
-        else if (e.Match(Tag.For, out init, out test, out induction, out body))
-        {
-            string bottom = MakeUniqueLabel();
-
-            EmitComment("for loop (prologue)");
-            CompileExpression(init, DestinationDiscard, Continuation.Fallthrough);
-            EmitComment("for loop");
-            string top = MakeUniqueLabel();
-            Emit(Asm.Label, top);
-            CompileExpression(test, DestinationDiscard, new Continuation(JumpCondition.IfFalse, bottom));
-            CompileExpression(body, DestinationDiscard, Continuation.Fallthrough);
-            CompileExpression(induction, DestinationDiscard, Continuation.Fallthrough);
-            Emit("JMP", top);
-            EmitComment("for loop (end)");
-            Emit(Asm.Label, bottom);
-
-            if (cont.When != JumpCondition.Never) Program.NYI();
-        }
         else if (e.Match(Tag.Return, out subexpr))
         {
             EmitComment("return");
@@ -777,6 +796,22 @@ partial class Compiler
         else if (e.Match(Tag.Cast, out type, out subexpr))
         {
             CompileExpression(subexpr, dest, cont);
+        }
+        else if (e.Match(Tag.Label, out target))
+        {
+            Emit(Asm.Label, target);
+        }
+        else if (e.Match(Tag.Goto, out target))
+        {
+            Emit("JMP", target);
+        }
+        else if (e.Match(Tag.GotoIf, out subexpr, out target))
+        {
+            CompileExpression(subexpr, DestinationDiscard, new Continuation(JumpCondition.IfTrue, target));
+        }
+        else if (e.Match(Tag.GotoIfNot, out subexpr, out target))
+        {
+            CompileExpression(subexpr, DestinationDiscard, new Continuation(JumpCondition.IfFalse, target));
         }
         else if (e.MatchTag(Tag.Asm))
         {
@@ -1029,9 +1064,11 @@ partial class Compiler
         DefineSymbol(scope, SymbolTag.Variable, name, address, type);
     }
 
-    string MakeUniqueLabel()
+    string MakeUniqueLabel() => MakeUniqueLabel("L");
+
+    string MakeUniqueLabel(string prefix)
     {
-        return string.Format("@L{0}", NextLabelNumber++);
+        return string.Format("@{0}{1}", prefix, NextLabelNumber++);
     }
 
     static byte LowByte(int n)
@@ -1282,4 +1319,11 @@ class LexicalScope
 {
     public LexicalScope Outer;
     public List<Symbol> Symbols = new List<Symbol>();
+}
+
+class LoopScope
+{
+    public LoopScope Outer;
+    public string ContinueLabel;
+    public string BreakLabel;
 }

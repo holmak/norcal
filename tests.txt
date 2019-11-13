@@ -486,6 +486,33 @@ void reset()
     *STOP = 0;
 }
 
+@out 16
+void reset()
+{
+    uint8_t n = 10;
+    for (uint8_t i = 6; i; 0)
+    {
+        i = i - 1;
+        if (i > 3) continue;
+        n = n + i;
+    }
+    *OUTB = n;
+    *STOP = 0;
+}
+
+@out 22
+void reset()
+{
+    uint8_t n = 10;
+    for (uint8_t i = 5; i; i = i - 1)
+    {
+        n = n + i;
+        if (i < 4) break;
+    }
+    *OUTB = n;
+    *STOP = 0;
+}
+
 @ structs
 @in
 @out 12
