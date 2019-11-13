@@ -98,7 +98,7 @@ partial class Compiler
         {
             string line;
 
-            string mnemonic, text;
+            string mnemonic, text, mode;
             int operand;
             if (e.Match(Asm.Comment, out text)) line = "\t; " + text;
             else if (e.Match(Asm.Label, out text)) line = text + ":";
@@ -106,6 +106,13 @@ partial class Compiler
             else if (e.Match(out mnemonic)) line = string.Format("\t{0}", mnemonic);
             else if (e.Match(out mnemonic, out operand)) line = string.Format("\t{0} ${1:X}", mnemonic, operand);
             else if (e.Match(out mnemonic, out text)) line = string.Format("\t{0} {1}", mnemonic, text);
+            else if (e.Match(out mnemonic, out operand, out mode))
+            {
+                string format;
+                if (mode == Asm.Immediate) format = "\t{0} #${1:X}";
+                else format = "\t{0} ${1:X} ???";
+                line = string.Format(format, mnemonic, operand);
+            }
             else line = '\t' + e.Show();
 
             sb.AppendLine(line);
