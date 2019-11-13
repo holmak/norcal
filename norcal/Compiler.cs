@@ -703,7 +703,7 @@ partial class Compiler
     {
         int value;
         string functionName;
-        CType type;
+        CType type, pointerType;
         Expr[] args;
         Expr test, then, init, induction, body, subexpr;
         if (e.Match(Tag.Int, out value, out type))
@@ -786,18 +786,20 @@ partial class Compiler
         else if (e.MatchAny(out functionName, out args))
         {
             int addr;
-            if ((functionName == Tag.LoadU8 || functionName == Tag.LoadU16) && args[0].Match(Tag.Int, out addr, out type))
+            if ((functionName == Tag.LoadU8 || functionName == Tag.LoadU16) && args[0].Match(Tag.Int, out addr, out pointerType))
             {
                 // Loads from constant addresses must be optimized, because this pattern is used to copy data from
                 // temporary variables into call frames; we can't generate a call to "load_***" in the middle of
                 // generating some other call.
 
-                EmitLoad(addr, type, dest, cont);
+                CType valueType = GetTypePointedAt(pointerType);
+                EmitLoad(addr, valueType, dest, cont);
             }
-            else if ((functionName == Tag.StoreU8 || functionName == Tag.StoreU16) && args[0].Match(Tag.Int, out addr, out type))
+            else if ((functionName == Tag.StoreU8 || functionName == Tag.StoreU16) && args[0].Match(Tag.Int, out addr, out pointerType))
             {
                 // This case is not essential, but generates better code.
 
+                CType valueType = GetTypePointedAt(pointerType);
                 if (dest == DestinationDiscard)
                 {
                     EmitComment("assign to constant address");
@@ -808,8 +810,8 @@ partial class Compiler
                 {
                     EmitComment("assign to constant address, and produce the assigned value");
                     CompileExpression(args[1], DestinationAcc, Continuation.Fallthrough);
-                    EmitStoreAcc(type, addr);
-                    EmitStoreAcc(type, dest);
+                    EmitStoreAcc(valueType, addr);
+                    EmitStoreAcc(valueType, dest);
                     EmitBranchOnAcc(cont);
                 }
             }
@@ -853,7 +855,7 @@ partial class Compiler
                         int argSize = SizeOf(argType);
                         int temp = AllocTemp(argSize);
                         CompileExpression(arg, temp, Continuation.Fallthrough);
-                        simpleArg = Expr.Make(GetLoadFunctionForType(argType), Expr.Make(Tag.Int, temp, argType));
+                        simpleArg = Expr.Make(GetLoadFunctionForType(argType), Expr.Make(Tag.Int, temp, CType.MakePointer(argType)));
                     }
                     temps.Add(simpleArg);
                 }
@@ -947,6 +949,12 @@ partial class Compiler
         {
             Program.UnhandledCase();
         }
+    }
+
+    CType GetTypePointedAt(CType pointerType)
+    {
+        if (!pointerType.IsPointer) Program.Panic("a pointer type is required");
+        return pointerType.Subtype;
     }
 
     void EmitLoadImmediate(int imm, CType type, int dest, Continuation cont)
