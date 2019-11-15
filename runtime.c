@@ -121,7 +121,12 @@ uint8_t _rt_eq_u8(uint8_t a, uint8_t b)
 {
     __asm
     {
+        LDA a
+        CMP b
         LDA #0
+        BNE skip
+        LDA #1
+        skip:
     }
 }
 
@@ -137,11 +142,62 @@ uint8_t _rt_ne_u8(uint8_t a, uint8_t b)
 {
     __asm
     {
+        LDA a
+        CMP b
         LDA #0
+        BEQ skip
+        LDA #1
+        skip:
     }
 }
 
 uint8_t _rt_ne_u16(uint16_t a, uint16_t b)
+{
+    __asm
+    {
+        LDA #0
+    }
+}
+
+uint8_t _rt_lt_u8(uint8_t a, uint8_t b)
+{
+    __asm
+    {
+        LDA a
+        CMP b
+        // The carry flag will be *clear* if T0 < T2.
+        // Load the corresponding boolean value:
+        LDA #0
+        BCS skip
+        LDA #1
+        skip:
+    }
+}
+
+uint8_t _rt_lt_u16(uint16_t a, uint16_t b)
+{
+    __asm
+    {
+        LDA #0
+    }
+}
+
+uint8_t _rt_gt_u8(uint8_t a, uint8_t b)
+{
+    __asm
+    {
+        LDA b
+        CMP a
+        // The carry flag will be *clear* if T0 > T2.
+        // Load the corresponding boolean value:
+        LDA #0
+        BCS skip
+        LDA #1
+        skip:
+    }
+}
+
+uint8_t _rt_gt_u16(uint16_t a, uint16_t b)
 {
     __asm
     {

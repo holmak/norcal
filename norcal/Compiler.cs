@@ -39,10 +39,6 @@ partial class Compiler
         DeclareFunction(Tag.LoadU16, new[] { CType.MakePointer(CType.UInt16) }, CType.UInt16, BuiltinParamAddresses(1));
         DeclareFunction(Tag.StoreU8, new[] { CType.MakePointer(CType.UInt8), CType.UInt8 }, CType.UInt8, BuiltinParamAddresses(2));
         DeclareFunction(Tag.StoreU16, new[] { CType.MakePointer(CType.UInt16), CType.UInt16 }, CType.UInt16, BuiltinParamAddresses(2));
-        DeclareFunction(Tag.LessThanU8, new[] { CType.UInt8, CType.UInt8 }, CType.UInt8, BuiltinParamAddresses(2));
-        DeclareFunction(Tag.LessThanU16, new[] { CType.UInt16, CType.UInt16 }, CType.UInt16, BuiltinParamAddresses(2));
-        DeclareFunction(Tag.GreaterThanU8, new[] { CType.UInt8, CType.UInt8 }, CType.UInt8, BuiltinParamAddresses(2));
-        DeclareFunction(Tag.GreaterThanU16, new[] { CType.UInt16, CType.UInt16 }, CType.UInt16, BuiltinParamAddresses(2));
 
         // HACK: If you don't define an interrupt handler, it will target address zero.
         // TODO: What should the compiler do if an interrupt handler isn't defined? Is it an error?
@@ -928,34 +924,6 @@ partial class Compiler
                     if (args.Length != 1) Program.Panic("wrong number of arguments to unary operator");
                     Emit("LDY", 0, Asm.Immediate);
                     Emit("LDA", T0, Asm.IndirectY);
-                }
-                else if (functionName == Tag.LessThanU8)
-                {
-                    if (args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
-                    Emit("SEC");
-                    Emit("LDA", T0, Asm.Absolute);
-                    Emit("CMP", T2, Asm.Absolute);
-                    // The carry flag will be *clear* if T0 < T2.
-                    // Load the corresponding boolean value:
-                    Emit("LDA", 0, Asm.Immediate);
-                    string skip = MakeUniqueLabel();
-                    Emit("BCS", skip);
-                    Emit("LDA", 1, Asm.Immediate);
-                    Emit(Asm.Label, skip);
-                }
-                else if (functionName == Tag.GreaterThanU8)
-                {
-                    if (args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
-                    Emit("SEC");
-                    Emit("LDA", T2, Asm.Absolute);
-                    Emit("CMP", T0, Asm.Absolute);
-                    // The carry flag will be *clear* if T0 > T2.
-                    // Load the corresponding boolean value:
-                    Emit("LDA", 0, Asm.Immediate);
-                    string skip = MakeUniqueLabel();
-                    Emit("BCS", skip);
-                    Emit("LDA", 1, Asm.Immediate);
-                    Emit(Asm.Label, skip);
                 }
                 else if (functionName == Tag.StoreU16)
                 {

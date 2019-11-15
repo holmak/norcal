@@ -36,7 +36,7 @@ partial class Compiler
         Emit(Asm.Comment, message);
     }
 
-    static readonly string[] ShortJumpInstructions = new string[]
+    public static readonly string[] ShortJumpInstructions = new string[]
     {
         "BCC",
         "BCS",
@@ -48,7 +48,7 @@ partial class Compiler
         "BVS",
     };
 
-    static readonly string[] LongJumpInstructions = new string[]
+    public static readonly string[] LongJumpInstructions = new string[]
     {
         "JMP",
         "JSR",

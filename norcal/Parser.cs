@@ -212,6 +212,11 @@ partial class Parser
                     {
                         args.Add(Expr.Make(Tag.Asm, mnemonic));
                     }
+                    else if (TryParse(TokenType.COLON))
+                    {
+                        Expect(TokenType.NEWLINE);
+                        args.Add(Expr.Make(Tag.Label, mnemonic));
+                    }
                     else if (TryParse(TokenType.NUMBER_SIGN))
                     {
                         object operand = ParseAssemblyOperand();

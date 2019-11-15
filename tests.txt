@@ -834,7 +834,24 @@ void reset()
     *STOP = 0;
 }
 
-@ Exhaustive math
+@ Exhaustive math: uint8_t
+void reset()
+{
+    for (uint8_t i = 0; 1; i = i + 1)
+    {
+        for (uint8_t j = 0; 1; j = j + 1)
+        {
+            *OUTB = i + j;
+            if (j == 0x4) break;
+        }
+
+        if (i == 0x4) break;
+    }
+
+    *STOP = 0;
+}
+
+@ Exhaustive math: uint16_t
 void reset()
 {
     for (uint16_t i = 0; 1; i = i + 1)

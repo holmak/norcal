@@ -252,10 +252,6 @@ static class Tag
     public static readonly string AddU8 = "_rt_add_u8";
     public static readonly string AddU16 = "_rt_add_u16";
     public static readonly string MultiplyU16 = "_rt_mul_u16";
-    public static readonly string LessThanU8 = "_rt_lt_u8";
-    public static readonly string LessThanU16 = "_rt_lt_u16";
-    public static readonly string GreaterThanU8 = "_rt_gt_u8";
-    public static readonly string GreaterThanU16 = "_rt_gt_u16";
     public static readonly string LoadU8 = "_rt_load_u8";
     public static readonly string LoadU16 = "_rt_load_u16";
     public static readonly string StoreU8 = "_rt_store_u8";
