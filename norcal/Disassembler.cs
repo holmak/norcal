@@ -185,4 +185,9 @@ public static class AsmInfo
         "JMP",
         "JSR",
     };
+
+    public static bool IsJumpInstruction(string mnemonic)
+    {
+        return ShortJumpInstructions.Contains(mnemonic) || LongJumpInstructions.Contains(mnemonic);
+    }
 }

@@ -208,7 +208,12 @@ partial class Parser
                 else
                 {
                     mnemonic = ExpectAnyName();
-                    if (TryParse(TokenType.NEWLINE))
+                    if (AsmInfo.IsJumpInstruction(mnemonic))
+                    {
+                        string target = ExpectAnyName();
+                        args.Add(Expr.Make(Tag.Asm, mnemonic, target));
+                    }
+                    else if (TryParse(TokenType.NEWLINE))
                     {
                         args.Add(Expr.Make(Tag.Asm, mnemonic));
                     }

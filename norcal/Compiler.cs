@@ -546,6 +546,10 @@ partial class Compiler
         {
             // TODO: Make sure that the cast is allowed.
         }
+        else if (e.MatchTag(Tag.Label))
+        {
+            // NOP
+        }
         else if (e.MatchTag(Tag.Asm))
         {
             // Ignore inline assembly.
