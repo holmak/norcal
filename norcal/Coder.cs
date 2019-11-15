@@ -36,24 +36,6 @@ partial class Compiler
         Emit(Asm.Comment, message);
     }
 
-    public static readonly string[] ShortJumpInstructions = new string[]
-    {
-        "BCC",
-        "BCS",
-        "BEQ",
-        "BMI",
-        "BNE",
-        "BPL",
-        "BVC",
-        "BVS",
-    };
-
-    public static readonly string[] LongJumpInstructions = new string[]
-    {
-        "JMP",
-        "JSR",
-    };
-
     public void Assemble(string outputFilename)
     {
         // TODO: Use a specified CHR ROM input file.
@@ -154,13 +136,13 @@ partial class Compiler
                 else if (e.Match(out mnemonic, out label))
                 {
                     int baseAddress;
-                    if (ShortJumpInstructions.Contains(mnemonic))
+                    if (AsmInfo.ShortJumpInstructions.Contains(mnemonic))
                     {
                         operandFormat = AsmInfo.REL;
                         // Relative jumps are always relative to the address of the *following* instruction:
                         baseAddress = PrgRomBase + prg.Count + 2;
                     }
-                    else if (LongJumpInstructions.Contains(mnemonic))
+                    else if (AsmInfo.LongJumpInstructions.Contains(mnemonic))
                     {
                         operandFormat = AsmInfo.ABS;
                         baseAddress = 0;

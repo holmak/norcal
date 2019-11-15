@@ -167,4 +167,22 @@ public static class AsmInfo
         " {0:X2}",
         " (${0:X4})",
     };
+
+    public static readonly string[] ShortJumpInstructions = new string[]
+    {
+        "BCC",
+        "BCS",
+        "BEQ",
+        "BMI",
+        "BNE",
+        "BPL",
+        "BVC",
+        "BVS",
+    };
+
+    public static readonly string[] LongJumpInstructions = new string[]
+    {
+        "JMP",
+        "JSR",
+    };
 }
