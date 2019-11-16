@@ -123,7 +123,10 @@ for test in tests:
         test.passed = False
         previously_attached = True
         continue
-    test.disasm = read_text_file(DISASM_FILE)
+    if os.path.isfile(DISASM_FILE):
+        test.disasm = read_text_file(DISASM_FILE)
+    else:
+        test.disasm = 'N/A'
     # Run:
     with open(INPUT_FILE, 'wb') as f:
         # Write input data as an array of uint16_t values:
