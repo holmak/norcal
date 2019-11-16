@@ -89,31 +89,34 @@ partial class Compiler
         Emit(Asm.Word, "brk");
 
         // Show the final assembly code:
-        StringBuilder sb = new StringBuilder();
-        foreach (Expr e in Assembly)
+        if (Program.EnableDebugOutput)
         {
-            string line;
-
-            string mnemonic, text, mode;
-            int operand;
-            if (e.Match(Asm.Comment, out text)) line = "\t; " + text;
-            else if (e.Match(Asm.Label, out text)) line = text + ":";
-            else if (e.Match(Asm.Function, out text)) line = string.Format("function {0}:", text);
-            else if (e.Match(out mnemonic)) line = string.Format("\t{0}", mnemonic);
-            else if (e.Match(out mnemonic, out text)) line = string.Format("\t{0} {1}", mnemonic, text);
-            else if (e.Match(out mnemonic, out operand, out mode))
+            StringBuilder sb = new StringBuilder();
+            foreach (Expr e in Assembly)
             {
-                string format;
-                if (mode == Asm.Absolute) format = "\t{0} ${1:X}";
-                else if (mode == Asm.Immediate) format = "\t{0} #${1:X}";
-                else format = "\t{0} ${1:X} ???";
-                line = string.Format(format, mnemonic, operand);
-            }
-            else line = '\t' + e.Show();
+                string line;
 
-            sb.AppendLine(line);
+                string mnemonic, text, mode;
+                int operand;
+                if (e.Match(Asm.Comment, out text)) line = "\t; " + text;
+                else if (e.Match(Asm.Label, out text)) line = text + ":";
+                else if (e.Match(Asm.Function, out text)) line = string.Format("function {0}:", text);
+                else if (e.Match(out mnemonic)) line = string.Format("\t{0}", mnemonic);
+                else if (e.Match(out mnemonic, out text)) line = string.Format("\t{0} {1}", mnemonic, text);
+                else if (e.Match(out mnemonic, out operand, out mode))
+                {
+                    string format;
+                    if (mode == Asm.Absolute) format = "\t{0} ${1:X}";
+                    else if (mode == Asm.Immediate) format = "\t{0} #${1:X}";
+                    else format = "\t{0} ${1:X} ???";
+                    line = string.Format(format, mnemonic, operand);
+                }
+                else line = '\t' + e.Show();
+
+                sb.AppendLine(line);
+            }
+            Program.WritePassOutputToFile("assembly", sb.ToString());
         }
-        Program.WritePassOutputToFile("assembly", sb.ToString());
     }
 
     List<Declaration> ApplyFirstPass(List<Declaration> program)
