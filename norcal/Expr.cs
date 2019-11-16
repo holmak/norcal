@@ -295,7 +295,7 @@ class Expr
 
         IEnumerable<object> subtrees = (IEnumerable<object>)tree;
         IEnumerable<string> substrings = subtrees.Select(x => ShowStringTree(multiline, x));
-        bool small = subtrees.Count() <= 2;
+        bool small = subtrees.Count() <= 2 || !subtrees.Any(x => x is Array);
         if (small || !multiline)
         {
             return "(" + string.Join(" ", substrings) + ")";
