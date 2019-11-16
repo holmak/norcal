@@ -16,11 +16,11 @@ uint16_t _rt_add_u16(uint16_t a, uint16_t b)
         CLC
         LDA a
         ADC b
-        STA a
+        TAY
         LDA a+1
         ADC b+1
         TAX
-        LDA a
+        TYA
     }
 }
 
@@ -41,11 +41,11 @@ uint16_t _rt_sub_u16(uint16_t a, uint16_t b)
         SEC
         LDA a
         SBC b
-        STA a
+        TAY
         LDA a+1
         SBC b+1
         TAX
-        LDA a
+        TYA
     }
 }
 
@@ -121,9 +121,9 @@ uint8_t _rt_eq_u8(uint8_t a, uint8_t b)
 {
     __asm
     {
-        LDA a
-        CMP b
         LDA #0
+        LDX a
+        CPX b
         BNE skip
         LDA #1
         skip:
@@ -135,6 +135,14 @@ uint8_t _rt_eq_u16(uint16_t a, uint16_t b)
     __asm
     {
         LDA #0
+        LDX a
+        CPX b
+        BNE skip
+        LDX a+1
+        CPX b+1
+        BNE skip
+        LDA #1
+        skip:
     }
 }
 
@@ -142,11 +150,14 @@ uint8_t _rt_ne_u8(uint8_t a, uint8_t b)
 {
     __asm
     {
-        LDA a
-        CMP b
-        LDA #0
-        BEQ skip
+        // This is identical to _rt_eq_u8 except
+        // that the constants are flipped.
+
         LDA #1
+        LDX a
+        CPX b
+        BNE skip
+        LDA #0
         skip:
     }
 }
@@ -155,7 +166,18 @@ uint8_t _rt_ne_u16(uint16_t a, uint16_t b)
 {
     __asm
     {
+        // This is identical to _rt_eq_u16 except
+        // that the constants are flipped.
+
+        LDA #1
+        LDX a
+        CPX b
+        BNE skip
+        LDX a+1
+        CPX b+1
+        BNE skip
         LDA #0
+        skip:
     }
 }
 
@@ -163,11 +185,10 @@ uint8_t _rt_lt_u8(uint8_t a, uint8_t b)
 {
     __asm
     {
-        LDA a
-        CMP b
-        // The carry flag will be *clear* if T0 < T2.
-        // Load the corresponding boolean value:
         LDA #0
+        LDX a
+        CPX b
+        // The carry flag will be *clear* if a < b.
         BCS skip
         LDA #1
         skip:
@@ -178,7 +199,27 @@ uint8_t _rt_lt_u16(uint16_t a, uint16_t b)
 {
     __asm
     {
+        // if (AH == BH)
+        //     return AL < BL;
+        // else
+        //     return AH < BH;
+
         LDA #0
+        LDX a+1
+        CPX b+1
+        BEQ test_low
+        // The carry flag will be *clear* if a+1 < b+1.
+        BCS skip
+        LDA #1
+        JMP skip
+
+        test_low:
+        LDX a
+        CPX b
+        // The carry flag will be *clear* if a < b.
+        BCS skip
+        LDA #1
+        skip:
     }
 }
 
@@ -186,11 +227,12 @@ uint8_t _rt_gt_u8(uint8_t a, uint8_t b)
 {
     __asm
     {
-        LDA b
-        CMP a
-        // The carry flag will be *clear* if T0 > T2.
-        // Load the corresponding boolean value:
+        // This is identical to _rt_lt_u8 except
+        // that the arguments are swapped.
+
         LDA #0
+        LDX b
+        CPX a
         BCS skip
         LDA #1
         skip:
@@ -201,7 +243,22 @@ uint8_t _rt_gt_u16(uint16_t a, uint16_t b)
 {
     __asm
     {
+        // This is identical to _rt_lt_u16 except
+        // that the arguments are swapped.
+
         LDA #0
+        LDX b+1
+        CPX a+1
+        BEQ test_low
+        BCS skip
+        LDA #1
+        JMP skip
+        test_low:
+        LDX b
+        CPX a
+        BCS skip
+        LDA #1
+        skip:
     }
 }
 
