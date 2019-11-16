@@ -262,6 +262,84 @@ uint8_t _rt_gt_u16(uint16_t a, uint16_t b)
     }
 }
 
+uint8_t _rt_ge_u8(uint8_t a, uint8_t b)
+{
+    __asm
+    {
+        // This is identical to _rt_lt_u8 except
+        // that the constants are flipped.
+
+        LDA #1
+        LDX a
+        CPX b
+        BCS skip
+        LDA #0
+        skip:
+    }
+}
+
+uint8_t _rt_ge_u16(uint16_t a, uint16_t b)
+{
+    __asm
+    {
+        // This is identical to _rt_lt_u16 except
+        // that the constants are flipped.
+
+        LDA #1
+        LDX a+1
+        CPX b+1
+        BEQ test_low
+        BCS skip
+        LDA #0
+        JMP skip
+        test_low:
+        LDX a
+        CPX b
+        BCS skip
+        LDA #0
+        skip:
+    }
+}
+
+uint8_t _rt_le_u8(uint8_t a, uint8_t b)
+{
+    __asm
+    {
+        // This is identical to _rt_gt_u8 except
+        // that the constants are flipped.
+
+        LDA #1
+        LDX b
+        CPX a
+        BCS skip
+        LDA #0
+        skip:
+    }
+}
+
+uint8_t _rt_le_u16(uint16_t a, uint16_t b)
+{
+    __asm
+    {
+        // This is identical to _rt_gt_u16 except
+        // that the constants are flipped.
+
+        LDA #1
+        LDX b+1
+        CPX a+1
+        BEQ test_low
+        BCS skip
+        LDA #0
+        JMP skip
+        test_low:
+        LDX b
+        CPX a
+        BCS skip
+        LDA #0
+        skip:
+    }
+}
+
 uint8_t _rt_bitwise_and_u8(uint8_t a, uint8_t b)
 {
     __asm
