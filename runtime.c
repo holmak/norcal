@@ -53,16 +53,48 @@ uint8_t _rt_mul_u8(uint8_t a, uint8_t b)
 {
     __asm
     {
-        LDA #$EE
+        LDA #0      // Initialize A (result) to 0
+        LDY #8      // Initialize Y (counter) to 8
+        loop:
+        ASL         // Shift A up    
+        ASL b       // Shift b up, storing bit 7 in carry
+        BCC skip    // If b.7 was previously 1:
+        CLC
+        ADC a       // Add a to A without carry
+        skip:
+        DEY         // Decrement the counter
+        BNE loop    // Loop a total of 8 times
     }
 }
 
 uint16_t _rt_mul_u16(uint16_t a, uint16_t b)
 {
+    uint16_t r;
     __asm
     {
-        LDA #$EE
+        LDA #0      // Initialize r (result) to 0
+        STA r
+        STA r+1
+        LDY #16     // Initialize Y (counter) to 16
+        loop:
+        ASL r       // Shift r up
+        ROL r+1
+        ASL b       // Shift b up, storing bit 15 in carry
+        ROL b+1
+        BCC skip    // If b.15 was previously 1:
+        CLC
+        LDA r       // Add a to r
+        ADC a
+        STA r
+        LDA r+1
+        ADC a+1
+        STA r+1
+        skip:
+        DEY         // Decrement the counter
+        BNE loop    // Loop a total of 16 times
+        LDA r+1     // Copy r to AX
         TAX
+        LDA r
     }
 }
 

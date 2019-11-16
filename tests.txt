@@ -965,6 +965,17 @@ void reset()
     *STOP = 0;
 }
 
+@ arithmetic that overflows
+@out 0x40 0xD5 0xA7
+void reset()
+{
+    uint8_t n = 197;
+    *OUTB = n + 123;
+    *OUTB = n - 240;
+    *OUTB = n * 123;
+    *STOP = 0;
+}
+
 @ arithmetic
 @out 403 397 1200 133 1
 void reset()
@@ -975,6 +986,17 @@ void reset()
     *OUT = n * 3;
     *OUT = n / 3;
     *OUT = n % 3;
+    *STOP = 0;
+}
+
+@ arithmetic that overflows
+@out 0x1963 0xAB6A 0x93DB
+void reset()
+{
+    uint16_t n = 40273;
+    *OUT = n + 31762;
+    *OUT = n - 61927;
+    *OUT = n * 58219;
     *STOP = 0;
 }
 
