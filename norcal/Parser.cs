@@ -9,6 +9,7 @@ partial class Parser
 {
     // Input text:
     List<Token> Input;
+    string CurrentFunctionName = "(global)";
 
     public static List<Declaration> ParseFile(string filename)
     {
@@ -78,6 +79,7 @@ partial class Parser
                 if (TryParse(TokenType.LPAREN))
                 {
                     d.Tag = DeclarationTag.Function;
+                    CurrentFunctionName = d.Name;
                     d.Fields = new List<NamedField>();
                     if (!TryParse(TokenType.RPAREN))
                     {
@@ -211,7 +213,7 @@ partial class Parser
                     if (AsmInfo.IsJumpInstruction(mnemonic))
                     {
                         string target = ExpectAnyName();
-                        args.Add(Expr.Make(Tag.Asm, mnemonic, target));
+                        args.Add(Expr.Make(Tag.Asm, mnemonic, MakeScopedLabel(target)));
                     }
                     else if (TryParse(TokenType.NEWLINE))
                     {
@@ -220,7 +222,7 @@ partial class Parser
                     else if (TryParse(TokenType.COLON))
                     {
                         Expect(TokenType.NEWLINE);
-                        args.Add(Expr.Make(Tag.Label, mnemonic));
+                        args.Add(Expr.Make(Tag.Label, MakeScopedLabel(mnemonic)));
                     }
                     else if (TryParse(TokenType.NUMBER_SIGN))
                     {
@@ -245,6 +247,11 @@ partial class Parser
             Expect(TokenType.SEMICOLON);
         }
         return stmt;
+    }
+
+    string MakeScopedLabel(string unqualifiedName)
+    {
+        return CurrentFunctionName + "." + unqualifiedName;
     }
 
     object ParseAssemblyOperand()
