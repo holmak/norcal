@@ -22,25 +22,8 @@ partial class Compiler
     static readonly int DestinationDiscard = -1;
     static readonly int DestinationAcc = -2;
 
-    // Temporary pseudoregisters for intrinsic operations, such as arithmetic.
-    // TODO: Once a symbol table is implemented, mark this space as allocated.
-    static readonly int T0 = 0x00F0;
-    static readonly int T1 = (T0 + 1);
-    static readonly int T2 = (T0 + 2);
-    static readonly int T3 = (T0 + 3);
-
     public void CompileProgram(List<Declaration> program)
     {
-        // HACK: Many functions are currently just defined in the compiler, and they use
-        // a fixed set of addresses for their arguments.
-        // Even worse, they all assume that their parameters are word-sized.
-        // Currently, none take more than two parameters.
-        int[] builtinParamAddresses = new[] { T0, T2 };
-
-        // Define the types of the builtin functions:
-        DeclareFunction(Tag.LoadU8, new[] { CType.MakePointer(CType.UInt8) }, CType.UInt8, BuiltinParamAddresses(1));
-        DeclareFunction(Tag.LoadU16, new[] { CType.MakePointer(CType.UInt16) }, CType.UInt16, BuiltinParamAddresses(1));
-
         // HACK: If you don't define an interrupt handler, it will target address zero.
         // TODO: What should the compiler do if an interrupt handler isn't defined? Is it an error?
         Emit(Asm.Label, "nmi");
@@ -915,31 +898,8 @@ partial class Compiler
                     CompileExpression(temps[i], paramAddresses[i], Continuation.Fallthrough);
                 }
 
-                // For builtin operations, instead of jumping to a function, emit the code inline.
-                EmitComment("function call: " + functionName);
-                if (functionName == Tag.LoadU16)
-                {
-                    if (args.Length != 1) Program.Panic("wrong number of arguments to unary operator");
-                    // TODO: This would be more efficient if it loaded the high byte first.
-                    Emit("LDY", 0, Asm.Immediate);
-                    Emit("LDA", T0, Asm.IndirectY);
-                    Emit("STA", T2, Asm.Absolute);
-                    Emit("INY");
-                    Emit("LDA", T0, Asm.IndirectY);
-                    Emit("TAX");
-                    Emit("LDA", T2, Asm.Absolute);
-                }
-                else if (functionName == Tag.LoadU8)
-                {
-                    if (args.Length != 1) Program.Panic("wrong number of arguments to unary operator");
-                    Emit("LDY", 0, Asm.Immediate);
-                    Emit("LDA", T0, Asm.IndirectY);
-                }
-                else
-                {
-                    // JSR to the function:
-                    Emit("JSR", functionName);
-                }
+                EmitComment("call " + functionName);
+                Emit("JSR", functionName);
 
                 // The return value is placed in the accumulator.
                 EmitStoreAcc(functionInfo.ReturnType, dest);
@@ -1198,15 +1158,6 @@ partial class Compiler
     int AllocTemp(MemoryRegion region, int size)
     {
         return AllocGlobal(region, size);
-    }
-
-    // TODO: This is a hack, used to define builtin functions.
-    int[] BuiltinParamAddresses(int count)
-    {
-        if (count == 1) return new[] { T0 };
-        else if (count == 2) return new[] { T0, T2 };
-        Program.UnhandledCase();
-        return null;
     }
 
     static void ReportInvalidNodes(Expr e, params string[] tags)

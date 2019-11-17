@@ -1,4 +1,29 @@
 
+uint8_t _rt_load_u8(__zeropage uint8_t *p)
+{
+    __asm
+    {
+        LDY #0
+        LDA (p),Y
+    }
+}
+
+uint16_t _rt_load_u16(__zeropage uint16_t *p)
+{
+    // TODO: This would be more efficient if it loaded the high byte first.
+    uint8_t temp;
+    __asm
+    {
+        LDY #0
+        LDA (p),Y
+        STA temp
+        INY
+        LDA (p),Y
+        TAX
+        LDA temp
+    }
+}
+
 void _rt_store_u8(__zeropage uint8_t *p, uint8_t n)
 {
     __asm
