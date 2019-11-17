@@ -1002,39 +1002,68 @@ void reset()
     *STOP = 0;
 }
 
-@ Exhaustive math: uint8_t
+@ increment / decrement
+@out 42 43 43 43 44 43 43 43 42
 void reset()
 {
-    for (uint8_t i = 0; 1; i = i + 1)
-    {
-        for (uint8_t j = 0; 1; j = j + 1)
-        {
-            *OUTB = i + j;
-            if (j == 0x4) break;
-        }
-
-        if (i == 0x4) break;
-    }
-
+    uint8_t n = 42;
+    *OUTB = n;
+    *OUTB = ++n;
+    *OUTB = n;
+    *OUTB = n++;
+    *OUTB = n;
+    *OUTB = --n;
+    *OUTB = n;
+    *OUTB = n--;
+    *OUTB = n;
     *STOP = 0;
 }
 
-@ Exhaustive math: uint16_t
+@out 0xFF 0 0 0xFF 0xFF 0xFF 0 0 0xFF
 void reset()
 {
-    for (uint16_t i = 0; 1; i = i + 1)
-    {
-        for (uint16_t j = 0; 1; j = j + 1)
-        {
-            *OUT = i + j;
-            *OUT = i - j;
-            *OUT = i * j;
-            *OUT = i / j;
-            if (j == 0xFFFF) break;
-        }
+    uint8_t n = 0xFF;
+    *OUTB = n;
+    *OUTB = ++n;
+    *OUTB = n;
+    *OUTB = --n;
+    *OUTB = n;
+    *OUTB = n++;
+    *OUTB = n;
+    *OUTB = n--;
+    *OUTB = n;
+    *STOP = 0;
+}
 
-        if (i == 0xFFFF) break;
-    }
+@ increment / decrement
+@out 42732 42733 42733 42733 42734 42733 42733 42733 42732
+void reset()
+{
+    uint16_t n = 42732;
+    *OUT = n;
+    *OUT = ++n;
+    *OUT = n;
+    *OUT = n++;
+    *OUT = n;
+    *OUT = --n;
+    *OUT = n;
+    *OUT = n--;
+    *OUT = n;
+    *STOP = 0;
+}
 
+@out 0xFFFF 0 0 0xFFFF 0xFFFF 0xFFFF 0 0 0xFFFF
+void reset()
+{
+    uint16_t n = 0xFFFF;
+    *OUT = n;
+    *OUT = ++n;
+    *OUT = n;
+    *OUT = --n;
+    *OUT = n;
+    *OUT = n++;
+    *OUT = n;
+    *OUT = n--;
+    *OUT = n;
     *STOP = 0;
 }
