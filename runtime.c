@@ -100,35 +100,124 @@ uint16_t _rt_mul_u16(uint16_t a, uint16_t b)
 
 uint8_t _rt_div_u8(uint8_t a, uint8_t b)
 {
+    uint8_t q;
     __asm
     {
-        LDA #$EE
+        LDA #0          // Initialize A (remainder / working space) to 0
+        STA q           // Initialize q (quotient) to 0
+        LDY #8          // Initialize Y (counter) to 8
+        loop:
+        ASL a           // Shift a up, storing the high bit in carry
+        ROL             // Shift A up, setting the low bit to carry
+        CMP b           // The carry flag will be *clear* if A < b
+        BCS dosub
+        ASL q           // Shift q up, setting the low bit to 0
+        JMP nosub
+        dosub:
+        ROL q           // Shift q up, setting the low bit to 1
+        SEC             // Subtract b from A (since A >= b)
+        SBC b
+        nosub:
+        DEY             // Decrement the counter
+        BNE loop        // Loop a total of 8 times
+        LDA q           // Copy q to A to return it
     }
 }
 
 uint16_t _rt_div_u16(uint16_t a, uint16_t b)
 {
+    uint16_t r;
     __asm
     {
-        LDA #$EE
-        TAX
+        // From http://nparker.llx.com/a2/mult.html
+        
+        LDA #0          // Initialize r to 0
+        STA r
+        STA r+1
+        LDX #16         // There are 16 bits in a
+        loop:
+        ASL a           // Shift hi bit of a into r
+        ROL a+1         // (vacating the lo bit, which will be used for the quotient)
+        ROL r
+        ROL r+1
+        LDA r
+        SEC             // Trial subtraction
+        SBC b
+        TAY
+        LDA r+1
+        SBC b+1
+        BCC skip        // Did subtraction succeed?
+        STA r+1         // If yes, save it
+        STY r
+        INC a           // and record a 1 in the quotient
+        skip:
+        DEX
+        BNE loop
+        LDA a           // Return the quotient
+        LDX a+1                
     }
 }
 
 uint8_t _rt_mod_u8(uint8_t a, uint8_t b)
 {
+    uint8_t q;
     __asm
     {
-        LDA #$EE
+        // This is identical to _rt_div_u8 except
+        // that we return the remainder.
+
+        LDA #0
+        STA q
+        LDY #8
+        loop:
+        ASL a
+        ROL
+        CMP b
+        BCS dosub
+        ASL q
+        JMP nosub
+        dosub:
+        ROL q
+        SEC
+        SBC b
+        nosub:
+        DEY
+        BNE loop
     }
 }
 
 uint16_t _rt_mod_u16(uint16_t a, uint16_t b)
 {
+    uint16_t r;
     __asm
     {
-        LDA #$EE
-        TAX
+        // This is identical to _rt_div_u16 except
+        // that we return the remainder.
+
+        LDA #0
+        STA r
+        STA r+1
+        LDX #16
+        loop:
+        ASL a
+        ROL a+1
+        ROL r
+        ROL r+1
+        LDA r
+        SEC
+        SBC b
+        TAY
+        LDA r+1
+        SBC b+1
+        BCC skip
+        STA r+1
+        STY r
+        INC a
+        skip:
+        DEX
+        BNE loop
+        LDA r
+        LDX r+1
     }
 }
 
