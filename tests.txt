@@ -1067,3 +1067,12 @@ void reset()
     *OUT = n;
     *STOP = 0;
 }
+
+@ simulator timeout
+@error
+void reset()
+{
+    for (uint8_t i = 0; 1; i = i + 1)
+    {
+    }
+}

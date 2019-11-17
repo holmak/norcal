@@ -87,8 +87,8 @@ int main(int argc, char *argv[])
 
         if (clockticks6502 >= CYCLE_LIMIT)
         {
-            fprintf(stderr, "sim error: cycle limit exceeded\n");
-			break;
+            fprintf(stderr, "cycle limit exceeded");
+			exit(1);
         }
 
         step6502();

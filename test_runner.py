@@ -139,9 +139,11 @@ for test in tests:
     process = run_process([SIMULATOR, IMAGE_FILE, INPUT_FILE])
     if process == TIMED_OUT:
         test.actual_output = '(simulator timed out)'
+        test.passed = False
         continue
     elif process.returncode != 0:
         test.actual_output = 'simulator error:<br>' + process.stderr.decode('utf_8')
+        test.passed = test.expect_error
         continue
     sim_output = parse_number_list(process.stdout.decode('utf_8'))
     test.cycles = sim_output[-1]
