@@ -75,7 +75,7 @@ int main(int argc, char *argv[])
 
     reset6502();
     run = true;
-    for (int i = 0; run && i < CYCLE_LIMIT; i++)
+    while (true)
     {
         //fprintf(stderr, "PC = %04X  A = %02X\n", pc, a);
         //fprintf(stderr, "RAM ");
@@ -85,13 +85,19 @@ int main(int argc, char *argv[])
         //for (int i = 0; i < 16; i++) fprintf(stderr, "%02X ", rom[i]);
         //fprintf(stderr, "\n");
 
-        if (!run) break;
         if (clockticks6502 >= CYCLE_LIMIT)
         {
             fprintf(stderr, "sim error: cycle limit exceeded\n");
-            exit(0);
+			break;
         }
+
         step6502();
+
+		if (!run)
+		{
+			printf("%d", clockticks6502);
+			break;
+		}
 
         //getchar();
     }

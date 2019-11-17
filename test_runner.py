@@ -36,6 +36,7 @@ class Test:
         self.expected_output = []
         self.actual_output = []
         self.expect_error = False
+        self.cycles = 0
 
 def parse_number_list(text):
     return [int(s, 0) for s in text.split()]
@@ -142,7 +143,9 @@ for test in tests:
     elif process.returncode != 0:
         test.actual_output = 'simulator error:<br>' + process.stderr.decode('utf_8')
         continue
-    test.actual_output = parse_number_list(process.stdout.decode('utf_8'))
+    sim_output = parse_number_list(process.stdout.decode('utf_8'))
+    test.cycles = sim_output[-1]
+    test.actual_output = sim_output[:-1]
     if test.expect_error:
         test.passed = False
     else:
@@ -203,6 +206,7 @@ html_middle = '''
 <th>Input</th>
 <th>Output</th>
 <th>Expected Output</th>
+<th>Cycles</th>
 </tr>
 '''
 
@@ -227,6 +231,8 @@ def monospace(data):
     text = None
     if type(data) is str:
         text = data
+    elif type(data) is int:
+        text = str(data)
     elif len(data) > 0:
         text = ', '.join([format_int(n) for n in data])
     else:
@@ -263,6 +269,7 @@ with open(REPORT_FILE, 'w') as report:
         else:
             expected_output = monospace(test.expected_output)
         report.write('<td>' + expected_output + '</td>\n')
+        report.write('<td>' + monospace(test.cycles) + '</td>\n')
         report.write('</tr>\n')
     report.write(html_footer1)
     if first_error_id is not None:
