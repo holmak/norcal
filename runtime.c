@@ -100,27 +100,28 @@ uint16_t _rt_mul_u16(uint16_t a, uint16_t b)
 
 uint8_t _rt_div_u8(uint8_t a, uint8_t b)
 {
-    uint8_t q;
+    uint8_t r;
     __asm
     {
-        LDA #0          // Initialize A (remainder / working space) to 0
-        STA q           // Initialize q (quotient) to 0
-        LDY #8          // Initialize Y (counter) to 8
+        // This is identical to _rt_div_u16 except
+        // simplified to 8-bit values.
+
+        LDA #0
+        STA r
+        LDX #8
         loop:
-        ASL a           // Shift a up, storing the high bit in carry
-        ROL             // Shift A up, setting the low bit to carry
-        CMP b           // The carry flag will be *clear* if A < b
-        BCS dosub
-        ASL q           // Shift q up, setting the low bit to 0
-        JMP nosub
-        dosub:
-        ROL q           // Shift q up, setting the low bit to 1
-        SEC             // Subtract b from A (since A >= b)
+        ASL a
+        ROL r
+        LDA r
+        SEC
         SBC b
-        nosub:
-        DEY             // Decrement the counter
-        BNE loop        // Loop a total of 8 times
-        LDA q           // Copy q to A to return it
+        BCC skip
+        STA r
+        INC a
+        skip:
+        DEX
+        BNE loop
+        LDA a
     }
 }
 
@@ -160,29 +161,28 @@ uint16_t _rt_div_u16(uint16_t a, uint16_t b)
 
 uint8_t _rt_mod_u8(uint8_t a, uint8_t b)
 {
-    uint8_t q;
+    uint8_t r;
     __asm
     {
         // This is identical to _rt_div_u8 except
         // that we return the remainder.
 
         LDA #0
-        STA q
-        LDY #8
+        STA r
+        LDX #8
         loop:
         ASL a
-        ROL
-        CMP b
-        BCS dosub
-        ASL q
-        JMP nosub
-        dosub:
-        ROL q
+        ROL r
+        LDA r
         SEC
         SBC b
-        nosub:
-        DEY
+        BCC skip
+        STA r
+        INC a
+        skip:
+        DEX
         BNE loop
+        LDA r
     }
 }
 
