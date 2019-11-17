@@ -59,15 +59,14 @@ partial class Parser
                 d.Fields = new List<NamedField>();
                 while (!TryParse(TokenType.RBRACE))
                 {
-                    string fieldName;
-                    CType fieldType;
-                    fieldType = ExpectType();
-                    fieldName = ExpectAnyName();
-                    d.Fields.Add(new NamedField(fieldType, fieldName));
+                    MemoryRegion region = ParseMemoryRegionQualifier();
+                    CType fieldType = ExpectType();
+                    string fieldName = ExpectAnyName();
+                    d.Fields.Add(new NamedField(region, fieldType, fieldName));
                     while (TryParse(TokenType.COMMA))
                     {
                         fieldName = ExpectAnyName();
-                        d.Fields.Add(new NamedField(fieldType, fieldName));
+                        d.Fields.Add(new NamedField(region, fieldType, fieldName));
                     }
                     Expect(TokenType.SEMICOLON);
                 }
@@ -85,11 +84,10 @@ partial class Parser
                     {
                         while (true)
                         {
-                            CType type;
-                            string name;
-                            type = ExpectType();
-                            name = ExpectAnyName();
-                            d.Fields.Add(new NamedField(type, name));
+                            MemoryRegion region = ParseMemoryRegionQualifier();
+                            CType type = ExpectType();
+                            string name = ExpectAnyName();
+                            d.Fields.Add(new NamedField(region, type, name));
                             if (TryParse(TokenType.RPAREN)) break;
                             Expect(TokenType.COMMA);
                         }
@@ -115,6 +113,27 @@ partial class Parser
         return d;
     }
 
+    bool TryParseMemoryRegionQualifier(out MemoryRegion region)
+    {
+        if (TryParseName("__zeropage"))
+        {
+            region = MemoryRegion.ZeroPage;
+            return true;
+        }
+        else
+        {
+            region = MemoryRegion.Ram;
+            return false;
+        }
+    }
+
+    MemoryRegion ParseMemoryRegionQualifier()
+    {
+        MemoryRegion region;
+        if (TryParseMemoryRegionQualifier(out region)) return region;
+        else return MemoryRegion.Ram;
+    }
+
     void ParseArrayDeclaration(ref CType type)
     {
         if (TryParse(TokenType.LBRACKET))
@@ -129,29 +148,19 @@ partial class Parser
     Expr ParseStatement(bool allowLong)
     {
         Expr stmt;
+        MemoryRegion region;
         CType type;
-        if (TryParseType(out type))
+        if (TryParseMemoryRegionQualifier(out region))
         {
             // Declare a local variable:
-            string localname;
-            localname = ExpectAnyName();
-            ParseArrayDeclaration(ref type);
-            // Optionally, an initial value can be assigned:
-            if (TryParse(TokenType.EQUAL))
-            {
-                Expr value = ParseExpr();
-                stmt = Expr.Make(new object[]
-                {
-                    Tag.Sequence,
-                    Expr.Make(Tag.Local, type, localname),
-                    MakeAssignExpr(Expr.Make(Tag.Name, localname), value),
-                });
-            }
-            else
-            {
-                stmt = Expr.Make(Tag.Local, type, localname);
-            }
-            Expect(TokenType.SEMICOLON);
+            type = ExpectType();
+            stmt = ParseRestOfLocalDeclaration(region, type);
+        }
+        else if (TryParseType(out type))
+        {
+            // Declare a local variable:
+            region = MemoryRegion.Ram;
+            stmt = ParseRestOfLocalDeclaration(region, type);
         }
         else if (TryParseName("if"))
         {
@@ -230,6 +239,15 @@ partial class Parser
                         Expect(TokenType.NEWLINE);
                         args.Add(Expr.Make(Tag.Asm, mnemonic, operand, Asm.Immediate));
                     }
+                    else if (TryParse(TokenType.LPAREN))
+                    {
+                        object operand = ParseAssemblyOperand();
+                        Expect(TokenType.RPAREN);
+                        Expect(TokenType.COMMA);
+                        ExpectKeyword("Y");
+                        Expect(TokenType.NEWLINE);
+                        args.Add(Expr.Make(Tag.Asm, mnemonic, operand, Asm.IndirectY));
+                    }
                     else
                     {
                         object operand = ParseAssemblyOperand();
@@ -246,6 +264,28 @@ partial class Parser
             stmt = ParseExpr();
             Expect(TokenType.SEMICOLON);
         }
+        return stmt;
+    }
+
+    Expr ParseRestOfLocalDeclaration(MemoryRegion region, CType type)
+    {
+        Expr stmt;
+        string localname = ExpectAnyName();
+        ParseArrayDeclaration(ref type);
+        // Optionally, an initial value can be assigned:
+        if (TryParse(TokenType.EQUAL))
+        {
+            Expr value = ParseExpr();
+            stmt = Expr.Make(
+                Tag.Sequence,
+                Expr.Make(Tag.Local, region, type, localname),
+                MakeAssignExpr(Expr.Make(Tag.Name, localname), value));
+        }
+        else
+        {
+            stmt = Expr.Make(Tag.Local, region, type, localname);
+        }
+        Expect(TokenType.SEMICOLON);
         return stmt;
     }
 
@@ -707,6 +747,11 @@ partial class Parser
         {
             return false;
         }
+    }
+
+    void ExpectKeyword(string name)
+    {
+        if (!TryParseName(name)) ParserError("expected '{0}'", name);
     }
 
     bool TryParseType(out CType type)

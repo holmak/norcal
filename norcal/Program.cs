@@ -175,6 +175,7 @@ static class Program
 class Declaration
 {
     public DeclarationTag Tag;
+    public MemoryRegion Region;
     public CType Type;
     public string Name;
     public Expr Body;
@@ -191,11 +192,13 @@ enum DeclarationTag
 
 class NamedField
 {
-    public CType Type;
-    public string Name;
+    public readonly MemoryRegion Region;
+    public readonly CType Type;
+    public readonly string Name;
 
-    public NamedField(CType type, string name)
+    public NamedField(MemoryRegion region, CType type, string name)
     {
+        Region = region;
         Type = type;
         Name = name;
     }

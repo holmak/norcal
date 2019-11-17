@@ -8,11 +8,14 @@ using System.Threading.Tasks;
 
 partial class Compiler
 {
+    int ZeroPageNext = ZeroPageStart;
     int RamNext = RamStart;
     int NextLabelNumber = 0;
     Dictionary<string, CFunctionInfo> Functions = new Dictionary<string, CFunctionInfo>();
     Dictionary<string, CStructInfo> StructTypes = new Dictionary<string, CStructInfo>();
 
+    static readonly int ZeroPageStart = 0x000;
+    static readonly int ZeroPageEnd = 0x100;
     static readonly int RamStart = 0x300;
     static readonly int RamEnd = 0x800;
 
@@ -37,8 +40,6 @@ partial class Compiler
         // Define the types of the builtin functions:
         DeclareFunction(Tag.LoadU8, new[] { CType.MakePointer(CType.UInt8) }, CType.UInt8, BuiltinParamAddresses(1));
         DeclareFunction(Tag.LoadU16, new[] { CType.MakePointer(CType.UInt16) }, CType.UInt16, BuiltinParamAddresses(1));
-        DeclareFunction(Tag.StoreU8, new[] { CType.MakePointer(CType.UInt8), CType.UInt8 }, CType.UInt8, BuiltinParamAddresses(2));
-        DeclareFunction(Tag.StoreU16, new[] { CType.MakePointer(CType.UInt16), CType.UInt16 }, CType.UInt16, BuiltinParamAddresses(2));
 
         // HACK: If you don't define an interrupt handler, it will target address zero.
         // TODO: What should the compiler do if an interrupt handler isn't defined? Is it an error?
@@ -108,6 +109,7 @@ partial class Compiler
                     string format;
                     if (mode == Asm.Absolute) format = "\t{0} ${1:X}";
                     else if (mode == Asm.Immediate) format = "\t{0} #${1:X}";
+                    else if (mode == Asm.IndirectY) format = "\t{0} (${1:X}),Y";
                     else format = "\t{0} ${1:X} ???";
                     line = string.Format(format, mnemonic, operand);
                 }
@@ -136,7 +138,7 @@ partial class Compiler
                 {
                     CType type = decl.Fields[i].Type;
                     paramTypes[i] = type;
-                    addresses[i] = AllocGlobal(SizeOf(type));
+                    addresses[i] = AllocGlobal(decl.Fields[i].Region, SizeOf(type));
                 }
                 DeclareFunction(decl.Name, paramTypes, decl.Type, addresses);
                 EmitComment("declare function " + decl.Name);
@@ -171,7 +173,7 @@ partial class Compiler
             }
             else if (decl.Tag == DeclarationTag.Variable)
             {
-                DefineVariable(globalScope, decl.Type, decl.Name);
+                DefineVariable(globalScope, decl.Region, decl.Type, decl.Name);
             }
             else if (decl.Tag == DeclarationTag.Struct)
             {
@@ -239,6 +241,7 @@ partial class Compiler
     {
         string name, mnemonic, mode;
         Expr body, operand;
+        MemoryRegion region;
         CType type;
         int offset;
         if (e.Match(Tag.Name, out name))
@@ -263,9 +266,9 @@ partial class Compiler
             // Remove the "scope" node, which isn't needed once all the variables have been replaced:
             return ReplaceNamedVariables(body, PushScope(scope));
         }
-        else if (e.Match(Tag.Local, out type, out name))
+        else if (e.Match(Tag.Local, out region, out type, out name))
         {
-            DefineVariable(scope, type, name);
+            DefineVariable(scope, region, type, name);
             // There is no need to keep the declaration node:
             return Expr.Make(Tag.Empty);
         }
@@ -898,7 +901,7 @@ partial class Compiler
                     {
                         EmitComment("prepare call: create temporary for argument " + i);
                         int argSize = SizeOf(argType);
-                        int temp = AllocTemp(argSize);
+                        int temp = AllocTemp(MemoryRegion.Ram, argSize);
                         CompileExpression(arg, temp, Continuation.Fallthrough);
                         simpleArg = Expr.Make(GetLoadFunctionForType(argType), Expr.Make(Tag.Int, temp, CType.MakePointer(argType)));
                     }
@@ -931,23 +934,6 @@ partial class Compiler
                     if (args.Length != 1) Program.Panic("wrong number of arguments to unary operator");
                     Emit("LDY", 0, Asm.Immediate);
                     Emit("LDA", T0, Asm.IndirectY);
-                }
-                else if (functionName == Tag.StoreU16)
-                {
-                    if (args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
-                    Emit("LDY", 0, Asm.Immediate);
-                    Emit("LDA", T2, Asm.Absolute);
-                    Emit("STA", T0, Asm.IndirectY);
-                    Emit("INY");
-                    Emit("LDA", T3, Asm.Absolute);
-                    Emit("STA", T0, Asm.IndirectY);
-                }
-                else if (functionName == Tag.StoreU8)
-                {
-                    if (args.Length != 2) Program.Panic("wrong number of arguments to binary operator");
-                    Emit("LDY", 0, Asm.Immediate);
-                    Emit("LDA", T2, Asm.Absolute);
-                    Emit("STA", T0, Asm.IndirectY);
                 }
                 else
                 {
@@ -1040,9 +1026,9 @@ partial class Compiler
         EmitBranchOnAcc(cont);
     }
 
-    void DefineVariable(LexicalScope scope, CType type, string name)
+    void DefineVariable(LexicalScope scope, MemoryRegion region, CType type, string name)
     {
-        int address = AllocGlobal(SizeOf(type));
+        int address = AllocGlobal(region, SizeOf(type));
         DefineSymbol(scope, SymbolTag.Variable, name, address, type);
     }
 
@@ -1167,11 +1153,27 @@ partial class Compiler
     }
 
     // Allocate 'size' bytes in RAM and return the address.
-    int AllocGlobal(int size)
+    int AllocGlobal(MemoryRegion region, int size)
     {
-        if (RamNext + size > RamEnd) Program.Error("Not enough RAM to allocate global.");
-        int address = RamNext;
-        RamNext += size;
+        int address;
+        if (region == MemoryRegion.ZeroPage)
+        {
+            if (ZeroPageNext + size > ZeroPageEnd) Program.Error("Not enough zero page RAM to allocate global.");
+            address = ZeroPageNext;
+            ZeroPageNext += size;
+        }
+        else if (region == MemoryRegion.Ram)
+        {
+            if (RamNext + size > RamEnd) Program.Error("Not enough RAM to allocate global.");
+            address = RamNext;
+            RamNext += size;
+        }
+        else
+        {
+            Program.NYI();
+            address = -1;
+        }
+
         return address;
     }
 
@@ -1193,9 +1195,9 @@ partial class Compiler
     }
 
     // TODO: Temporary variables can be freed when the current temp scope ends.
-    int AllocTemp(int size)
+    int AllocTemp(MemoryRegion region, int size)
     {
-        return AllocGlobal(size);
+        return AllocGlobal(region, size);
     }
 
     // TODO: This is a hack, used to define builtin functions.
@@ -1308,4 +1310,10 @@ class LoopScope
     public LoopScope Outer;
     public string ContinueLabel;
     public string BreakLabel;
+}
+
+enum MemoryRegion
+{
+    ZeroPage,
+    Ram,
 }
