@@ -53,6 +53,9 @@ partial class Compiler
         program = ApplyPass("fold-constants", SimplifyConstantExpressions, program);
         program = ApplyPass("simplify-casts", SimplifyCasts, program);
 
+        // Recursion detection:
+        DetectRecursion(program);
+
         // Pass: Codegen
         foreach (Declaration decl in program)
         {
@@ -565,6 +568,89 @@ partial class Compiler
         else
         {
             Program.Panic("type checker: unhandled case");
+        }
+    }
+
+    void DetectRecursion(List<Declaration> program)
+    {
+        // Figure out which functions each function could call:
+        Dictionary<string, HashSet<string>> callGraph = new Dictionary<string, HashSet<string>>();
+        foreach (Declaration decl in program)
+        {
+            if (decl.Tag == DeclarationTag.Function)
+            {
+                HashSet<string> calledFunctions = new HashSet<string>();
+                callGraph[decl.Name] = calledFunctions;
+
+                Action<Expr> findCalls = null;
+                findCalls = (expr) =>
+                {
+                    string tag = expr.GetArgs().First() as string;
+                    if (tag != null && !tag.StartsWith("$"))
+                    {
+                        calledFunctions.Add(tag);
+                    }
+
+                    foreach (object arg in expr.GetArgs())
+                    {
+                        Expr child = arg as Expr;
+                        if (child != null)
+                        {
+                            findCalls(child);
+                        }
+                    }
+                };
+
+                findCalls(decl.Body);
+            }
+        }
+
+        // Find all of the functions that have no incoming calls:
+        Queue<string> rootFunctions = new Queue<string>();
+        foreach (string func in callGraph.Keys)
+        {
+            if (!callGraph.Values.Any(x => x.Contains(func)))
+            {
+                rootFunctions.Enqueue(func);
+            }
+        }
+
+        // Perform a topological sort, discarding the actual sorted list:
+        while (rootFunctions.Count > 0)
+        {
+            string func = rootFunctions.Dequeue();
+            HashSet<string> callees = callGraph[func];
+            callGraph.Remove(func);
+
+            foreach (string otherFunc in callees)
+            {
+                if (!callGraph.Values.Any(x => x.Contains(otherFunc)))
+                {
+                    rootFunctions.Enqueue(otherFunc);
+                }
+            }
+        }
+
+        // If any functions remain in the call graph it means a cycle exists:
+        if (callGraph.Count > 0)
+        {
+            // Repeatedly remove leaf node functions in an attempt to clean up the error message:
+            KeepSearching:
+            foreach (var funcAndCallees in callGraph)
+            {
+                if (funcAndCallees.Value.Count == 0)
+                {
+                    foreach (var callees in callGraph.Values)
+                    {
+                        callees.Remove(funcAndCallees.Key);
+                    }
+
+                    callGraph.Remove(funcAndCallees.Key);
+                    goto KeepSearching;
+                }
+            }
+
+            Program.Error("functions called recursively: {0}", string.Join(", ", callGraph.Keys));
         }
     }
 

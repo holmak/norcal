@@ -1076,3 +1076,16 @@ void reset()
     {
     }
 }
+
+@ recursion detection
+@error
+void a() {}
+void b() { a(); }
+void c() { b(); e(); }
+void d() { c(); }
+void e() { d(); }
+void reset()
+{
+    e();
+    *STOP = 0;
+}
