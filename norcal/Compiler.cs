@@ -87,7 +87,7 @@ partial class Compiler
                 int operand;
                 if (e.Match(Asm.Comment, out text)) line = "\t; " + text;
                 else if (e.Match(Asm.Label, out text)) line = text + ":";
-                else if (e.Match(Asm.Function, out text)) line = string.Format("function {0}:", text);
+                else if (e.Match(Asm.Function, out text)) line = string.Format("\nfunction {0}:", text);
                 else if (e.Match(out mnemonic)) line = string.Format("\t{0}", mnemonic);
                 else if (e.Match(out mnemonic, out text)) line = string.Format("\t{0} {1}", mnemonic, text);
                 else if (e.Match(out mnemonic, out operand, out mode))
