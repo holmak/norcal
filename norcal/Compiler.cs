@@ -300,7 +300,6 @@ partial class Compiler
         }
         else
         {
-            ReportInvalidNodes(e, Tag.Name, Tag.Scope, Tag.Local);
             return e.Map(ReplaceAddressOf);
         }
     }
@@ -457,7 +456,6 @@ partial class Compiler
         }
         else
         {
-            ReportInvalidNodes(e, Tag.Name, Tag.Scope, Tag.Local);
             return e;
         }
     }
@@ -502,8 +500,6 @@ partial class Compiler
 
     void CheckTypes(Expr e, CType returnType)
     {
-        ReportInvalidNodes(e, Tag.Scope, Tag.Local, Tag.AddressOf);
-
         string name;
         int value;
         CType type;
@@ -713,7 +709,6 @@ partial class Compiler
         }
         else
         {
-            ReportInvalidNodes(e, Tag.Name, Tag.Scope, Tag.Local);
             return e;
         }
     }
@@ -757,8 +752,6 @@ partial class Compiler
 
     CType TypeOfWithoutDecay(Expr e)
     {
-        ReportInvalidNodes(e, Tag.Name, Tag.Local);
-
         int value;
         string name;
         CType type;
@@ -1248,17 +1241,6 @@ partial class Compiler
     int AllocTemp(MemoryRegion region, int size)
     {
         return AllocGlobal(region, size);
-    }
-
-    static void ReportInvalidNodes(Expr e, params string[] tags)
-    {
-        foreach (string tag in tags)
-        {
-            if (e.MatchTag(tag))
-            {
-                Program.Panic("invalid '{0}' node encountered", tag);
-            }
-        }
     }
 }
 
