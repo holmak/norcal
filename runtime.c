@@ -20,7 +20,7 @@ uint16_t _rt_load_u16(__zeropage uint16_t *p)
     }
 }
 
-void _rt_store_u8(__zeropage uint8_t *p, uint8_t n)
+uint8_t _rt_store_u8(__zeropage uint8_t *p, uint8_t n)
 {
     __asm
     {
@@ -30,15 +30,16 @@ void _rt_store_u8(__zeropage uint8_t *p, uint8_t n)
     }
 }
 
-void _rt_store_u16(__zeropage uint16_t *p, uint16_t n)
+uint16_t _rt_store_u16(__zeropage uint16_t *p, uint16_t n)
 {
     __asm
     {
-        LDY #0
-        LDA n
-        STA (p),Y
-        INY
+        LDY #1
         LDA n+1
+        STA (p),Y
+        TAX
+        DEY
+        LDA n
         STA (p),Y
     }
 }
