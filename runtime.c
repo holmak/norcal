@@ -15,7 +15,7 @@ uint16_t _rt_load_u16(__zeropage uint16_t *p)
         LDY #1
         LDA (p),Y
         TAX
-        LDY #0
+        DEY
         LDA (p),Y
     }
 }
@@ -37,7 +37,7 @@ void _rt_store_u16(__zeropage uint16_t *p, uint16_t n)
         LDY #0
         LDA n
         STA (p),Y
-        LDY #1
+        INY
         LDA n+1
         STA (p),Y
     }
