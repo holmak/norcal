@@ -12,7 +12,6 @@ TESTS_FILE = 'tests.txt'
 RUNTIME_FILE = 'runtime.c'
 SOURCE_FILE = joinpaths(TEST_DIR, 'source.c')
 IMAGE_FILE = joinpaths(TEST_DIR, 'program.nes')
-INPUT_FILE = joinpaths(TEST_DIR, 'input.bin')
 REPORT_FILE = joinpaths(TEST_DIR, 'results.html')
 DISASM_FILE = joinpaths(DEBUG_DIR, 'dis.s')
 COMPILER = 'norcal/bin/Debug/norcal.exe'
@@ -32,7 +31,6 @@ class Test:
         self.description = ''
         self.source = ''
         self.disasm = ''
-        self.input = []
         self.expected_output = []
         self.actual_output = []
         self.expect_error = False
@@ -56,8 +54,6 @@ with open(TESTS_FILE, 'r') as f:
         # Collect metadata for the upcoming test.
         if line.startswith('@ '):
             test.description = line[2:]
-        elif line.startswith('@in'):
-            test.input = parse_number_list(line[4:])
         elif line.startswith('@out'):
             test.expected_output = parse_number_list(line[5:])
         elif line.startswith('@error'):
@@ -129,14 +125,7 @@ for test in tests:
     else:
         test.disasm = 'N/A'
     # Run:
-    with open(INPUT_FILE, 'wb') as f:
-        # Write input data as an array of uint16_t values:
-        data = bytearray()
-        for n in test.input:
-            data.append(n & 0xFF)
-            data.append((n >> 8) & 0xFF)
-        f.write(data)
-    process = run_process([SIMULATOR, IMAGE_FILE, INPUT_FILE])
+    process = run_process([SIMULATOR, IMAGE_FILE])
     if process == TIMED_OUT:
         test.actual_output = '(simulator timed out)'
         test.passed = False
@@ -205,7 +194,6 @@ html_middle = '''
 <th>Description</th>
 <th>Source</th>
 <th>Disassembly</th>
-<th>Input</th>
 <th>Output</th>
 <th>Expected Output</th>
 <th>Cycles</th>
@@ -264,7 +252,6 @@ with open(REPORT_FILE, 'w') as report:
         report.write('<td id="{}">{}</td>\n'.format(test.html_id, test.description))
         report.write('<td><pre>' + test.source.strip() + '</pre></td>\n')
         report.write('<td><details><summary>Show</summary><pre>' + test.disasm.strip() + '</pre></details></td>\n')
-        report.write('<td>' + monospace(test.input) + '</td>\n')
         report.write('<td>' + monospace(test.actual_output) + '</td>\n')
         if test.expect_error:
             expected_output = monospace('(error)')

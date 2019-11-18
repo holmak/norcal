@@ -20,22 +20,11 @@
 static bool run;
 static uint8_t ram[RAM_SIZE];
 static uint8_t rom[ROM_SIZE];
-static FILE *input;
 static uint8_t outputLow;
-
-uint8_t next_input()
-{
-    uint8_t b = fgetc(input);
-    if (b == EOF) b = 0;
-    return b;
-}
 
 uint8_t read6502(uint16_t address)
 {
     if (address < RAM_SIZE) return ram[address];
-    else if (address == DEBUG_PORT_LOW) return next_input();
-    else if (address == DEBUG_PORT_HIGH) return next_input();
-    else if (address == DEBUG_PORT_BYTE) return next_input();
     else if (address >= ROM_BASE) return rom[address - ROM_BASE];
     else return 0xEE;
 }
@@ -52,13 +41,12 @@ void write6502(uint16_t address, uint8_t value)
 
 int main(int argc, char *argv[])
 {
-    if (argc != 3)
+    if (argc != 2)
     {
-        fprintf(stderr, "Usage: %s IMAGEFILE INPUTFILE", argv[0]);
+        fprintf(stderr, "Usage: %s IMAGEFILE", argv[0]);
         exit(1);
     }
     char *imagefilename = argv[1];
-    char *inputfilename = argv[2];
 
     FILE *image = fopen(imagefilename, "rb");
     assert(image);
@@ -69,9 +57,6 @@ int main(int argc, char *argv[])
 
     assert(fread(rom, sizeof(rom), 1, image) == 1);
     fclose(image);
-
-    input = fopen(inputfilename, "rb");
-    assert(input);
 
     reset6502();
     run = true;
