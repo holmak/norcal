@@ -39,6 +39,7 @@ class CType : IEquatable<CType>
     public static readonly CType UInt8 = MakeSimple(CSimpleType.UInt8);
     public static readonly CType UInt8Ptr = MakePointer(UInt8);
     public static readonly CType UInt16 = MakeSimple(CSimpleType.UInt16);
+    public static readonly CType UInt16Ptr = MakePointer(UInt16);
 
     public static CType MakeSimple(CSimpleType simple)
     {

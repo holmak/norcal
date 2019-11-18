@@ -241,7 +241,10 @@ static class Tag
     public static readonly string LoadGeneric = "$load";
     public static readonly string StoreGeneric = "$store";
     public static readonly string BoolFromGeneric = "$bool_from";
-    public static readonly string PredecrementGeneric = "$predecr";
+    public static readonly string PredecrementGeneric = "$predec";
+    public static readonly string PostdecrementGeneric = "$postdec";
+    public static readonly string PreincrementGeneric = "$preinc";
+    public static readonly string PostincrementGeneric = "$postinc";
     public static readonly string EqualGeneric = "$equal";
     public static readonly string NotEqualGeneric = "$not_equal";
     public static readonly string LessThanGeneric = "$less_than";
@@ -259,6 +262,12 @@ static class Tag
     public static readonly string LoadU16 = "_rt_load_u16";
     public static readonly string StoreU8 = "_rt_store_u8";
     public static readonly string StoreU16 = "_rt_store_u16";
-    public static readonly string PredecrementU8 = "_rt_predecr_u8";
-    public static readonly string PredecrementU16 = "_rt_predecr_u16";
+    public static readonly string PredecrementU8 = "_rt_predec_u8";
+    public static readonly string PredecrementU16 = "_rt_predec_u16";
+    public static readonly string PostdecrementU8 = "_rt_postdec_u8";
+    public static readonly string PostdecrementU16 = "_rt_postdec_u16";
+    public static readonly string PreincrementU8 = "_rt_preinc_u8";
+    public static readonly string PreincrementU16 = "_rt_preinc_u16";
+    public static readonly string PostincrementU8 = "_rt_postinc_u8";
+    public static readonly string PostincrementU16 = "_rt_postinc_u16";
 }

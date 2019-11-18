@@ -550,6 +550,14 @@ partial class Parser
         {
             return Expr.Make(Tag.BitwiseNotGeneric, ParseUnaryPrefixExpr());
         }
+        else if (TryParse(TokenType.INCREMENT))
+        {
+            return Expr.Make(Tag.PreincrementGeneric, AddressOf(ParseUnaryPrefixExpr()));
+        }
+        else if (TryParse(TokenType.DECREMENT))
+        {
+            return Expr.Make(Tag.PredecrementGeneric, AddressOf(ParseUnaryPrefixExpr()));
+        }
         else
         {
             return ParseSuffixExpr();
@@ -596,6 +604,14 @@ partial class Parser
                 string fieldName;
                 fieldName = ExpectAnyName();
                 e = Expr.Make(Tag.LoadGeneric, Expr.Make(Tag.Field, Expr.Make(Tag.LoadGeneric, e), fieldName));
+            }
+            else if (TryParse(TokenType.INCREMENT))
+            {
+                e = Expr.Make(Tag.PostincrementGeneric, AddressOf(e));
+            }
+            else if (TryParse(TokenType.DECREMENT))
+            {
+                e = Expr.Make(Tag.PostdecrementGeneric, AddressOf(e));
             }
             else if (TryParse(TokenType.LBRACKET))
             {

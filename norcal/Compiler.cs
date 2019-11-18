@@ -349,6 +349,10 @@ partial class Compiler
     {
         { Tag.BoolFromGeneric, "bool" },
         { Tag.BitwiseNotGeneric, "bitwise_not" },
+        { Tag.PredecrementGeneric, "predec" },
+        { Tag.PostdecrementGeneric, "postdec" },
+        { Tag.PreincrementGeneric, "preinc" },
+        { Tag.PostincrementGeneric, "postinc" },
     };
 
     static Dictionary<string, string> SymmetricBinaryOperators = new Dictionary<string, string>
@@ -457,8 +461,8 @@ partial class Compiler
 
     static string GetTypeCode(CType type)
     {
-        if (type == CType.UInt8) return "u8";
-        else if (type == CType.UInt16) return "u16";
+        if (type == CType.UInt8 || type == CType.UInt8Ptr) return "u8";
+        else if (type == CType.UInt16 || type == CType.UInt16Ptr) return "u16";
         Program.NYI();
         return null;
     }

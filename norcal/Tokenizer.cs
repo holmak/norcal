@@ -85,11 +85,16 @@ class Tokenizer
             else if (TryRead('(')) tag = TokenType.LPAREN;
             else if (TryRead(')')) tag = TokenType.RPAREN;
             else if (TryRead('*')) tag = TokenType.STAR;
-            else if (TryRead('+')) tag = TokenType.PLUS;
+            else if (TryRead('+'))
+            {
+                if (TryRead('+')) tag = TokenType.INCREMENT;
+                else tag = TokenType.PLUS;
+            }
             else if (TryRead(',')) tag = TokenType.COMMA;
             else if (TryRead('-'))
             {
                 if (TryRead('>')) tag = TokenType.ARROW;
+                else if (TryRead('-')) tag = TokenType.DECREMENT;
                 else tag = TokenType.MINUS;
             }
             else if (TryRead('.')) tag = TokenType.PERIOD;
@@ -360,6 +365,8 @@ enum TokenType
     PIPE,
     RBRACE,
     TILDE,
+    INCREMENT,
+    DECREMENT,
 
     INT,
     NAME,
