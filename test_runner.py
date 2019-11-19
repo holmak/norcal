@@ -93,7 +93,7 @@ for test in tests:
     # Compile:
     with open(SOURCE_FILE, 'w') as f:
         f.write(test.source)
-    args = [COMPILER, RUNTIME_FILE, TEST_HEADER, SOURCE_FILE, "-o", IMAGE_FILE]
+    args = [COMPILER, RUNTIME_FILE, TEST_HEADER, SOURCE_FILE, "-o", IMAGE_FILE, "--debug-output"]
     # Automatically attach the debugger if a test fails.
     # However, only do this for the first failure, to avoid a cascade of
     # debugger prompt windows.
