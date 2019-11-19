@@ -52,9 +52,7 @@ partial class Compiler
         program = ApplyPass("replace-loops", x => ReplaceLoops(x, null), program);
         program = ApplyPass("fold-constants", SimplifyConstantExpressions, program);
         program = ApplyPass("simplify-casts", SimplifyCasts, program);
-
-        // Recursion detection:
-        DetectRecursion(program);
+        program = RemoveUncalledFunctionsAndDetectRecursion(program, new[] { "nmi", "reset", "brk" });
 
         // Pass: Codegen
         foreach (Declaration decl in program)
@@ -567,8 +565,10 @@ partial class Compiler
         }
     }
 
-    void DetectRecursion(List<Declaration> program)
+    List<Declaration> RemoveUncalledFunctionsAndDetectRecursion(List<Declaration> program, string[] functionsToNeverRemove)
     {
+        List<Declaration> newProgram = new List<Declaration>(program);
+
         // Figure out which functions each function could call:
         Dictionary<string, HashSet<string>> callGraph = new Dictionary<string, HashSet<string>>();
         foreach (Declaration decl in program)
@@ -601,11 +601,30 @@ partial class Compiler
             }
         }
 
-        // Find all of the functions that have no incoming calls:
-        Queue<string> rootFunctions = new Queue<string>();
-        foreach (string func in callGraph.Keys)
+        // Repeatedly remove uncalled functions from the program (but not interrupt vectors):
         {
-            if (!callGraph.Values.Any(x => x.Contains(func)))
+            KeepSearching:
+            foreach (string func in callGraph.Keys)
+            {
+                if (functionsToNeverRemove.Contains(func))
+                {
+                    continue;
+                }
+
+                if (!callGraph.Values.Any(x => x.Contains(func)))
+                {
+                    callGraph.Remove(func);
+                    newProgram.RemoveAll(decl => decl.Tag == DeclarationTag.Function && decl.Name == func);
+                    goto KeepSearching;
+                }
+            }
+        }
+
+        // Find all of the remaining functions that have no incoming calls:
+        Queue<string> rootFunctions = new Queue<string>();
+        foreach (string func in functionsToNeverRemove)
+        {
+            if (callGraph.ContainsKey(func))
             {
                 rootFunctions.Enqueue(func);
             }
@@ -648,6 +667,9 @@ partial class Compiler
 
             Program.Error("functions called recursively: {0}", string.Join(", ", callGraph.Keys));
         }
+
+        Program.WritePassOutputToFile("remove-uncalled-functions", newProgram);
+        return newProgram;
     }
 
     Expr ReplaceLoops(Expr e, LoopScope loop)
