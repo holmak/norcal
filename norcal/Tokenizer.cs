@@ -113,13 +113,21 @@ class Tokenizer
             }
             else if (TryRead(':')) tag = TokenType.COLON;
             else if (TryRead(';')) tag = TokenType.SEMICOLON;
-            else if (TryRead('<')) tag = TokenType.LESS_THAN;
+            else if (TryRead('<'))
+            {
+                if (TryRead('=')) tag = TokenType.LESS_THAN_OR_EQUAL;
+                else tag = TokenType.LESS_THAN;
+            }
             else if (TryRead('='))
             {
                 if (TryRead('=')) tag = TokenType.DOUBLE_EQUAL;
                 else tag = TokenType.EQUAL;
             }
-            else if (TryRead('>')) tag = TokenType.GREATER_THAN;
+            else if (TryRead('>'))
+            {
+                if (TryRead('=')) tag = TokenType.GREATER_THAN_OR_EQUAL;
+                else tag = TokenType.GREATER_THAN;
+            }
             else if (TryRead('?')) tag = TokenType.QUESTION_MARK;
             else if (TryRead('[')) tag = TokenType.LBRACKET;
             else if (TryRead(']')) tag = TokenType.RBRACKET;
@@ -358,9 +366,11 @@ enum TokenType
     COLON,
     SEMICOLON,
     LESS_THAN,
+    LESS_THAN_OR_EQUAL,
     EQUAL,
     DOUBLE_EQUAL,
     GREATER_THAN,
+    GREATER_THAN_OR_EQUAL,
     QUESTION_MARK,
     LBRACKET,
     RBRACKET,

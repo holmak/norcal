@@ -466,9 +466,17 @@ partial class Parser
             {
                 e = Expr.Make(Tag.LessThanGeneric, e, ParseShiftExpr());
             }
+            else if (TryParse(TokenType.LESS_THAN_OR_EQUAL))
+            {
+                e = Expr.Make(Tag.LessThanOrEqualGeneric, e, ParseShiftExpr());
+            }
             else if (TryParse(TokenType.GREATER_THAN))
             {
                 e = Expr.Make(Tag.GreaterThanGeneric, e, ParseShiftExpr());
+            }
+            else if (TryParse(TokenType.GREATER_THAN_OR_EQUAL))
+            {
+                e = Expr.Make(Tag.GreaterThanOrEqualGeneric, e, ParseShiftExpr());
             }
             else
             {

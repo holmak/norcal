@@ -852,6 +852,170 @@ void reset()
     *STOP = 0;
 }
 
+@ comparison: less than or equal
+@out 1
+void reset()
+{
+    uint8_t a = 4;
+    uint8_t b = 5;
+    *OUTB = a <= b;
+    *STOP = 0;
+}
+
+@out 1
+void reset()
+{
+    uint8_t a = 5;
+    uint8_t b = 5;
+    *OUTB = a <= b;
+    *STOP = 0;
+}
+
+@out 0
+void reset()
+{
+    uint8_t a = 6;
+    uint8_t b = 5;
+    *OUTB = a <= b;
+    *STOP = 0;
+}
+
+@out 0
+void reset()
+{
+    uint8_t a = 255;
+    uint8_t b = 0;
+    *OUTB = a <= b;
+    *STOP = 0;
+}
+
+@out 1
+void reset()
+{
+    uint16_t a = 0x1233;
+    uint16_t b = 0x1234;
+    *OUTB = a <= b;
+    *STOP = 0;
+}
+
+@out 1
+void reset()
+{
+    uint16_t a = 0x1135;
+    uint16_t b = 0x1234;
+    *OUTB = a <= b;
+    *STOP = 0;
+}
+
+@out 1
+void reset()
+{
+    uint16_t a = 0x1234;
+    uint16_t b = 0x1234;
+    *OUTB = a <= b;
+    *STOP = 0;
+}
+
+@out 0
+void reset()
+{
+    uint16_t a = 0x1235;
+    uint16_t b = 0x1234;
+    *OUTB = a <= b;
+    *STOP = 0;
+}
+
+@out 0
+void reset()
+{
+    uint16_t a = 0x1333;
+    uint16_t b = 0x1234;
+    *OUTB = a <= b;
+    *STOP = 0;
+}
+
+@ comparison: greater than or equal
+@out 0
+void reset()
+{
+    uint8_t a = 4;
+    uint8_t b = 5;
+    *OUTB = a >= b;
+    *STOP = 0;
+}
+
+@out 1
+void reset()
+{
+    uint8_t a = 5;
+    uint8_t b = 5;
+    *OUTB = a >= b;
+    *STOP = 0;
+}
+
+@out 1
+void reset()
+{
+    uint8_t a = 6;
+    uint8_t b = 5;
+    *OUTB = a >= b;
+    *STOP = 0;
+}
+
+@out 0
+void reset()
+{
+    uint8_t a = 0;
+    uint8_t b = 255;
+    *OUTB = a >= b;
+    *STOP = 0;
+}
+
+@out 0
+void reset()
+{
+    uint16_t a = 0x1233;
+    uint16_t b = 0x1234;
+    *OUTB = a >= b;
+    *STOP = 0;
+}
+
+@out 0
+void reset()
+{
+    uint16_t a = 0x1135;
+    uint16_t b = 0x1234;
+    *OUTB = a >= b;
+    *STOP = 0;
+}
+
+@out 1
+void reset()
+{
+    uint16_t a = 0x1234;
+    uint16_t b = 0x1234;
+    *OUTB = a >= b;
+    *STOP = 0;
+}
+
+@out 1
+void reset()
+{
+    uint16_t a = 0x1235;
+    uint16_t b = 0x1234;
+    *OUTB = a >= b;
+    *STOP = 0;
+}
+
+@out 1
+void reset()
+{
+    uint16_t a = 0x1333;
+    uint16_t b = 0x1234;
+    *OUTB = a >= b;
+    *STOP = 0;
+}
+
 @ bitwise operators
 @out 0xA0
 void reset()

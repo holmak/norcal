@@ -248,7 +248,9 @@ static class Tag
     public static readonly string EqualGeneric = "$equal";
     public static readonly string NotEqualGeneric = "$not_equal";
     public static readonly string LessThanGeneric = "$less_than";
+    public static readonly string LessThanOrEqualGeneric = "$less_than_or_equal";
     public static readonly string GreaterThanGeneric = "$greater_than";
+    public static readonly string GreaterThanOrEqualGeneric = "$greater_than_or_equal";
     public static readonly string BitwiseAndGeneric = "$bitwise_and";
     public static readonly string BitwiseOrGeneric = "$bitwise_or";
     public static readonly string BitwiseXorGeneric = "$bitwise_xor";
