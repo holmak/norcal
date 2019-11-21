@@ -1060,3 +1060,12 @@ void reset()
     e();
     *STOP = 0;
 }
+
+@ binary detection
+@out 42 0x1234
+void reset()
+{
+    *OUTB = 0b00101010;
+    *OUT = 0b1001000110100;
+    *STOP = 0;
+}

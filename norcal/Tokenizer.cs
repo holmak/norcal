@@ -220,16 +220,21 @@ class Tokenizer
         char first = literal[0];
         if (!decimalDigits.Contains(first) && first != '$') return false;
 
-        bool isHex = false;
+        int numberBase = 10;
         if (literal.StartsWith("0X"))
         {
             literal = literal.Substring(2);
-            isHex = true;
+            numberBase = 16;
         }
         else if (literal.StartsWith("$"))
         {
             literal = literal.Substring(1);
-            isHex = true;
+            numberBase = 16;
+        }
+        else if (literal.StartsWith("0B"))
+        {
+            literal = literal.Substring(2);
+            numberBase = 2;
         }
 
         if (literal.Length == 0)
@@ -237,13 +242,12 @@ class Tokenizer
             Error(pos, "number contains no digits: " + original);
         }
 
-        string allowedDigits = isHex ? hexDigits : decimalDigits;
+        string allowedDigits = hexDigits.Substring(0, numberBase);
         if (!literal.All(x => allowedDigits.Contains(x)))
         {
             Error(pos, "number contains invalid characters: " + original);
         }
 
-        int numberBase = isHex ? 16 : 10;
         integer = 0;
         foreach (char c in literal)
         {
