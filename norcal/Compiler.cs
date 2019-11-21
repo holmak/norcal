@@ -529,6 +529,10 @@ partial class Compiler
         {
             // TODO: Are there any special rules?
         }
+        else if (e.Match(Tag.While))
+        {
+            // TODO: Are there any special rules?
+        }
         else if (e.Match(Tag.Return, out arg))
         {
             CType actual = TypeOf(arg);
@@ -703,6 +707,22 @@ partial class Compiler
                 Expr.Make(Tag.Goto, loop.ContinueLabel),
                 Expr.Make(Tag.Label, loop.BreakLabel));
         }
+        else if (e.Match(Tag.While, out test, out body))
+        {
+            loop = new LoopScope
+            {
+                Outer = loop,
+                ContinueLabel = MakeUniqueLabel("while_top_"),
+                BreakLabel = MakeUniqueLabel("while_bottom_"),
+            };
+
+            return Expr.Make(Tag.Sequence,
+                Expr.Make(Tag.Label, loop.ContinueLabel),
+                Expr.Make(Tag.GotoIfNot, test, loop.BreakLabel),
+                ReplaceLoops(body, loop),
+                Expr.Make(Tag.Goto, loop.ContinueLabel),
+                Expr.Make(Tag.Label, loop.BreakLabel));
+        }
         else
         {
             // Recursively apply this pass to all arguments:
@@ -807,7 +827,7 @@ partial class Compiler
             // TODO: Figure out the type.
             return CType.Void;
         }
-        else if (e.MatchTag(Tag.For) || e.MatchTag(Tag.Return))
+        else if (e.MatchTag(Tag.For) || e.MatchTag(Tag.While) || e.MatchTag(Tag.Return))
         {
             return CType.Void;
         }

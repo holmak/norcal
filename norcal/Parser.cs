@@ -184,6 +184,15 @@ partial class Parser
             Expr body = ParseStatementBlock();
             stmt = Expr.Make(Tag.For, init, test, next, body);
         }
+        else if (TryParseName("while"))
+        {
+            if (!allowLong) Error_NotAllowedInFor();
+            Expect(TokenType.LPAREN);
+            Expr test = ParseExpr();
+            Expect(TokenType.RPAREN);
+            Expr body = ParseStatementBlock();
+            stmt = Expr.Make(Tag.While, test, body);
+        }
         else if (TryParseName("continue"))
         {
             if (!allowLong) Error_NotAllowedInFor();
