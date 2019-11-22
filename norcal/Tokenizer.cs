@@ -47,7 +47,7 @@ class Tokenizer
             else if (TryRead('!'))
             {
                 if (TryRead("=")) tag = TokenType.NOT_EQUAL;
-                else tag = TokenType.NOT;
+                else tag = TokenType.LOGICAL_NOT;
             }
             else if (TryRead('"'))
             {
@@ -81,7 +81,11 @@ class Tokenizer
                 }
             }
             else if (TryRead('%')) tag = TokenType.PERCENT;
-            else if (TryRead('&')) tag = TokenType.AMPERSAND;
+            else if (TryRead('&'))
+            {
+                if (TryRead('&')) tag = TokenType.LOGICAL_AND;
+                else tag = TokenType.AMPERSAND;
+            }
             else if (TryRead('(')) tag = TokenType.LPAREN;
             else if (TryRead(')')) tag = TokenType.RPAREN;
             else if (TryRead('*')) tag = TokenType.STAR;
@@ -135,7 +139,11 @@ class Tokenizer
             else if (TryRead(']')) tag = TokenType.RBRACKET;
             else if (TryRead('^')) tag = TokenType.CARET;
             else if (TryRead('{')) tag = TokenType.LBRACE;
-            else if (TryRead('|')) tag = TokenType.PIPE;
+            else if (TryRead('|'))
+            {
+                if (TryRead('|')) tag = TokenType.LOGICAL_OR;
+                else tag = TokenType.PIPE;
+            }
             else if (TryRead('}')) tag = TokenType.RBRACE;
             else if (TryRead('~')) tag = TokenType.TILDE;
             else if (IsNameChar(GetNextChar()))
@@ -352,7 +360,7 @@ enum TokenType
     EOF,
     NEWLINE,
 
-    NOT,
+    LOGICAL_NOT,
     NOT_EQUAL,
     NUMBER_SIGN,
     PERCENT,
@@ -386,6 +394,8 @@ enum TokenType
     DECREMENT,
     SHIFT_LEFT,
     SHIFT_RIGHT,
+    LOGICAL_OR,
+    LOGICAL_AND,
 
     INT,
     NAME,
