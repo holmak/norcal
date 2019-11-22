@@ -220,6 +220,40 @@ void reset()
     *STOP = 0;
 }
 
+@ If / else statements
+@out 1 2 0xFFFF 4 0xBBBB 0xFFFF 7 8 0xFFFF 0xBBBB 11 0xFFFF 13 14 0xFFBB 16 17 0xFFFF 19 0xBBBB
+void test(uint16_t i)
+{
+    if (i % 3 == 0)
+    {
+        if (i % 5 == 0) *OUT = 0xFFBB;
+        else *OUT = 0xFFFF;
+    }
+    else if (i % 5 == 0) *OUT = 0xBBBB;
+    else
+    {
+        *OUT = i;
+    }
+}
+void reset()
+{
+    for (uint16_t i = 1; i <= 20; i++) test(i);
+    *STOP = 0;
+}
+
+@ Invalid else statement
+@error
+void reset()
+{
+    uint8_t i = 5;
+    if (i == 0) *OUTB = 0;
+    else if (i == 1) *OUTB = 1;
+    else if (i == 2) *OUTB = 2;
+    else *OUTB = 3;
+    else *OUTB = 4;
+    *STOP = 0;
+}
+
 @ Single line comments
 @out 1 4 5
 void reset()
@@ -1339,5 +1373,25 @@ void reset()
     a = 0x1234;
     b = 0;
     *OUT = a >> b;
+    *STOP = 0;
+}
+
+@ Long branch instructions
+@out 1 2 0xFFFF 4 0xBBBB 0xFFFF 7 8 0xFFFF 0xBBBB 11 0xFFFF 13 14 0xFFBB 16 17 0xFFFF 19 0xBBBB
+void reset()
+{
+    for (uint16_t i = 1; i <= 20; i++)
+    {
+        if (i % 3 == 0)
+        {
+            if (i % 5 == 0) *OUT = 0xFFBB;
+            else *OUT = 0xFFFF;
+        }
+        else if (i % 5 == 0) *OUT = 0xBBBB;
+        else
+        {
+            *OUT = i;
+        }
+    }
     *STOP = 0;
 }

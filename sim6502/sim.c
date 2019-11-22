@@ -7,7 +7,7 @@
 #include <string.h>
 #include "common.h"
 
-#define CYCLE_LIMIT 10000
+#define CYCLE_LIMIT 1000000
 
 #define RAM_SIZE 0x0800
 #define ROM_SIZE 0x8000

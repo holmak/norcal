@@ -892,17 +892,17 @@ partial class Compiler
                 }
             }
         }
-        else if (e.Match(Tag.Switch, out test, out then))
+        else if (e.MatchAny(Tag.Switch, out args))
         {
             string end = MakeUniqueLabel();
 
-            // TODO: Handle any number of clauses. For each clause:
+            for (int i = 0; i < args.Length; i += 2)
             {
                 string nextClause = MakeUniqueLabel();
                 // If this clause's condition is false, try the next clause:
-                CompileExpression(test, DestinationDiscard, new Continuation(JumpCondition.IfFalse, nextClause));
+                CompileExpression(args[i], DestinationDiscard, new Continuation(JumpCondition.IfFalse, nextClause));
                 // If the condition was true, execute the clause body:
-                CompileExpression(then, dest, cont);
+                CompileExpression(args[i + 1], dest, cont);
                 // After executing the body of a clause, skip the rest of the clauses:
                 Emit("JMP", end);
                 EmitComment("end of switch clause");

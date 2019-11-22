@@ -166,12 +166,46 @@ partial class Parser
         else if (TryParseName("if"))
         {
             if (!allowLong) Error_NotAllowedInFor();
+
+            // Create a switch expression with one or more test/body pairs:
+            List<object> expr = new List<object>();
+            expr.Add(Tag.Switch);
+
+            // Parse the test:
             Expect(TokenType.LPAREN);
-            Expr test = ParseExpr();
-            test = Expr.Make(Tag.BoolFromGeneric, test);
+            expr.Add(Expr.Make(Tag.BoolFromGeneric, ParseExpr()));
             Expect(TokenType.RPAREN);
-            Expr then = ParseStatementBlock();
-            stmt = Expr.Make(Tag.Switch, test, then);
+
+            // Parse the body:
+            expr.Add(ParseStatementBlock());
+
+            // Parse additional else statements:
+            while (TryParseName("else"))
+            {
+                if (TryParseName("if"))
+                {
+                    // Parse the test:
+                    Expect(TokenType.LPAREN);
+                    expr.Add(Expr.Make(Tag.BoolFromGeneric, ParseExpr()));
+                    Expect(TokenType.RPAREN);
+
+                    // Parse the body:
+                    expr.Add(ParseStatementBlock());
+                }
+                else
+                {
+                    // Create a fake test that is always true:
+                    expr.Add(Expr.Make(Tag.Int, 1, CType.UInt8));
+
+                    // Parse the body:
+                    expr.Add(ParseStatementBlock());
+
+                    // An "else" that is not an "else if" means it's time to stop
+                    break;
+                }
+            }
+
+            stmt = Expr.Make(expr.ToArray());
         }
         else if (TryParseName("for"))
         {
