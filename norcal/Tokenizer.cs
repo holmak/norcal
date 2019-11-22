@@ -80,18 +80,28 @@ class Tokenizer
                     continue;
                 }
             }
-            else if (TryRead('%')) tag = TokenType.PERCENT;
+            else if (TryRead('%'))
+            {
+                if (TryRead('=')) tag = TokenType.PERCENT_EQUALS;
+                else tag = TokenType.PERCENT;
+            }
             else if (TryRead('&'))
             {
                 if (TryRead('&')) tag = TokenType.LOGICAL_AND;
+                else if (TryRead('=')) tag = TokenType.AMPERSAND_EQUALS;
                 else tag = TokenType.AMPERSAND;
             }
             else if (TryRead('(')) tag = TokenType.LPAREN;
             else if (TryRead(')')) tag = TokenType.RPAREN;
-            else if (TryRead('*')) tag = TokenType.STAR;
+            else if (TryRead('*'))
+            {
+                if (TryRead('=')) tag = TokenType.STAR_EQUALS;
+                else tag = TokenType.STAR;
+            }
             else if (TryRead('+'))
             {
                 if (TryRead('+')) tag = TokenType.INCREMENT;
+                else if (TryRead('=')) tag = TokenType.PLUS_EQUALS;
                 else tag = TokenType.PLUS;
             }
             else if (TryRead(',')) tag = TokenType.COMMA;
@@ -99,6 +109,7 @@ class Tokenizer
             {
                 if (TryRead('>')) tag = TokenType.ARROW;
                 else if (TryRead('-')) tag = TokenType.DECREMENT;
+                else if (TryRead('=')) tag = TokenType.MINUS_EQUALS;
                 else tag = TokenType.MINUS;
             }
             else if (TryRead('.')) tag = TokenType.PERIOD;
@@ -112,7 +123,8 @@ class Tokenizer
                 }
                 else
                 {
-                    tag = TokenType.SLASH;
+                    if (TryRead('=')) tag = TokenType.SLASH_EQUALS;
+                    else tag = TokenType.SLASH;
                 }
             }
             else if (TryRead(':')) tag = TokenType.COLON;
@@ -120,7 +132,11 @@ class Tokenizer
             else if (TryRead('<'))
             {
                 if (TryRead('=')) tag = TokenType.LESS_THAN_OR_EQUAL;
-                else if (TryRead('<')) tag = TokenType.SHIFT_LEFT;
+                else if (TryRead('<'))
+                {
+                    if (TryRead('=')) tag = TokenType.SHIFT_LEFT_EQUALS;
+                    else tag = TokenType.SHIFT_LEFT;
+                }
                 else tag = TokenType.LESS_THAN;
             }
             else if (TryRead('='))
@@ -131,17 +147,26 @@ class Tokenizer
             else if (TryRead('>'))
             {
                 if (TryRead('=')) tag = TokenType.GREATER_THAN_OR_EQUAL;
-                else if (TryRead('>')) tag = TokenType.SHIFT_RIGHT;
+                else if (TryRead('>'))
+                {
+                    if (TryRead('=')) tag = TokenType.SHIFT_RIGHT_EQUALS;
+                    else tag = TokenType.SHIFT_RIGHT;
+                }
                 else tag = TokenType.GREATER_THAN;
             }
             else if (TryRead('?')) tag = TokenType.QUESTION_MARK;
             else if (TryRead('[')) tag = TokenType.LBRACKET;
             else if (TryRead(']')) tag = TokenType.RBRACKET;
-            else if (TryRead('^')) tag = TokenType.CARET;
+            else if (TryRead('^'))
+            {
+                if (TryRead('=')) tag = TokenType.CARET_EQUALS;
+                else tag = TokenType.CARET;
+            }
             else if (TryRead('{')) tag = TokenType.LBRACE;
             else if (TryRead('|'))
             {
                 if (TryRead('|')) tag = TokenType.LOGICAL_OR;
+                else if (TryRead('=')) tag = TokenType.PIPE_EQUALS;
                 else tag = TokenType.PIPE;
             }
             else if (TryRead('}')) tag = TokenType.RBRACE;
@@ -396,6 +421,16 @@ enum TokenType
     SHIFT_RIGHT,
     LOGICAL_OR,
     LOGICAL_AND,
+    PLUS_EQUALS,
+    MINUS_EQUALS,
+    STAR_EQUALS,
+    SLASH_EQUALS,
+    PERCENT_EQUALS,
+    SHIFT_LEFT_EQUALS,
+    SHIFT_RIGHT_EQUALS,
+    AMPERSAND_EQUALS,
+    PIPE_EQUALS,
+    CARET_EQUALS,
 
     INT,
     NAME,
@@ -444,6 +479,18 @@ static class TokenInfo
         "--",
         "<<",
         ">>",
+        "||",
+        "&&",
+        "+=",
+        "-=",
+        "*=",
+        "/=",
+        "%=",
+        "<<=",
+        ">>=",
+        "&=",
+        "|=",
+        "^=",
 
         "(int)",
         "(name)",
