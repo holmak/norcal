@@ -1439,3 +1439,18 @@ void reset()
     *OUTB = (a == 4) ? a : b;
     *STOP = 0;
 }
+
+@ Special assignment
+@out 5 15 30 60 60
+void reset()
+{
+    uint8_t a = 5;
+    *OUTB = a;
+    a += 10;
+    *OUTB = a;
+    a += a;
+    *OUTB = a;
+    *OUTB = a += a;
+    *OUTB = a;
+    *STOP = 0;
+}
