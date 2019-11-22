@@ -116,6 +116,7 @@ class Tokenizer
             else if (TryRead('<'))
             {
                 if (TryRead('=')) tag = TokenType.LESS_THAN_OR_EQUAL;
+                else if (TryRead('<')) tag = TokenType.SHIFT_LEFT;
                 else tag = TokenType.LESS_THAN;
             }
             else if (TryRead('='))
@@ -126,6 +127,7 @@ class Tokenizer
             else if (TryRead('>'))
             {
                 if (TryRead('=')) tag = TokenType.GREATER_THAN_OR_EQUAL;
+                else if (TryRead('>')) tag = TokenType.SHIFT_RIGHT;
                 else tag = TokenType.GREATER_THAN;
             }
             else if (TryRead('?')) tag = TokenType.QUESTION_MARK;
@@ -381,6 +383,8 @@ enum TokenType
     TILDE,
     INCREMENT,
     DECREMENT,
+    SHIFT_LEFT,
+    SHIFT_RIGHT,
 
     INT,
     NAME,
@@ -412,17 +416,23 @@ static class TokenInfo
         ":",
         ";",
         "<",
+        "<=",
         "=",
         "==",
         ">",
+        ">=",
         "?",
         "[",
         "]",
         "^",
         "{",
         "|",
-        "{",
+        "}",
         "~",
+        "++",
+        "--",
+        "<<",
+        ">>",
 
         "(int)",
         "(name)",

@@ -1276,3 +1276,68 @@ void reset()
     *OUT = 0b1001000110100;
     *STOP = 0;
 }
+
+@ shift left
+@out 88 0 11
+void reset()
+{
+    uint8_t a = 11;
+    uint8_t b = 3;
+    *OUTB = a << b;
+    b = 15;
+    *OUTB = a << b;
+    b = 0;
+    *OUTB = a << b;
+    *STOP = 0;
+}
+
+@out 88 45056 0 0 0x1234
+void reset()
+{
+    uint16_t a = 11;
+    uint16_t b = 3;
+    *OUT = a << b;
+    b = 12;
+    *OUT = a << b;
+    b = 40;
+    *OUT = a << b;
+    b = 256;
+    *OUT = a << b;
+    a = 0x1234;
+    b = 0;
+    *OUT = a << b;
+    *STOP = 0;
+}
+
+@ shift right
+@out 11 0 88
+void reset()
+{
+    uint8_t a = 88;
+    uint8_t b = 3;
+    *OUTB = a >> b;
+    b = 15;
+    *OUTB = a >> b;
+    b = 0;
+    *OUTB = a >> b;
+    *STOP = 0;
+}
+
+@out 11 11 0 0 0x1234
+void reset()
+{
+    uint16_t a = 88;
+    uint16_t b = 3;
+    *OUT = a >> b;
+    a = 45056;
+    b = 12;
+    *OUT = a >> b;
+    b = 40;
+    *OUT = a >> b;
+    b = 256;
+    *OUT = a >> b;
+    a = 0x1234;
+    b = 0;
+    *OUT = a >> b;
+    *STOP = 0;
+}

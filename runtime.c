@@ -737,3 +737,85 @@ uint16_t _rt_postinc_u16(__zeropage uint16_t *p)
         LDA r
     }
 }
+
+uint8_t _rt_shift_left_u8(uint8_t a, uint8_t b)
+{
+    __asm
+    {
+        LDA a
+        LDX b           // Load the counter
+        BEQ done        // Return a unmodified if b is zero
+        loop:
+        ASL             // Shift left
+        DEX             // Decrement the counter
+        BNE loop
+        done:
+    }
+}
+
+uint16_t _rt_shift_left_u16(uint16_t a, uint16_t b)
+{
+    __asm
+    {
+        LDY b+1
+        BEQ skip        // If b+1 isn't zero, the answer is always zero
+        LDA #0          
+        LDX #0
+        RTS
+        skip:
+        LDA a
+        LDY b           // Load the counter
+        BEQ done        // Return a unmodified if b is zero
+        loop:
+        ASL             // Shift low byte left
+        ROL a+1         // Shift high byte left
+        DEY             // Decrement the counter
+        BNE loop
+        done:
+        LDX a+1         // a is already in A, but a+1 needs to go to X
+    }
+}
+
+uint8_t _rt_shift_right_u8(uint8_t a, uint8_t b)
+{
+    // This is identical to _rt_shift_left_u8 except
+    // that it shifts right instead of left.
+
+    __asm
+    {
+        LDA a
+        LDX b
+        BEQ done
+        loop:
+        LSR
+        DEX
+        BNE loop
+        done:
+    }
+}
+
+uint16_t _rt_shift_right_u16(uint16_t a, uint16_t b)
+{
+    // This is identical to _rt_shift_right_u16 except
+    // that it shifts right instead of left.
+
+    __asm
+    {
+        LDY b+1
+        BEQ skip
+        LDA #0          
+        LDX #0
+        RTS
+        skip:
+        LDA a
+        LDY b
+        BEQ done
+        loop:
+        LSR a+1
+        ROR
+        DEY
+        BNE loop
+        done:
+        LDX a+1
+    }
+}

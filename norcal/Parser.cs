@@ -497,7 +497,22 @@ partial class Parser
     // << >>
     Expr ParseShiftExpr()
     {
-        return ParseAddExpr();
+        Expr e = ParseAddExpr();
+        while (true)
+        {
+            if (TryParse(TokenType.SHIFT_LEFT))
+            {
+                e = Expr.Make(Tag.ShiftLeftGeneric, e, ParseAddExpr());
+            }
+            else if (TryParse(TokenType.SHIFT_RIGHT))
+            {
+                e = Expr.Make(Tag.ShiftRightGeneric, e, ParseAddExpr());
+            }
+            else
+            {
+                return e;
+            }
+        }
     }
 
     // + -

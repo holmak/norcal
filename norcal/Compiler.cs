@@ -370,6 +370,8 @@ partial class Compiler
         { Tag.BitwiseAndGeneric, "bitwise_and" },
         { Tag.BitwiseOrGeneric, "bitwise_or" },
         { Tag.BitwiseXorGeneric, "bitwise_xor" },
+        { Tag.ShiftLeftGeneric, "shift_left" },
+        { Tag.ShiftRightGeneric, "shift_right" },
     };
 
     Expr ReplaceGenericFunctions(Expr e, CType returnType)
