@@ -219,7 +219,6 @@ static class Tag
     public static readonly string AddressOf = "$address_of";
     public static readonly string Switch = "$switch";
     public static readonly string For = "$for";
-    public static readonly string While = "$while";
     public static readonly string Return = "$return";
     public static readonly string Cast = "$cast";
     public static readonly string Field = "$field";

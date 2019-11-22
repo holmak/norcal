@@ -191,7 +191,7 @@ partial class Parser
             Expr test = ParseExpr();
             Expect(TokenType.RPAREN);
             Expr body = ParseStatementBlock();
-            stmt = Expr.Make(Tag.While, test, body);
+            stmt = Expr.Make(Tag.For, Expr.Make(Tag.Empty), test, Expr.Make(Tag.Empty), body);
         }
         else if (TryParseName("continue"))
         {
