@@ -1097,11 +1097,18 @@ partial class Compiler
     {
         if (cont.When != JumpCondition.Never)
         {
+            // Branch instructions use relative jumps, which can only jump up to 128 bytes away.
+            // In order to be able to branch further, all branches are now written as long jumps
+            // that are skipped by a (short) branch when the condition is not true.
+
             // TODO: Values used as branch conditions must have a single-byte type, for easy comparison against zero.
+            string skipJump = MakeUniqueLabel();
             EmitComment("branch on ACC");
             Emit("ORA", 0, Asm.Immediate);
-            string op = (cont.When == JumpCondition.IfTrue) ? "BNE" : "BEQ";
-            Emit(op, cont.Target);
+            string op = (cont.When == JumpCondition.IfTrue) ? "BEQ" : "BNE";
+            Emit(op, skipJump);
+            Emit("JMP", cont.Target);
+            Emit(Asm.Label, skipJump);
         }
     }
 
