@@ -22,7 +22,7 @@ partial class Compiler
     static readonly int DestinationDiscard = -1;
     static readonly int DestinationAcc = -2;
 
-    public void CompileProgram(List<Declaration> program)
+    public void CompileProgram(List<Expr> program)
     {
         // HACK: If you don't define an interrupt handler, it will target address zero.
         // TODO: What should the compiler do if an interrupt handler isn't defined? Is it an error?
@@ -39,13 +39,10 @@ partial class Compiler
         program = ApplyPass("replace-generics", ReplaceGenericFunctions, program);
 
         // Pass: Typechecking
-        foreach (Declaration decl in program)
+        foreach (FunctionDeclaration function in EnumerateFunctions(program))
         {
-            if (decl.Tag == DeclarationTag.Function)
-            {
-                CFunctionInfo functionInfo = GetFunctionInfo(decl.Name);
-                CheckTypes(decl.Body, functionInfo.ReturnType);
-            }
+            CFunctionInfo functionInfo = GetFunctionInfo(function.Name);
+            CheckTypes(function.Body, functionInfo.ReturnType);
         }
 
         // Post-typechecking passes:
@@ -55,14 +52,11 @@ partial class Compiler
         program = RemoveUncalledFunctionsAndDetectRecursion(program, new[] { "nmi", "reset", "brk" });
 
         // Pass: Codegen
-        foreach (Declaration decl in program)
+        foreach (FunctionDeclaration function in EnumerateFunctions(program))
         {
-            if (decl.Tag == DeclarationTag.Function)
-            {
-                Emit(Asm.Function, decl.Name);
-                CompileExpression(decl.Body, DestinationDiscard, Continuation.Fallthrough);
-                Emit("RTS");
-            }
+            Emit(Asm.Function, function.Name);
+            CompileExpression(function.Body, DestinationDiscard, Continuation.Fallthrough);
+            Emit("RTS");
         }
 
         // TODO: Make sure interrupt-handling functions have the right type signature and are defined.
@@ -105,78 +99,101 @@ partial class Compiler
         }
     }
 
-    List<Declaration> ApplyFirstPass(List<Declaration> program)
+    /// <summary>
+    /// Enumerate the function declarations from a list.
+    /// </summary>
+    IEnumerable<FunctionDeclaration> EnumerateFunctions(IEnumerable<Expr> declarations)
+    {
+        foreach (Expr decl in declarations)
+        {
+            FunctionDeclaration function;
+            if (MatchFunctionDeclaration(decl, out function))
+            {
+                yield return function;
+            }
+        }
+    }
+
+    bool MatchFunctionDeclaration(Expr declaration, out FunctionDeclaration function)
+    {
+        function = new FunctionDeclaration();
+        return declaration.Match(Tag.Function, out function.ReturnType, out function.Name, out function.Parameters, out function.Body);
+    }
+
+    List<Expr> ApplyFirstPass(List<Expr> program)
     {
         LexicalScope globalScope = new LexicalScope();
 
-        List<Declaration> newProgram = new List<Declaration>();
-        foreach (Declaration decl in program)
+        List<Expr> newProgram = new List<Expr>();
+        foreach (Expr decl in program)
         {
-            if (decl.Tag == DeclarationTag.Function)
+            MemoryRegion region;
+            CType returnType, type;
+            string name;
+            FieldInfo[] fields;
+            Expr body;
+            if (decl.Match(Tag.Function, out returnType, out name, out fields, out body))
             {
                 // Allocate space for each parameter and store it in the symbol table.
-                int paramCount = decl.Fields.Count;
-                CType[] paramTypes = new CType[paramCount];
-                int[] addresses = new int[paramCount];
-                for (int i = 0; i < paramCount; i++)
+                CType[] paramTypes = new CType[fields.Length];
+                int[] addresses = new int[fields.Length];
+                for (int i = 0; i < fields.Length; i++)
                 {
-                    CType type = decl.Fields[i].Type;
-                    paramTypes[i] = type;
-                    addresses[i] = AllocGlobal(decl.Fields[i].Region, SizeOf(type));
+                    CType fieldType = fields[i].Type;
+                    paramTypes[i] = fieldType;
+                    addresses[i] = AllocGlobal(fields[i].Region, SizeOf(fieldType));
                 }
-                DeclareFunction(decl.Name, paramTypes, decl.Type, addresses);
-                EmitComment("declare function " + decl.Name);
+                DeclareFunction(name, paramTypes, returnType, addresses);
+                EmitComment("declare function " + name);
 
                 // Define each of the function's parameters as a local variable:
                 LexicalScope functionScope = PushScope(globalScope);
-                for (int i = 0; i < decl.Fields.Count; i++)
+                for (int i = 0; i < fields.Length; i++)
                 {
-                    NamedField f = decl.Fields[i];
+                    FieldInfo f = fields[i];
                     DefineSymbol(functionScope, SymbolTag.Variable, f.Name, addresses[i], f.Type);
                 }
 
-                newProgram.Add(new Declaration
-                {
-                    Tag = decl.Tag,
-                    Type = decl.Type,
-                    Name = decl.Name,
-                    Body = ReplaceNamedVariables(decl.Body, functionScope),
-                    Fields = decl.Fields,
-                });
+                newProgram.Add(Expr.Make(
+                    Tag.Function,
+                    returnType,
+                    name,
+                    fields,
+                    ReplaceNamedVariables(body, functionScope)));
             }
-            else if (decl.Tag == DeclarationTag.Constant)
+            else if (decl.Match(Tag.Constant, out type, out name, out body))
             {
                 // TODO: Make sure the declared type matches the actual type.
-                CType type;
+                CType valueType;
                 int value;
-                if (!decl.Body.Match(Tag.Int, out value, out type))
+                if (!body.Match(Tag.Int, out value, out valueType))
                 {
                     Program.Error("expression must be constant");
                 }
-                DefineSymbol(globalScope, SymbolTag.Constant, decl.Name, value, decl.Type);
+                DefineSymbol(globalScope, SymbolTag.Constant, name, value, type);
             }
-            else if (decl.Tag == DeclarationTag.Variable)
+            else if (decl.Match(Tag.Variable, out region, out type, out name))
             {
-                DefineVariable(globalScope, decl.Region, decl.Type, decl.Name);
+                DefineVariable(globalScope, region, type, name);
             }
-            else if (decl.Tag == DeclarationTag.Struct)
+            else if (decl.Match(Tag.Struct, out name, out fields))
             {
-                CField[] fields = new CField[decl.Fields.Count];
+                CField[] structFields = new CField[fields.Length];
                 int offset = 0;
                 for (int i = 0; i < fields.Length; i++)
                 {
-                    fields[i] = new CField
+                    structFields[i] = new CField
                     {
-                        Type = decl.Fields[i].Type,
-                        Name = decl.Fields[i].Name,
+                        Type = fields[i].Type,
+                        Name = fields[i].Name,
                         Offset = offset,
                     };
                     offset += SizeOf(fields[i].Type);
                 }
-                StructTypes.Add(decl.Name, new CStructInfo
+                StructTypes.Add(name, new CStructInfo
                 {
                     TotalSize = offset,
-                    Fields = fields,
+                    Fields = structFields,
                 });
             }
             else
@@ -191,26 +208,28 @@ partial class Compiler
     /// <summary>
     /// This overload is for the majority of passes which don't need to know the function's return type.
     /// </summary>
-    List<Declaration> ApplyPass(string passName, Func<Expr, Expr> apply, List<Declaration> program)
+    List<Expr> ApplyPass(string passName, Func<Expr, Expr> apply, List<Expr> program)
     {
         return ApplyPass(passName, (expr, returnType) => apply(expr), program);
     }
 
-    List<Declaration> ApplyPass(string passName, Func<Expr, CType, Expr> apply, List<Declaration> program)
+    List<Expr> ApplyPass(string passName, Func<Expr, CType, Expr> apply, List<Expr> program)
     {
-        List<Declaration> newProgram = new List<Declaration>();
-        foreach (Declaration decl in program)
+        List<Expr> newProgram = new List<Expr>();
+        foreach (Expr decl in program)
         {
-            if (decl.Tag == DeclarationTag.Function)
+            CType returnType;
+            string name;
+            FieldInfo[] parameters;
+            Expr body;
+            if (decl.Match(Tag.Function, out returnType, out name, out parameters, out body))
             {
-                newProgram.Add(new Declaration
-                {
-                    Tag = decl.Tag,
-                    Type = decl.Type,
-                    Name = decl.Name,
-                    Body = apply(decl.Body, decl.Type),
-                    Fields = decl.Fields,
-                });
+                newProgram.Add(Expr.Make(
+                    Tag.Function,
+                    returnType,
+                    name,
+                    parameters,
+                    apply(body, returnType)));
             }
             else
             {
@@ -569,40 +588,37 @@ partial class Compiler
         }
     }
 
-    List<Declaration> RemoveUncalledFunctionsAndDetectRecursion(List<Declaration> program, string[] functionsToNeverRemove)
+    List<Expr> RemoveUncalledFunctionsAndDetectRecursion(List<Expr> program, string[] functionsToNeverRemove)
     {
-        List<Declaration> newProgram = new List<Declaration>(program);
+        List<Expr> newProgram = new List<Expr>(program);
 
         // Figure out which functions each function could call:
         Dictionary<string, HashSet<string>> callGraph = new Dictionary<string, HashSet<string>>();
-        foreach (Declaration decl in program)
+        foreach (FunctionDeclaration function in EnumerateFunctions(program))
         {
-            if (decl.Tag == DeclarationTag.Function)
+            HashSet<string> calledFunctions = new HashSet<string>();
+            callGraph[function.Name] = calledFunctions;
+
+            Action<Expr> findCalls = null;
+            findCalls = (expr) =>
             {
-                HashSet<string> calledFunctions = new HashSet<string>();
-                callGraph[decl.Name] = calledFunctions;
-
-                Action<Expr> findCalls = null;
-                findCalls = (expr) =>
+                string tag = expr.GetArgs().First() as string;
+                if (tag != null && !tag.StartsWith("$"))
                 {
-                    string tag = expr.GetArgs().First() as string;
-                    if (tag != null && !tag.StartsWith("$"))
-                    {
-                        calledFunctions.Add(tag);
-                    }
+                    calledFunctions.Add(tag);
+                }
 
-                    foreach (object arg in expr.GetArgs())
+                foreach (object arg in expr.GetArgs())
+                {
+                    Expr child = arg as Expr;
+                    if (child != null)
                     {
-                        Expr child = arg as Expr;
-                        if (child != null)
-                        {
-                            findCalls(child);
-                        }
+                        findCalls(child);
                     }
-                };
+                }
+            };
 
-                findCalls(decl.Body);
-            }
+            findCalls(function.Body);
         }
 
         // Repeatedly remove uncalled functions from the program (but not interrupt vectors):
@@ -618,7 +634,11 @@ partial class Compiler
                 if (!callGraph.Values.Any(x => x.Contains(func)))
                 {
                     callGraph.Remove(func);
-                    newProgram.RemoveAll(decl => decl.Tag == DeclarationTag.Function && decl.Name == func);
+                    newProgram.RemoveAll(decl =>
+                    {
+                        FunctionDeclaration function;
+                        return MatchFunctionDeclaration(decl, out function) && function.Name == func;
+                    });
                     goto KeepSearching;
                 }
             }
@@ -1365,4 +1385,12 @@ enum MemoryRegion
 {
     ZeroPage,
     Ram,
+}
+
+class FunctionDeclaration
+{
+    public CType ReturnType;
+    public string Name;
+    public FieldInfo[] Parameters;
+    public Expr Body;
 }

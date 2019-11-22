@@ -18,7 +18,7 @@ class Expr
         foreach (object arg in args)
         {
             if (arg == null) throw new Exception("Null in tuple.");
-            if (!(arg is int || arg is string || arg is MemoryRegion || arg is CType || arg is Expr))
+            if (!(arg is int || arg is string || arg is MemoryRegion || arg is CType || arg is FieldInfo[] || arg is Expr))
             {
                 throw new Exception("Unsupported type in tuple: " + arg.GetType());
             }
@@ -260,6 +260,7 @@ class Expr
             Expr subexpr = Args[i] as Expr;
             MemoryRegion? region = Args[i] as MemoryRegion?;
             CType type = Args[i] as CType;
+            FieldInfo[] fields = Args[i] as FieldInfo[];
             if (integer != null)
             {
                 int n = integer.Value;
@@ -280,6 +281,10 @@ class Expr
             else if (!ReferenceEquals(type, null))
             {
                 tree[i] = "<" + type.Show() + ">";
+            }
+            else if (fields != null)
+            {
+                tree[i] = "<fields>";
             }
             else
             {

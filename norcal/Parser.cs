@@ -11,7 +11,7 @@ partial class Parser
     List<Token> Input;
     string CurrentFunctionName = "(global)";
 
-    public static List<Declaration> ParseFile(string filename)
+    public static List<Expr> ParseFile(string filename)
     {
         Parser p = new Parser(filename);
         return p.ParseFile();
@@ -22,9 +22,9 @@ partial class Parser
         Input = Tokenizer.TokenizeFile(filename);
     }
 
-    List<Declaration> ParseFile()
+    List<Expr> ParseFile()
     {
-        List<Declaration> program = new List<Declaration>();
+        List<Expr> program = new List<Expr>();
         while (!TryParse(TokenType.EOF))
         {
             program.Add(ParseDeclaration());
@@ -32,62 +32,62 @@ partial class Parser
         return program;
     }
 
-    Declaration ParseDeclaration()
+    Expr ParseDeclaration()
     {
-        // TODO: Items with static scope should not be visible outside their file.
-        bool isStatic = TryParseName("static");
+        while (TryParseName("static"))
+        {
+            // TODO: Emit a warning.
+        }
 
-        Declaration d = new Declaration();
         if (TryParseName("define"))
         {
-            d.Tag = DeclarationTag.Constant;
-            d.Type = ExpectType();
-            d.Name = ExpectAnyName();
+            CType type = ExpectType();
+            string name = ExpectAnyName();
             Expect(TokenType.EQUAL);
-            d.Body = ParseExpr();
+            Expr body = ParseExpr();
             Expect(TokenType.SEMICOLON);
+            return Expr.Make(Tag.Constant, type, name, body);
         }
         else
         {
-            d.Type = ExpectType();
+            CType type = ExpectType();
 
-            if (d.Type.IsStruct && TryParse(TokenType.LBRACE))
+            if (type.IsStruct && TryParse(TokenType.LBRACE))
             {
-                d.Tag = DeclarationTag.Struct;
-                d.Name = d.Type.Name;
-                d.Type = null;
-                d.Fields = new List<NamedField>();
+                List<FieldInfo> fields = new List<FieldInfo>();
                 while (!TryParse(TokenType.RBRACE))
                 {
-                    MemoryRegion region = ParseMemoryRegionQualifier();
+                    // Individual fields can't be assigned to a region of memory.
+                    MemoryRegion region = MemoryRegion.Ram;
                     CType fieldType = ExpectType();
                     string fieldName = ExpectAnyName();
-                    d.Fields.Add(new NamedField(region, fieldType, fieldName));
+                    fields.Add(new FieldInfo(region, fieldType, fieldName));
                     while (TryParse(TokenType.COMMA))
                     {
                         fieldName = ExpectAnyName();
-                        d.Fields.Add(new NamedField(region, fieldType, fieldName));
+                        fields.Add(new FieldInfo(region, fieldType, fieldName));
                     }
                     Expect(TokenType.SEMICOLON);
                 }
+
+                return Expr.Make(Tag.Struct, type.Name, fields.ToArray());
             }
             else
             {
-                d.Name = ExpectAnyName();
+                string name = ExpectAnyName();
 
                 if (TryParse(TokenType.LPAREN))
                 {
-                    d.Tag = DeclarationTag.Function;
-                    CurrentFunctionName = d.Name;
-                    d.Fields = new List<NamedField>();
+                    CurrentFunctionName = name;
+                    List<FieldInfo> fields = new List<FieldInfo>();
                     if (!TryParse(TokenType.RPAREN))
                     {
                         while (true)
                         {
                             MemoryRegion region = ParseMemoryRegionQualifier();
-                            CType type = ExpectType();
-                            string name = ExpectAnyName();
-                            d.Fields.Add(new NamedField(region, type, name));
+                            CType fieldType = ExpectType();
+                            string fieldName = ExpectAnyName();
+                            fields.Add(new FieldInfo(region, fieldType, fieldName));
                             if (TryParse(TokenType.RPAREN)) break;
                             Expect(TokenType.COMMA);
                         }
@@ -99,18 +99,19 @@ partial class Parser
                     {
                         args.Add(ParseStatement(true));
                     }
-                    d.Body = Expr.Make(Tag.Scope, Expr.Make(args.ToArray()));
+                    Expr body = Expr.Make(Tag.Scope, Expr.Make(args.ToArray()));
+                    return Expr.Make(Tag.Function, type, name, fields.ToArray(), body);
                 }
                 else
                 {
-                    d.Tag = DeclarationTag.Variable;
-                    ParseArrayDeclaration(ref d.Type);
+                    MemoryRegion region = ParseMemoryRegionQualifier();
+                    ParseArrayDeclaration(ref type);
                     if (TryParse(TokenType.EQUAL)) ParserError("global variables cannot be initialized");
                     Expect(TokenType.SEMICOLON);
+                    return Expr.Make(Tag.Variable, region, type, name);
                 }
             }
         }
-        return d;
     }
 
     bool TryParseMemoryRegionQualifier(out MemoryRegion region)

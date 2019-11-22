@@ -161,7 +161,8 @@ class Tokenizer
             }
             else
             {
-                Error(pos, "invalid token");
+                // HACK: Show the input that could not be tokenized:
+                Error(pos, "invalid token: " + new string(Input.Skip(Next).Take(15).ToArray()));
             }
 
             tokens.Add(new Token

@@ -63,7 +63,7 @@ static class Program
             Error("error: no source files provided");
         }
 
-        List<Declaration> program = new List<Declaration>();
+        List<Expr> program = new List<Expr>();
         foreach (string file in sourceFilenames)
         {
             program.AddRange(Parser.ParseFile(file));
@@ -89,7 +89,7 @@ static class Program
         }
     }
 
-    public static void WritePassOutputToFile(string passName, List<Declaration> program)
+    public static void WritePassOutputToFile(string passName, List<Expr> program)
     {
         WritePassOutputToFile(passName, ShowProgram(program));
     }
@@ -100,40 +100,15 @@ static class Program
         NextPassNumber += 1;
     }
 
-    static string ShowProgram(List<Declaration> program)
+    static string ShowProgram(List<Expr> program)
     {
         StringBuilder sb = new StringBuilder();
-
-        foreach (Declaration decl in program)
+        foreach (Expr decl in program)
         {
-            if (decl.Tag == DeclarationTag.Function)
-            {
-                sb.AppendFormat("{0}()\n", decl.Name);
-                sb.AppendFormat(decl.Body.ShowMultiline());
-                sb.AppendFormat("\n\n");
-            }
-            else if (decl.Tag == DeclarationTag.Constant)
-            {
-                sb.AppendFormat("define {0} = ", decl.Name);
-                sb.AppendFormat(decl.Body.ShowMultiline());
-                sb.AppendFormat("\n\n");
-            }
-            else if (decl.Tag == DeclarationTag.Variable)
-            {
-                sb.AppendFormat("var {0};\n\n", decl.Name);
-                sb.AppendFormat("\n\n");
-            }
-            else if (decl.Tag == DeclarationTag.Struct)
-            {
-                sb.AppendFormat("struct {0} {{ ... }}\n\n", decl.Name);
-                // TODO: Print the fields.
-            }
-            else
-            {
-                Panic("unhandled declaration type");
-            }
+            sb.Append(decl.ShowMultiline());
+            sb.AppendLine();
+            sb.AppendLine();
         }
-
         return sb.ToString();
     }
 
@@ -172,31 +147,13 @@ static class Program
     public static void UnhandledCase() => Panic("unhandled case");
 }
 
-class Declaration
-{
-    public DeclarationTag Tag;
-    public MemoryRegion Region;
-    public CType Type;
-    public string Name;
-    public Expr Body;
-    public List<NamedField> Fields;
-}
-
-enum DeclarationTag
-{
-    Function,
-    Constant,
-    Variable,
-    Struct,
-}
-
-class NamedField
+class FieldInfo
 {
     public readonly MemoryRegion Region;
     public readonly CType Type;
     public readonly string Name;
 
-    public NamedField(MemoryRegion region, CType type, string name)
+    public FieldInfo(MemoryRegion region, CType type, string name)
     {
         Region = region;
         Type = type;
@@ -209,6 +166,12 @@ class NamedField
 /// </summary>
 static class Tag
 {
+    // Top-level declarations:
+    public static readonly string Function = "$function";
+    public static readonly string Constant = "$constant";
+    public static readonly string Variable = "$variable";
+    public static readonly string Struct = "$struct";
+
     // Special nodes:
     public static readonly string Empty = "$empty";
     public static readonly string Int = "$int";
