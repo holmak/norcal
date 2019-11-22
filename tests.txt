@@ -1418,3 +1418,24 @@ void reset()
     }
     *STOP = 0;
 }
+
+@ Conditional expressions
+@out 1 2 0xFFFF 4 0xBBBB 0xFFFF 7 8 0xFFFF 0xBBBB 11 0xFFFF 13 14 0xFFBB 16 17 0xFFFF 19 0xBBBB
+void reset()
+{
+    for (uint16_t i = 1; i <= 20; i++)
+    {
+        *OUT = i % 3 == 0 ? (i % 5 == 0 ? 0xFFBB : 0xFFFF) : (i % 5 == 0 ? 0xBBBB : i);
+    }
+    *STOP = 0;
+}
+
+@ Invalid conditional expressions
+@error
+void reset()
+{
+    uint8_t a = 0;
+    uint16_t b = 0;
+    *OUTB = (a == 4) ? a : b;
+    *STOP = 0;
+}

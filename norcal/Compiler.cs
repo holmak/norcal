@@ -543,8 +543,18 @@ partial class Compiler
         }
         else if (e.MatchAny(Tag.Switch, out args))
         {
-            // TODO: Each condition must have type "uint8_t".
-            // TODO: Each then-clause must have the same type.
+            // Each condition must have type "uint8_t":
+            for (int i = 0; i < args.Length; i += 2)
+            {
+                if (TypeOf(args[i]) != CType.UInt8) Program.Panic("switch test has wrong type");
+            }
+
+            // Each then-clause must have the same type:
+            CType bodyType = TypeOf(args[1]);
+            for (int i = 3; i < args.Length; i += 2)
+            {
+                if (TypeOf(args[i]) != bodyType) Program.Error("conditional expression types do not match");
+            }
         }
         else if (e.Match(Tag.For))
         {
@@ -826,8 +836,7 @@ partial class Compiler
         }
         else if (e.MatchAny(Tag.Switch, out args))
         {
-            // TODO: Figure out the type.
-            return CType.Void;
+            return TypeOf(args[1]);
         }
         else if (e.MatchTag(Tag.For) || e.MatchTag(Tag.Return))
         {

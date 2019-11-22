@@ -370,21 +370,26 @@ partial class Parser
 
     Expr ParseStatementBlock()
     {
-        // A block can be a single statement, or a series of statements surrounded by braces.
+        List<object> args = new List<object>();
+        args.Add(Tag.Sequence);
+
+        // A block can be a single statement, or a series of statements surrounded by braces:
         if (TryParse(TokenType.LBRACE))
         {
-            List<object> args = new List<object>();
-            args.Add(Tag.Sequence);
             while (!TryParse(TokenType.RBRACE))
             {
                 args.Add(ParseStatement(true));
             }
-            return Expr.Make(args.ToArray());
         }
         else
         {
-            return ParseStatement(true);
+            args.Add(ParseStatement(true));
         }
+
+        // Add an empty expression at the end to force the type of this sequence expression to be void:
+        args.Add(Expr.Make(Tag.Empty));
+        return Expr.Make(args.ToArray());
+
     }
 
     Expr ParseExpr()
@@ -401,7 +406,7 @@ partial class Parser
     // = *= /= %= += -= <<= >>= &= ^= |=
     Expr ParseAssignExpr()
     {
-        Expr e = ParseLogicalOrExpr();
+        Expr e = ParseConditionalExpr();
         if (TryParse(TokenType.EQUAL))
         {
             e = MakeAssignExpr(e, ParseAssignExpr());
@@ -413,7 +418,17 @@ partial class Parser
     // ? :
     Expr ParseConditionalExpr()
     {
-        return ParseLogicalOrExpr();
+        Expr e = ParseLogicalOrExpr();
+        if (TryParse(TokenType.QUESTION_MARK))
+        {
+            Expr test = Expr.Make(Tag.BoolFromGeneric, e);
+            Expr ifTrue = ParseExpr();
+            Expect(TokenType.COLON);
+            Expr ifFalse = ParseConditionalExpr();
+            e = Expr.Make(Tag.Switch, test, ifTrue, Expr.Make(Tag.Int, 1, CType.UInt8), ifFalse);
+        }
+
+        return e;
     }
 
     // ||
