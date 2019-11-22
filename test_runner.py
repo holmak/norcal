@@ -86,6 +86,7 @@ next_html_id = 0
 previously_attached = False
 time_in_compiler = 0
 for test in tests:
+    print('.', end='', flush=True)
     test.disasm = 'N/A'
     test.passed = False
     test.html_id = 'test{}'.format(next_html_id)
