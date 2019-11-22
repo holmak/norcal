@@ -185,6 +185,11 @@ partial class Compiler
 
                 if (candidates.Count == 1)
                 {
+                    if (AsmInfo.ShortJumpInstructions.Contains(mnemonic) && (operand < sbyte.MinValue || operand > sbyte.MaxValue))
+                    {
+                        Program.Panic("relative branch offset is too large");
+                    }
+
                     prg.Add(candidates[0]);
 
                     if (formalSize == 1)
