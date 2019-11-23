@@ -230,12 +230,4 @@ static class Tag
     public static readonly string LoadU16 = "_rt_load_u16";
     public static readonly string StoreU8 = "_rt_store_u8";
     public static readonly string StoreU16 = "_rt_store_u16";
-    public static readonly string PredecrementU8 = "_rt_predec_u8";
-    public static readonly string PredecrementU16 = "_rt_predec_u16";
-    public static readonly string PostdecrementU8 = "_rt_postdec_u8";
-    public static readonly string PostdecrementU16 = "_rt_postdec_u16";
-    public static readonly string PreincrementU8 = "_rt_preinc_u8";
-    public static readonly string PreincrementU16 = "_rt_preinc_u16";
-    public static readonly string PostincrementU8 = "_rt_postinc_u8";
-    public static readonly string PostincrementU16 = "_rt_postinc_u16";
 }
