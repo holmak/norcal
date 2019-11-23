@@ -186,7 +186,7 @@ partial class Parser
                 {
                     // Parse the test:
                     Expect(TokenType.LPAREN);
-                    expr.Add(Expr.Make(Tag.BoolFromGeneric, ParseExpr()));
+                    expr.Add(ConvertToBool(ParseExpr()));
                     Expect(TokenType.RPAREN);
 
                     // Parse the body:
@@ -309,6 +309,11 @@ partial class Parser
             Expect(TokenType.SEMICOLON);
         }
         return stmt;
+    }
+
+    Expr ConvertToBool(Expr e)
+    {
+        return Expr.Make(Tag.BoolFromGeneric, e);
     }
 
     Expr ParseRestOfLocalDeclaration(MemoryRegion region, CType type)
@@ -434,13 +439,41 @@ partial class Parser
     // ||
     Expr ParseLogicalOrExpr()
     {
-        return ParseLogicalAndExpr();
+        Expr e = ParseLogicalAndExpr();
+        while (true)
+        {
+            if (TryParse(TokenType.LOGICAL_OR))
+            {
+                Expr right = ParseLogicalAndExpr();
+                e = Expr.Make(Tag.Switch,
+                    ConvertToBool(e), Expr.Make(Tag.Int, 1, CType.UInt8),
+                    Expr.Make(Tag.Int, 1, CType.UInt8), ConvertToBool(right));
+            }
+            else
+            {
+                return e;
+            }
+        }
     }
 
     // &&
     Expr ParseLogicalAndExpr()
     {
-        return ParseBitwiseOrExpr();
+        Expr e = ParseBitwiseOrExpr();
+        while (true)
+        {
+            if (TryParse(TokenType.LOGICAL_AND))
+            {
+                Expr right = ParseBitwiseOrExpr();
+                e = Expr.Make(Tag.Switch,
+                    Expr.Make(Tag.LogicalNotGeneric, ConvertToBool(e)), Expr.Make(Tag.Int, 0, CType.UInt8),
+                    Expr.Make(Tag.Int, 1, CType.UInt8), ConvertToBool(right));
+            }
+            else
+            {
+                return e;
+            }
+        }
     }
 
     // |
@@ -631,6 +664,10 @@ partial class Parser
         else if (TryParse(TokenType.TILDE))
         {
             return Expr.Make(Tag.BitwiseNotGeneric, ParseUnaryPrefixExpr());
+        }
+        else if (TryParse(TokenType.LOGICAL_NOT))
+        {
+            return Expr.Make(Tag.LogicalNotGeneric, ConvertToBool(ParseUnaryPrefixExpr()));
         }
         else if (TryParse(TokenType.INCREMENT))
         {

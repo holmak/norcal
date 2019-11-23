@@ -590,6 +590,18 @@ uint16_t _rt_bitwise_not_u16(uint16_t a)
     }
 }
 
+uint8_t _rt_logical_not_u8(uint8_t a)
+{
+    __asm
+    {
+        LDA #1
+        LDX a
+        BEQ skip
+        LDA #0
+        skip:
+    }
+}
+
 uint8_t _rt_predec_u8(__zeropage uint8_t *p)
 {
     __asm

@@ -368,6 +368,7 @@ partial class Compiler
     {
         { Tag.BoolFromGeneric, "bool" },
         { Tag.BitwiseNotGeneric, "bitwise_not" },
+        { Tag.LogicalNotGeneric, "logical_not" },
         { Tag.PredecrementGeneric, "predec" },
         { Tag.PostdecrementGeneric, "postdec" },
         { Tag.PreincrementGeneric, "preinc" },

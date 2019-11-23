@@ -1164,6 +1164,15 @@ void reset()
     *STOP = 0;
 }
 
+@ Associativity
+@out 8 4
+void reset()
+{
+    *OUT = 9 - 3 + 2;
+    *OUT = 9 - (3 + 2);
+    *STOP = 0;
+}
+
 @ arithmetic
 @out 23 17 60 6 2
 void reset()
@@ -1452,5 +1461,49 @@ void reset()
     *OUTB = a;
     *OUTB = a += a;
     *OUTB = a;
+    *STOP = 0;
+}
+
+@ Logical operators
+@out 0 1 1 0 0 0 0 1 0 1 1 1 1 0 222
+
+// If a function call should not be made, due to short-circuiting,
+// the caller passes TRUE as the "explode" parameter.
+
+uint8_t yes(uint16_t explode)
+{
+    if (explode) *OUT = 8;
+    return 1;
+}
+
+uint8_t no(uint16_t explode)
+{
+    if (explode) *OUT = 8;
+    return 0;
+}
+
+void reset()
+{
+    *OUTB = no(0);
+    *OUTB = !no(0);
+    *OUTB = yes(0);
+    *OUTB = !yes(0);
+
+    *OUTB = no(0) && no(1);
+    *OUTB = no(0) && yes(1);
+    *OUTB = yes(0) && no(0);
+    *OUTB = yes(0) && yes(0);
+
+    *OUTB = no(0) || no(0);
+    *OUTB = no(0) || yes(0);
+    *OUTB = yes(0) || no(1);
+    *OUTB = yes(0) || yes(1);
+
+    // Test associativity:
+    *OUTB = yes(0) || no(1) || no(1);
+    *OUTB = no(0) && yes(1) && yes(1);
+
+    *OUT = 222;
+
     *STOP = 0;
 }

@@ -220,6 +220,7 @@ static class Tag
     public static readonly string BitwiseNotGeneric = "$bitwise_not";
     public static readonly string ShiftLeftGeneric = "$shift_left";
     public static readonly string ShiftRightGeneric = "$shift_right";
+    public static readonly string LogicalNotGeneric = "$logical_not";
 
     // Runtime functions:
     public static readonly string AddU8 = "_rt_add_u8";
