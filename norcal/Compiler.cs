@@ -870,11 +870,11 @@ partial class Compiler
 
     void CompileExpression(Expr e, int dest, Continuation cont)
     {
-        int value;
+        int value, address;
         string functionName, target;
-        CType type, pointerType;
+        CType type, addressType;
         Expr[] args;
-        Expr subexpr;
+        Expr subexpr, addressExpr, valueExpr;
         if (e.Match(Tag.Int, out value, out type))
         {
             EmitLoadImmediate(value, type, dest, cont);
@@ -950,99 +950,98 @@ partial class Compiler
             // Copy assembly instructions almost verbatim:
             Emit(e.GetArgs().Skip(1).ToArray());
         }
-        else if (e.MatchAny(out functionName, out args))
+        else if ((e.Match(Tag.LoadU8, out addressExpr) || e.Match(Tag.LoadU16, out addressExpr)) &&
+            addressExpr.Match(Tag.Int, out address, out addressType))
         {
-            int addr;
-            if ((functionName == Tag.LoadU8 || functionName == Tag.LoadU16) && args[0].Match(Tag.Int, out addr, out pointerType))
-            {
-                // Loads from constant addresses must be optimized, because this pattern is used to copy data from
-                // temporary variables into call frames; we can't generate a call to "load_***" in the middle of
-                // generating some other call.
+            // Loads from constant addresses must be optimized, because this pattern is used to copy data from
+            // temporary variables into call frames; we can't generate a call to "load_***" in the middle of
+            // generating some other call.
 
-                CType valueType = Dereference(pointerType, "a pointer type is required");
-                EmitLoad(addr, valueType, dest, cont);
-            }
-            else if ((functionName == Tag.StoreU8 || functionName == Tag.StoreU16) && args[0].Match(Tag.Int, out addr, out pointerType))
-            {
-                // This case is not essential, but generates better code.
+            CType valueType = Dereference(addressType, "a pointer type is required");
+            EmitLoad(address, valueType, dest, cont);
+        }
+        else if ((e.Match(Tag.StoreU8, out addressExpr, out valueExpr) || e.Match(Tag.StoreU16, out addressExpr, out valueExpr)) &&
+            addressExpr.Match(Tag.Int, out address, out addressType))
+        {
+            // Stores to constant addresses benefit greatly from destination-driven compilation.
+            // This case is not essential, but generates better code.
 
-                CType valueType = Dereference(pointerType, "a pointer type is required");
-                if (dest == DestinationDiscard)
-                {
-                    EmitComment("assign to constant address");
-                    // Let the sub-expression handle storing the data _and_ any conditional branch.
-                    CompileExpression(args[1], addr, cont);
-                }
-                else
-                {
-                    EmitComment("assign to constant address, and produce the assigned value");
-                    CompileExpression(args[1], DestinationAcc, Continuation.Fallthrough);
-                    EmitStoreAcc(valueType, addr);
-                    EmitStoreAcc(valueType, dest);
-                    EmitBranchOnAcc(cont);
-                }
+            CType valueType = Dereference(addressType, "a pointer type is required");
+            if (dest == DestinationDiscard)
+            {
+                EmitComment("assign to constant address");
+                // Let the sub-expression handle storing the data _and_ any conditional branch.
+                CompileExpression(valueExpr, address, cont);
             }
             else
             {
-                // This is the general-purpose way of calling functions.
-
-                CFunctionInfo functionInfo;
-                if (!Functions.TryGetValue(functionName, out functionInfo)) Program.Error("function not defined: " + functionName);
-
-                // Get the call frame address (and type information) from the function's type entry.
-                CType[] paramTypes = functionInfo.ParameterTypes;
-                int[] paramAddresses = functionInfo.ParameterAddresses;
-
-                if (paramTypes.Length != paramAddresses.Length) Program.Panic("in function symbol, the number of types doesn't match the number of argument locations: " + functionName);
-                if (args.Length != paramTypes.Length) Program.Error("wrong number of arguments to function: " + functionName);
-
-                BeginTempScope();
-                EmitComment("prepare call: function " + functionName);
-
-                // Evaluate the arguments and store the results in temporary variables.
-                // TODO: (optimization) The first arg doesn't have to be simplified, since we haven't started assembling a call frame yet.
-                // Optimization: Sufficiently simple arguments (such as literal ints) can skip this
-                //   step and be written directly into the call frame.
-                List<Expr> temps = new List<Expr>();
-                for (int i = 0; i < paramTypes.Length; i++)
-                {
-                    Expr arg = args[i];
-                    CType argType = paramTypes[i];
-
-                    int n;
-                    CType ignored;
-                    Expr simpleArg;
-                    if (arg.Match(Tag.Int, out n, out ignored))
-                    {
-                        simpleArg = Expr.Make(Tag.Int, n, argType);
-                    }
-                    else
-                    {
-                        EmitComment("prepare call: create temporary for argument " + i);
-                        int argSize = SizeOf(argType);
-                        int temp = AllocTemp(MemoryRegion.Ram, argSize);
-                        CompileExpression(arg, temp, Continuation.Fallthrough);
-                        simpleArg = Expr.Make(GetLoadFunctionForType(argType), Expr.Make(Tag.Int, temp, CType.MakePointer(argType)));
-                    }
-                    temps.Add(simpleArg);
-                }
-
-                // Copy all of the argument values from the temporaries into the function's call frame.
-                for (int i = 0; i < temps.Count; i++)
-                {
-                    EmitComment("prepare call: load argument " + i);
-                    CompileExpression(temps[i], paramAddresses[i], Continuation.Fallthrough);
-                }
-
-                EmitComment("call " + functionName);
-                Emit("JSR", functionName);
-
-                // The return value is placed in the accumulator.
-                EmitStoreAcc(functionInfo.ReturnType, dest);
+                EmitComment("assign to constant address, and produce the assigned value");
+                CompileExpression(valueExpr, DestinationAcc, Continuation.Fallthrough);
+                EmitStoreAcc(valueType, address);
+                EmitStoreAcc(valueType, dest);
                 EmitBranchOnAcc(cont);
-
-                EndTempScope();
             }
+        }
+        else if (e.MatchAny(out functionName, out args))
+        {
+            // This is the general-purpose way of calling functions.
+
+            CFunctionInfo functionInfo;
+            if (!Functions.TryGetValue(functionName, out functionInfo)) Program.Error("function not defined: " + functionName);
+
+            // Get the call frame address (and type information) from the function's type entry.
+            CType[] paramTypes = functionInfo.ParameterTypes;
+            int[] paramAddresses = functionInfo.ParameterAddresses;
+
+            if (paramTypes.Length != paramAddresses.Length) Program.Panic("in function symbol, the number of types doesn't match the number of argument locations: " + functionName);
+            if (args.Length != paramTypes.Length) Program.Error("wrong number of arguments to function: " + functionName);
+
+            BeginTempScope();
+            EmitComment("prepare call: function " + functionName);
+
+            // Evaluate the arguments and store the results in temporary variables.
+            // TODO: (optimization) The first arg doesn't have to be simplified, since we haven't started assembling a call frame yet.
+            // Optimization: Sufficiently simple arguments (such as literal ints) can skip this
+            //   step and be written directly into the call frame.
+            List<Expr> temps = new List<Expr>();
+            for (int i = 0; i < paramTypes.Length; i++)
+            {
+                Expr arg = args[i];
+                CType argType = paramTypes[i];
+
+                int n;
+                CType ignored;
+                Expr simpleArg;
+                if (arg.Match(Tag.Int, out n, out ignored))
+                {
+                    simpleArg = Expr.Make(Tag.Int, n, argType);
+                }
+                else
+                {
+                    EmitComment("prepare call: create temporary for argument " + i);
+                    int argSize = SizeOf(argType);
+                    int temp = AllocTemp(MemoryRegion.Ram, argSize);
+                    CompileExpression(arg, temp, Continuation.Fallthrough);
+                    simpleArg = Expr.Make(GetLoadFunctionForType(argType), Expr.Make(Tag.Int, temp, CType.MakePointer(argType)));
+                }
+                temps.Add(simpleArg);
+            }
+
+            // Copy all of the argument values from the temporaries into the function's call frame.
+            for (int i = 0; i < temps.Count; i++)
+            {
+                EmitComment("prepare call: load argument " + i);
+                CompileExpression(temps[i], paramAddresses[i], Continuation.Fallthrough);
+            }
+
+            EmitComment("call " + functionName);
+            Emit("JSR", functionName);
+
+            // The return value is placed in the accumulator.
+            EmitStoreAcc(functionInfo.ReturnType, dest);
+            EmitBranchOnAcc(cont);
+
+            EndTempScope();
         }
         else
         {
