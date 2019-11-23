@@ -1449,21 +1449,6 @@ void reset()
     *STOP = 0;
 }
 
-@ Special assignment
-@out 5 15 30 60 60
-void reset()
-{
-    uint8_t a = 5;
-    *OUTB = a;
-    a += 10;
-    *OUTB = a;
-    a += a;
-    *OUTB = a;
-    *OUTB = a += a;
-    *OUTB = a;
-    *STOP = 0;
-}
-
 @ Logical operators
 @out 0 1 1 0 0 0 0 1 0 1 1 1 1 0 222
 
@@ -1504,6 +1489,107 @@ void reset()
     *OUTB = no(0) && yes(1) && yes(1);
 
     *OUT = 222;
+    *STOP = 0;
+}
 
+@ Assignment operators
+@out 5 15 30 60 60
+void reset()
+{
+    uint8_t a = 5;
+    *OUTB = a;
+    a += 10;
+    *OUTB = a;
+    a += a;
+    *OUTB = a;
+    *OUTB = a += a;
+    *OUTB = a;
+    *STOP = 0;
+}
+
+@out 500 1500 3000 6000 6000
+void reset()
+{
+    uint16_t a = 500;
+    *OUTB = a;
+    a += 1000;
+    *OUTB = a;
+    a += a;
+    *OUTB = a;
+    *OUTB = a += a;
+    *OUTB = a;
+    *STOP = 0;
+}
+
+@out 15 10 50 6 2 16 8 15 7 36
+void reset()
+{
+    uint8_t a = 5;
+    *OUTB = a += 10;
+    *OUTB = a -= 5;
+    *OUTB = a *= 5;
+    *OUTB = a /= 8;
+    *OUTB = a %= 4;
+    *OUTB = a << 3;
+    *OUTB = a >> 1;
+    *OUTB = a |= 7;
+    *OUTB = a &= 55;
+    *OUTB = a ^= 35;
+    *STOP = 0;
+}
+
+@out 1500 1000 5000 625 1 4096 1024 2000 960 466
+void reset()
+{
+    uint16_t a = 500;
+    *OUTB = a += 1000;
+    *OUTB = a -= 500;
+    *OUTB = a *= 5;
+    *OUTB = a /= 8;
+    *OUTB = a %= 4;
+    *OUTB = a << 12;
+    *OUTB = a >> 2;
+    *OUTB = a |= 2000;
+    *OUTB = a &= 999;
+    *OUTB = a ^= 530;
+    *STOP = 0;
+}
+
+@ Pointers
+@out 3 3 7 7
+void reset()
+{
+    uint8_t a = 3;
+    uint8_t *b = &a;
+    *OUTB = a;
+    *OUTB = *b;
+    *b = 7;
+    *OUTB = a;
+    *OUTB = *b;
+    *STOP = 0;
+}
+
+@out 3 3 3 7 3 5 7 5 1 0 7
+void reset()
+{
+    uint8_t a = 3;
+    uint8_t b = 7;
+    uint8_t *c = &a;
+    uint8_t *d = &b;
+    uint8_t **e = &c;
+    *OUTB = a;
+    *OUTB = *c;
+    *OUTB = **e;
+    e = &d;
+    *OUTB = **e;
+    *e = &a;
+    *OUTB = **e;
+    **e = 5;
+    *OUTB = a;
+    *OUTB = b;
+    *OUTB = **e;
+    *OUTB = (&**e == &a);
+    *OUTB = (&**e == &b);
+    *OUTB = *&*&*&**&*&*&*e;
     *STOP = 0;
 }
