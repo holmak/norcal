@@ -330,7 +330,7 @@ partial class Compiler
             left = ReplaceFields(left);
 
             CType structType = TypeOf(left);
-            if (structType.Tag != CTypeTag.Struct) Program.Error("left side must have struct type");
+            if (!structType.IsStruct) Program.Error("left side must have struct type");
             CStructInfo structInfo = GetStructInfo(structType.Name);
             CField fieldInfo = structInfo.Fields.FirstOrDefault(x => x.Name == fieldName);
             if (fieldInfo == null) Program.Error("type does not contain a field with this name: {0}", fieldName);
@@ -409,8 +409,7 @@ partial class Compiler
         else if (e.Match(Tag.LoadGeneric, out left))
         {
             CType addressType = TypeOf(left);
-            if (addressType.Tag != CTypeTag.Pointer) Program.Error("load address must have pointer type");
-            CType resultType = addressType.Subtype;
+            CType resultType = Dereference(addressType, "load address must have pointer type");
             return Expr.Make(GetLoadFunctionForType(resultType), left);
         }
         else if (e.Match(Tag.StoreGeneric, out left, out right))
@@ -418,8 +417,7 @@ partial class Compiler
             CType leftType = TypeOf(left);
 
             CType addressType = TypeOf(left);
-            if (addressType.Tag != CTypeTag.Pointer) Program.Error("store address must have pointer type");
-            CType expectedTypeOfValue = addressType.Subtype;
+            CType expectedTypeOfValue = Dereference(addressType, "store address must have pointer type");
             if (!TryToChangeType(ref right, expectedTypeOfValue)) Program.Error("types in assignment must match");
             return Expr.Make(GetStoreFunctionForType(expectedTypeOfValue), left, right);
         }
@@ -850,8 +848,7 @@ partial class Compiler
         else if (e.Match(Tag.LoadGeneric, out subexpr))
         {
             CType innerType = TypeOf(subexpr);
-            if (innerType.Tag != CTypeTag.Pointer) Program.Error("an expression with pointer type is required");
-            return innerType.Subtype;
+            return Dereference(innerType, "an expression with pointer type is required");
         }
         else if (e.MatchAny(out name, out args))
         {
@@ -962,14 +959,14 @@ partial class Compiler
                 // temporary variables into call frames; we can't generate a call to "load_***" in the middle of
                 // generating some other call.
 
-                CType valueType = GetTypePointedAt(pointerType);
+                CType valueType = Dereference(pointerType, "a pointer type is required");
                 EmitLoad(addr, valueType, dest, cont);
             }
             else if ((functionName == Tag.StoreU8 || functionName == Tag.StoreU16) && args[0].Match(Tag.Int, out addr, out pointerType))
             {
                 // This case is not essential, but generates better code.
 
-                CType valueType = GetTypePointedAt(pointerType);
+                CType valueType = Dereference(pointerType, "a pointer type is required");
                 if (dest == DestinationDiscard)
                 {
                     EmitComment("assign to constant address");
@@ -1053,9 +1050,9 @@ partial class Compiler
         }
     }
 
-    CType GetTypePointedAt(CType pointerType)
+    CType Dereference(CType pointerType, string error)
     {
-        if (!pointerType.IsPointer) Program.Panic("a pointer type is required");
+        if (!pointerType.IsPointer) Program.Panic(error);
         return pointerType.Subtype;
     }
 
@@ -1157,21 +1154,21 @@ partial class Compiler
 
     int SizeOf(CType type)
     {
-        if (type.Tag == CTypeTag.Simple)
+        if (type.IsSimple)
         {
             if (type.SimpleType == CSimpleType.UInt8) return 1;
             else if (type.SimpleType == CSimpleType.UInt16) return 2;
         }
-        else if (type.Tag == CTypeTag.Pointer)
+        else if (type.IsPointer)
         {
             return 2;
         }
-        else if (type.Tag == CTypeTag.Struct)
+        else if (type.IsStruct)
         {
             CStructInfo info = GetStructInfo(type.Name);
             return info.TotalSize;
         }
-        else if (type.Tag == CTypeTag.Array)
+        else if (type.IsArray)
         {
             return type.Dimension * SizeOf(type.Subtype);
         }

@@ -78,6 +78,7 @@ class CType : IEquatable<CType>
         };
     }
 
+    public bool IsSimple => Tag == CTypeTag.Simple;
     public bool IsPointer => Tag == CTypeTag.Pointer;
     public bool IsStruct => Tag == CTypeTag.Struct;
     public bool IsArray => Tag == CTypeTag.Array;
