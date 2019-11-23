@@ -877,7 +877,7 @@ partial class Compiler
         string functionName, target;
         CType type, pointerType;
         Expr[] args;
-        Expr test, then, subexpr;
+        Expr subexpr;
         if (e.Match(Tag.Int, out value, out type))
         {
             EmitLoadImmediate(value, type, dest, cont);
