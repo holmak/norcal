@@ -5,10 +5,8 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-partial class Compiler
+static class Assembler
 {
-    List<Expr> Assembly = new List<Expr>();
-
     // PRG must be exactly 32k, and CHR must be exactly 8k.
     static readonly int ChrRomSize = 0x2000;
     static readonly int PrgRomBase = 0x8000;
@@ -25,18 +23,7 @@ partial class Compiler
         0x00, 0x00,
     };
 
-    void Emit(params object[] args)
-    {
-        Expr e = Expr.Make(args);
-        Assembly.Add(e);
-    }
-
-    void EmitComment(string message)
-    {
-        Emit(Asm.Comment, message);
-    }
-
-    public void Assemble(string outputFilename)
+    public static void Assemble(List<Expr> assembly, string outputFilename)
     {
         // TODO: Use a specified CHR ROM input file.
         byte[] chr = new byte[ChrRomSize];
@@ -44,7 +31,7 @@ partial class Compiler
         // First pass: Calculate label values.
         Dictionary<string, int> labels = new Dictionary<string, int>();
         RunPass(
-            Assembly,
+            assembly,
             (label, address) =>
             {
                 // TODO: Make sure the address is in the allowed range.
@@ -54,7 +41,7 @@ partial class Compiler
 
         // Second pass: Generate machine code.
         List<byte> prg = RunPass(
-            Assembly,
+            assembly,
             (label, address) => { /* ignored */ },
             (label, baseAddress) =>
             {
@@ -210,6 +197,16 @@ partial class Compiler
         }
 
         return prg;
+    }
+
+    static byte LowByte(int n)
+    {
+        return (byte)(n & 0xFF);
+    }
+
+    static byte HighByte(int n)
+    {
+        return (byte)((n >> 8) & 0xFF);
     }
 }
 

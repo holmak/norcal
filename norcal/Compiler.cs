@@ -6,13 +6,14 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-partial class Compiler
+class Compiler
 {
     int ZeroPageNext = ZeroPageStart;
     int RamNext = RamStart;
     int NextLabelNumber = 0;
     Dictionary<string, CFunctionInfo> Functions = new Dictionary<string, CFunctionInfo>();
     Dictionary<string, CStructInfo> StructTypes = new Dictionary<string, CStructInfo>();
+    List<Expr> Assembly = new List<Expr>();
 
     static readonly int ZeroPageStart = 0x000;
     static readonly int ZeroPageEnd = 0x100;
@@ -22,7 +23,7 @@ partial class Compiler
     static readonly int DestinationDiscard = -1;
     static readonly int DestinationAcc = -2;
 
-    public void CompileProgram(List<Expr> program)
+    public List<Expr> CompileProgram(List<Expr> program)
     {
         // HACK: If you don't define an interrupt handler, it will target address zero.
         // TODO: What should the compiler do if an interrupt handler isn't defined? Is it an error?
@@ -97,6 +98,8 @@ partial class Compiler
             }
             Program.WritePassOutputToFile("assembly", sb.ToString());
         }
+
+        return Assembly;
     }
 
     /// <summary>
@@ -1064,16 +1067,16 @@ partial class Compiler
         }
         else if (dest == DestinationAcc)
         {
-            Emit("LDA", (int)LowByte(imm), Asm.Immediate);
-            if (width == 2) Emit("LDX", (int)HighByte(imm), Asm.Immediate);
+            Emit("LDA", LowByte(imm), Asm.Immediate);
+            if (width == 2) Emit("LDX", HighByte(imm), Asm.Immediate);
         }
         else
         {
-            Emit("LDA", (int)LowByte(imm), Asm.Immediate);
+            Emit("LDA", LowByte(imm), Asm.Immediate);
             Emit("STA", dest, Asm.Absolute);
             if (width == 2)
             {
-                Emit("LDX", (int)HighByte(imm), Asm.Immediate);
+                Emit("LDX", HighByte(imm), Asm.Immediate);
                 Emit("STX", dest + 1, Asm.Absolute);
             }
         }
@@ -1141,14 +1144,14 @@ partial class Compiler
         return string.Format("@{0}{1}", prefix, NextLabelNumber++);
     }
 
-    static byte LowByte(int n)
+    static int LowByte(int n)
     {
-        return (byte)(n & 0xFF);
+        return n & 0xFF;
     }
 
-    static byte HighByte(int n)
+    static int HighByte(int n)
     {
-        return (byte)((n >> 8) & 0xFF);
+        return (n >> 8) & 0xFF;
     }
 
     int SizeOf(CType type)
@@ -1300,6 +1303,17 @@ partial class Compiler
     int AllocTemp(MemoryRegion region, int size)
     {
         return AllocGlobal(region, size);
+    }
+
+    void Emit(params object[] args)
+    {
+        Expr e = Expr.Make(args);
+        Assembly.Add(e);
+    }
+
+    void EmitComment(string message)
+    {
+        Emit(Asm.Comment, message);
     }
 }
 

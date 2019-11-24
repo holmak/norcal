@@ -71,8 +71,8 @@ static class Program
         WritePassOutputToFile("parse", program);
 
         Compiler compiler = new Compiler();
-        compiler.CompileProgram(program);
-        compiler.Assemble(outputFilename);
+        List<Expr> assembly = compiler.CompileProgram(program);
+        Assembler.Assemble(assembly, outputFilename);
 
         if (EnableDebugOutput)
         {
