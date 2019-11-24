@@ -13,24 +13,15 @@ class Compiler
     int NextLabelNumber = 0;
     Dictionary<string, CFunctionInfo> Functions = new Dictionary<string, CFunctionInfo>();
     Dictionary<string, CStructInfo> StructTypes = new Dictionary<string, CStructInfo>();
-    List<Expr> Assembly = new List<Expr>();
+    List<Expr> StackCode = new List<Expr>();
 
     static readonly int ZeroPageStart = 0x000;
     static readonly int ZeroPageEnd = 0x100;
     static readonly int RamStart = 0x300;
     static readonly int RamEnd = 0x800;
 
-    static readonly int DestinationDiscard = -1;
-    static readonly int DestinationAcc = -2;
-
     public List<Expr> CompileProgram(List<Expr> program)
     {
-        // HACK: If you don't define an interrupt handler, it will target address zero.
-        // TODO: What should the compiler do if an interrupt handler isn't defined? Is it an error?
-        Emit(Asm.Label, "nmi");
-        Emit(Asm.Label, "reset");
-        Emit(Asm.Label, "brk");
-
         // Pass: Declare global symbols and replace symbols with addresses
         program = ApplyFirstPass(program);
 
@@ -55,20 +46,17 @@ class Compiler
         // Pass: Codegen
         foreach (FunctionDeclaration function in EnumerateFunctions(program))
         {
-            Emit(Asm.Function, function.Name);
-            CompileExpression(function.Body, DestinationDiscard, Continuation.Fallthrough);
-            Emit("RTS");
+            Emit(Stk.Function, function.Name);
+            CompileExpression(function.Body);
+
+            // Functions that return non-void should never reach this point.
+            Emit(Stk.PushImmediate, 0, CType.Void);
+            Emit(Stk.Return);
         }
 
         // TODO: Make sure interrupt-handling functions have the right type signature and are defined.
 
-        // Put the interrupt vector table at the end of ROM:
-        Emit(Asm.SkipTo, 0xFFFA);
-        Emit(Asm.Word, "nmi");
-        Emit(Asm.Word, "reset");
-        Emit(Asm.Word, "brk");
-
-        return Assembly;
+        return StackCode;
     }
 
     /// <summary>
@@ -380,18 +368,18 @@ class Compiler
         }
         else if (e.Match(Tag.LoadGeneric, out left))
         {
+            // TODO: This is just typechecking; move it there.
             CType addressType = TypeOf(left);
             CType resultType = Dereference(addressType, "load address must have pointer type");
-            return Expr.Make(GetLoadFunctionForType(resultType), left);
+            return e;
         }
         else if (e.Match(Tag.StoreGeneric, out left, out right))
         {
-            CType leftType = TypeOf(left);
-
+            // TODO: This is just typechecking; move it there.
             CType addressType = TypeOf(left);
             CType expectedTypeOfValue = Dereference(addressType, "store address must have pointer type");
             if (!TryToChangeType(ref right, expectedTypeOfValue)) Program.Error("types in assignment must match");
-            return Expr.Make(GetStoreFunctionForType(expectedTypeOfValue), left, right);
+            return e;
         }
         else if (e.Match(Tag.AddGeneric, out left, out right))
         {
@@ -840,16 +828,16 @@ class Compiler
         return info;
     }
 
-    void CompileExpression(Expr e, int dest, Continuation cont)
+    void CompileExpression(Expr e)
     {
-        int value, address;
+        int value;
         string functionName, target;
-        CType type, addressType;
+        CType type;
         Expr[] args;
-        Expr subexpr, addressExpr, valueExpr;
+        Expr subexpr;
         if (e.Match(Tag.Int, out value, out type))
         {
-            EmitLoadImmediate(value, type, dest, cont);
+            Emit(Stk.PushImmediate, value, type);
         }
         else if (e.Match(Tag.Empty))
         {
@@ -857,18 +845,9 @@ class Compiler
         }
         else if (e.MatchAny(Tag.Sequence, out args))
         {
-            for (int i = 0; i < args.Length; i++)
+            foreach (Expr sequenceExpr in args)
             {
-                // Drop the result of each expression except the last.
-                bool isLast = (i == args.Length - 1);
-                if (!isLast)
-                {
-                    CompileExpression(args[i], DestinationDiscard, Continuation.Fallthrough);
-                }
-                else
-                {
-                    CompileExpression(args[i], dest, cont);
-                }
+                CompileExpression(sequenceExpr);
             }
         }
         else if (e.MatchAny(Tag.Switch, out args))
@@ -879,141 +858,58 @@ class Compiler
             {
                 string nextClause = MakeUniqueLabel();
                 // If this clause's condition is false, try the next clause:
-                CompileExpression(args[i], DestinationDiscard, new Continuation(JumpCondition.IfFalse, nextClause));
+                CompileExpression(args[i]);
+                Emit(Stk.JumpIfFalse, nextClause);
                 // If the condition was true, execute the clause body:
-                CompileExpression(args[i + 1], dest, cont);
+                CompileExpression(args[i + 1]);
                 // After executing the body of a clause, skip the rest of the clauses:
-                Emit("JMP", end);
+                Emit(Stk.Jump, end);
                 EmitComment("end of switch clause");
-                Emit(Asm.Label, nextClause);
+                Emit(Stk.Label, nextClause);
             }
 
             EmitComment("end of switch");
-            Emit(Asm.Label, end);
+            Emit(Stk.Label, end);
         }
         else if (e.Match(Tag.Return, out subexpr))
         {
-            EmitComment("return");
-            CompileExpression(subexpr, DestinationAcc, Continuation.Fallthrough);
-            Emit("RTS");
+            CompileExpression(subexpr);
+            Emit(Stk.Return);
         }
         else if (e.Match(Tag.Cast, out type, out subexpr))
         {
-            CompileExpression(subexpr, dest, cont);
+            CompileExpression(subexpr);
         }
         else if (e.Match(Tag.Label, out target))
         {
-            Emit(Asm.Label, target);
+            Emit(Stk.Label, target);
         }
         else if (e.Match(Tag.Goto, out target))
         {
-            Emit("JMP", target);
+            Emit(Stk.Jump, target);
         }
         else if (e.Match(Tag.GotoIf, out subexpr, out target))
         {
-            CompileExpression(subexpr, DestinationDiscard, new Continuation(JumpCondition.IfTrue, target));
+            CompileExpression(subexpr);
+            Emit(Stk.JumpIfTrue, target);
         }
         else if (e.Match(Tag.GotoIfNot, out subexpr, out target))
         {
-            CompileExpression(subexpr, DestinationDiscard, new Continuation(JumpCondition.IfFalse, target));
+            CompileExpression(subexpr);
+            Emit(Stk.JumpIfFalse, target);
         }
         else if (e.MatchTag(Tag.Asm))
         {
             // Copy assembly instructions almost verbatim:
             Emit(e.GetArgs().Skip(1).ToArray());
         }
-        else if ((e.Match(Tag.LoadU8, out addressExpr) || e.Match(Tag.LoadU16, out addressExpr)) &&
-            addressExpr.Match(Tag.Int, out address, out addressType))
-        {
-            // Loads from constant addresses must be optimized, because this pattern is used to copy data from
-            // temporary variables into call frames; we can't generate a call to "load_***" in the middle of
-            // generating some other call.
-
-            CType valueType = Dereference(addressType, "a pointer type is required");
-            EmitLoad(address, valueType, dest, cont);
-        }
-        else if ((e.Match(Tag.StoreU8, out addressExpr, out valueExpr) || e.Match(Tag.StoreU16, out addressExpr, out valueExpr)) &&
-            addressExpr.Match(Tag.Int, out address, out addressType))
-        {
-            // Stores to constant addresses benefit greatly from destination-driven compilation.
-            // This case is not essential, but generates better code.
-
-            CType valueType = Dereference(addressType, "a pointer type is required");
-            if (dest == DestinationDiscard)
-            {
-                EmitComment("assign to constant address");
-                // Let the sub-expression handle storing the data _and_ any conditional branch.
-                CompileExpression(valueExpr, address, cont);
-            }
-            else
-            {
-                EmitComment("assign to constant address, and produce the assigned value");
-                CompileExpression(valueExpr, DestinationAcc, Continuation.Fallthrough);
-                EmitStoreAcc(valueType, address);
-                EmitStoreAcc(valueType, dest);
-                EmitBranchOnAcc(cont);
-            }
-        }
         else if (e.MatchAny(out functionName, out args))
         {
-            // This is the general-purpose way of calling functions.
-
-            CFunctionInfo functionInfo;
-            if (!Functions.TryGetValue(functionName, out functionInfo)) Program.Error("function not defined: " + functionName);
-
-            // Get the call frame address (and type information) from the function's type entry.
-            CType[] paramTypes = functionInfo.ParameterTypes;
-            int[] paramAddresses = functionInfo.ParameterAddresses;
-
-            if (paramTypes.Length != paramAddresses.Length) Program.Panic("in function symbol, the number of types doesn't match the number of argument locations: " + functionName);
-            if (args.Length != paramTypes.Length) Program.Error("wrong number of arguments to function: " + functionName);
-
-            BeginTempScope();
-            EmitComment("prepare call: function " + functionName);
-
-            // Evaluate the arguments and store the results in temporary variables.
-            // TODO: (optimization) The first arg doesn't have to be simplified, since we haven't started assembling a call frame yet.
-            // Optimization: Sufficiently simple arguments (such as literal ints) can skip this
-            //   step and be written directly into the call frame.
-            List<Expr> temps = new List<Expr>();
-            for (int i = 0; i < paramTypes.Length; i++)
+            foreach (Expr arg in args)
             {
-                Expr arg = args[i];
-                CType argType = paramTypes[i];
-
-                int n;
-                CType ignored;
-                Expr simpleArg;
-                if (arg.Match(Tag.Int, out n, out ignored))
-                {
-                    simpleArg = Expr.Make(Tag.Int, n, argType);
-                }
-                else
-                {
-                    EmitComment("prepare call: create temporary for argument " + i);
-                    int argSize = SizeOf(argType);
-                    int temp = AllocTemp(MemoryRegion.Ram, argSize);
-                    CompileExpression(arg, temp, Continuation.Fallthrough);
-                    simpleArg = Expr.Make(GetLoadFunctionForType(argType), Expr.Make(Tag.Int, temp, CType.MakePointer(argType)));
-                }
-                temps.Add(simpleArg);
+                CompileExpression(arg);
             }
-
-            // Copy all of the argument values from the temporaries into the function's call frame.
-            for (int i = 0; i < temps.Count; i++)
-            {
-                EmitComment("prepare call: load argument " + i);
-                CompileExpression(temps[i], paramAddresses[i], Continuation.Fallthrough);
-            }
-
-            EmitComment("call " + functionName);
-            Emit("JSR", functionName);
-
-            // The return value is placed in the accumulator.
-            EmitStoreAcc(functionInfo.ReturnType, dest);
-            EmitBranchOnAcc(cont);
-
-            EndTempScope();
+            Emit(Stk.Call, functionName);
         }
         else
         {
@@ -1025,79 +921,6 @@ class Compiler
     {
         if (!pointerType.IsPointer) Program.Panic(error);
         return pointerType.Subtype;
-    }
-
-    void EmitLoadImmediate(int imm, CType type, int dest, Continuation cont)
-    {
-        int width = SizeOf(type);
-        if (dest == DestinationDiscard)
-        {
-            // NOP
-        }
-        else if (dest == DestinationAcc)
-        {
-            Emit("LDA", LowByte(imm), Asm.Immediate);
-            if (width == 2) Emit("LDX", HighByte(imm), Asm.Immediate);
-        }
-        else
-        {
-            Emit("LDA", LowByte(imm), Asm.Immediate);
-            Emit("STA", dest, Asm.Absolute);
-            if (width == 2)
-            {
-                Emit("LDX", HighByte(imm), Asm.Immediate);
-                Emit("STX", dest + 1, Asm.Absolute);
-            }
-        }
-
-        if ((cont.When == JumpCondition.IfTrue && imm != 0) ||
-            (cont.When == JumpCondition.IfFalse && imm == 0))
-        {
-            Emit("JMP", cont.Target);
-        }
-    }
-
-    void EmitStoreAcc(CType type, int dest)
-    {
-        if (dest == DestinationDiscard || dest == DestinationAcc)
-        {
-            // NOP
-        }
-        else
-        {
-            int width = SizeOf(type);
-            Emit("STA", dest, Asm.Absolute);
-            if (width == 2) Emit("STX", dest + 1, Asm.Absolute);
-        }
-    }
-
-    void EmitBranchOnAcc(Continuation cont)
-    {
-        if (cont.When != JumpCondition.Never)
-        {
-            // Branch instructions use relative jumps, which can only jump up to 128 bytes away.
-            // In order to be able to branch further, all branches are now written as long jumps
-            // that are skipped by a (short) branch when the condition is not true.
-
-            // TODO: Values used as branch conditions must have a single-byte type, for easy comparison against zero.
-            string skipJump = MakeUniqueLabel();
-            EmitComment("branch on ACC");
-            Emit("ORA", 0, Asm.Immediate);
-            string op = (cont.When == JumpCondition.IfTrue) ? "BEQ" : "BNE";
-            Emit(op, skipJump);
-            Emit("JMP", cont.Target);
-            Emit(Asm.Label, skipJump);
-        }
-    }
-
-    void EmitLoad(int address, CType type, int dest, Continuation cont)
-    {
-        int width = SizeOf(type);
-        // Even if the value is unused, always read the address; it might be a hardware register.
-        Emit("LDA", address, Asm.Absolute);
-        if (width == 2) Emit("LDX", address + 1, Asm.Absolute);
-        EmitStoreAcc(type, dest);
-        EmitBranchOnAcc(cont);
     }
 
     void DefineVariable(LexicalScope scope, MemoryRegion region, CType type, string name)
@@ -1146,24 +969,6 @@ class Compiler
 
         Program.NYI();
         return 1;
-    }
-
-    string GetLoadFunctionForType(CType type)
-    {
-        int size = SizeOf(type);
-        if (size == 1) return Tag.LoadU8;
-        if (size == 2) return Tag.LoadU16;
-        Program.NYI();
-        return null;
-    }
-
-    string GetStoreFunctionForType(CType type)
-    {
-        int size = SizeOf(type);
-        if (size == 1) return Tag.StoreU8;
-        if (size == 2) return Tag.StoreU16;
-        Program.NYI();
-        return null;
     }
 
     void DeclareFunction(string name, CType[] paramTypes, CType returnType, int[] paramAddresses)
@@ -1251,16 +1056,6 @@ class Compiler
         return address;
     }
 
-    void BeginTempScope()
-    {
-        // TODO: Implement temporaries.
-    }
-
-    void EndTempScope()
-    {
-        // TODO: Implement temporaries.
-    }
-
     static LexicalScope PushScope(LexicalScope scope)
     {
         LexicalScope inner = new LexicalScope();
@@ -1268,21 +1063,15 @@ class Compiler
         return inner;
     }
 
-    // TODO: Temporary variables can be freed when the current temp scope ends.
-    int AllocTemp(MemoryRegion region, int size)
-    {
-        return AllocGlobal(region, size);
-    }
-
     void Emit(params object[] args)
     {
         Expr e = Expr.Make(args);
-        Assembly.Add(e);
+        StackCode.Add(e);
     }
 
     void EmitComment(string message)
     {
-        Emit(Asm.Comment, message);
+        Emit(Stk.Comment, message);
     }
 }
 
@@ -1299,29 +1088,6 @@ enum SymbolTag
 {
     Constant,
     Variable,
-}
-
-// type Destination = Discard | Accumulator | AbsoluteAddress Int
-
-enum JumpCondition
-{
-    Never,
-    IfTrue,
-    IfFalse,
-}
-
-struct Continuation
-{
-    public readonly JumpCondition When;
-    public readonly string Target;
-
-    public Continuation(JumpCondition when, string target)
-    {
-        When = when;
-        Target = target;
-    }
-
-    public static readonly Continuation Fallthrough = new Continuation(JumpCondition.Never, null);
 }
 
 class CStructInfo
