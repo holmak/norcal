@@ -33,9 +33,9 @@ class StackAssembler
     {
         // HACK: If you don't define an interrupt handler, it will target address zero.
         // TODO: What should the compiler do if an interrupt handler isn't defined? Is it an error?
-        Emit(Asm.Label, "nmi");
-        Emit(Asm.Label, "reset");
-        Emit(Asm.Label, "brk");
+        Emit(Tag.Label, "nmi");
+        Emit(Tag.Label, "reset");
+        Emit(Tag.Label, "brk");
 
         foreach (Expr op in input)
         {
@@ -44,7 +44,7 @@ class StackAssembler
             CType type, returnType;
             FieldInfo[] fields;
             int number;
-            if (op.Match(Stk.Function, out returnType, out functionName, out fields))
+            if (op.Match(Tag.Function, out returnType, out functionName, out fields))
             {
                 if (Functions.ContainsKey(functionName)) Program.Error("function is already defined: " + functionName);
 
@@ -74,17 +74,17 @@ class StackAssembler
                     DefineSymbol(SymbolTag.Variable, f.Name, f.Type, f.Address);
                 }
             }
-            else if (op.Match(Stk.Constant, out type, out name, out number))
+            else if (op.Match(Tag.Constant, out type, out name, out number))
             {
                 // TODO: Make sure the value fits in the specified type.
                 DefineSymbol(SymbolTag.Constant, name, type, number);
             }
-            else if (op.Match(Stk.Variable, out region, out type, out name))
+            else if (op.Match(Tag.Variable, out region, out type, out name))
             {
                 int address = AllocGlobal(region, SizeOf(type));
                 DefineSymbol(SymbolTag.Variable, name, type, address);
             }
-            else if (op.Match(Stk.Struct, out name, out fields))
+            else if (op.Match(Tag.Struct, out name, out fields))
             {
                 CField[] structFields = new CField[fields.Length];
                 int offset = 0;
@@ -105,15 +105,15 @@ class StackAssembler
                     Fields = structFields,
                 });
             }
-            else if (op.Match(Stk.PushImmediate, out number))
+            else if (op.Match(Tag.PushImmediate, out number))
             {
                 PushImmediate(number);
             }
-            else if (op.Match(Stk.PushVariable, out name))
+            else if (op.Match(Tag.PushVariable, out name))
             {
                 PushVariable(name);
             }
-            else if (op.Match(Stk.Call, out functionName))
+            else if (op.Match(Tag.Call, out functionName))
             {
                 if (functionName == Tag.StoreGeneric)
                 {
@@ -147,7 +147,7 @@ class StackAssembler
                     Emit("JSR", functionName);
                 }
             }
-            else if (op.Match(Stk.Return))
+            else if (op.Match(Tag.Return))
             {
                 // TODO: "Return" must load top-of-stack into the accumulator, then RTS.
                 Emit("RTS");
@@ -155,10 +155,10 @@ class StackAssembler
         }
 
         // Put the interrupt vector table at the end of ROM:
-        Emit(Asm.SkipTo, 0xFFFA);
-        Emit(Asm.Word, "nmi");
-        Emit(Asm.Word, "reset");
-        Emit(Asm.Word, "brk");
+        Emit(Tag.SkipTo, 0xFFFA);
+        Emit(Tag.Word, "nmi");
+        Emit(Tag.Word, "reset");
+        Emit(Tag.Word, "brk");
     }
 
     void Emit(params object[] args)
@@ -315,7 +315,7 @@ class StackAssembler
         }
         else if (r.Tag == OperandTag.Immediate)
         {
-            Emit(mnemonic, r.Value, Asm.Immediate);
+            Emit(mnemonic, r.Value, Tag.Immediate);
         }
         else
         {

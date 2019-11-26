@@ -133,17 +133,17 @@ static class Program
 
             string mnemonic, text, mode;
             int operand;
-            if (e.Match(Asm.Comment, out text)) line = "\t; " + text;
-            else if (e.Match(Asm.Label, out text)) line = text + ":";
-            else if (e.Match(Asm.Function, out text)) line = string.Format("\nfunction {0}:", text);
+            if (e.Match(Tag.Comment, out text)) line = "\t; " + text;
+            else if (e.Match(Tag.Label, out text)) line = text + ":";
+            else if (e.Match(Tag.Function, out text)) line = string.Format("\nfunction {0}:", text);
             else if (e.Match(out mnemonic)) line = string.Format("\t{0}", mnemonic);
             else if (e.Match(out mnemonic, out text)) line = string.Format("\t{0} {1}", mnemonic, text);
             else if (e.Match(out mnemonic, out operand, out mode))
             {
                 string format;
-                if (mode == Asm.Absolute) format = "\t{0} ${1:X}";
-                else if (mode == Asm.Immediate) format = "\t{0} #${1:X}";
-                else if (mode == Asm.IndirectY) format = "\t{0} (${1:X}),Y";
+                if (mode == Tag.Absolute) format = "\t{0} ${1:X}";
+                else if (mode == Tag.Immediate) format = "\t{0} #${1:X}";
+                else if (mode == Tag.IndirectY) format = "\t{0} (${1:X}),Y";
                 else format = "\t{0} ${1:X} ???";
                 line = string.Format(format, mnemonic, operand);
             }
@@ -263,27 +263,26 @@ static class Tag
     public static readonly string ShiftLeftGeneric = "$shift_left";
     public static readonly string ShiftRightGeneric = "$shift_right";
     public static readonly string LogicalNotGeneric = "$logical_not";
-}
 
-static class Stk
-{
-    public static readonly string Function = "vsm/function";
-    public static readonly string Struct = "vsm/struct";
-    public static readonly string Constant = "vsm/constant";
-    public static readonly string Variable = "vsm/variable";
-    public static readonly string Label = "vsm/label";
-    public static readonly string BeginScope = "vsm/begin_scope";
-    public static readonly string EndScope = "vsm/end_scope";
+    // Virtual stack machine instructions:
+    public static readonly string BeginScope = "$begin_scope";
+    public static readonly string EndScope = "$end_scope";
+    public static readonly string PushImmediate = "$push";
+    public static readonly string PushVariable = "$pushv";
+    public static readonly string PushAddressOfVariable = "$pushav";
+    public static readonly string PushFieldName = "$pushfn";
+    public static readonly string Jump = "$j";
+    public static readonly string JumpIfTrue = "$jt";
+    public static readonly string JumpIfFalse = "$jf";
+    public static readonly string Call = "$call";
 
-    public static readonly string PushImmediate = "vsm/push";
-    public static readonly string PushVariable = "vsm/pushv";
-    public static readonly string PushAddressOfVariable = "vsm/pushav";
-    public static readonly string PushFieldName = "vsm/pushfn";
-    public static readonly string Jump = "vsm/j";
-    public static readonly string JumpIfTrue = "vsm/jt";
-    public static readonly string JumpIfFalse = "vsm/jf";
-    public static readonly string Call = "vsm/call";
-    public static readonly string Return = "vsm/ret";
-    public static readonly string Field = "vsm/field";
-    public static readonly string Index = "vsm/index";
+    // Assembly directives:
+    public static readonly string Comment = "comment";
+    public static readonly string SkipTo = "skip_to";
+    public static readonly string Word = "word";
+
+    // 6502 address modes:
+    public static readonly string Absolute = "absolute";
+    public static readonly string Immediate = "immediate";
+    public static readonly string IndirectY = "indirect_y";
 }

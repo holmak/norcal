@@ -30,12 +30,12 @@ class Compiler
             Expr body;
             if (decl.Match(Tag.Function, out returnType, out name, out fields, out body))
             {
-                Emit(Stk.Function, returnType, name, fields);
+                Emit(Tag.Function, returnType, name, fields);
                 CompileExpression(body);
 
                 // Functions that return non-void should never reach this point.
-                Emit(Stk.PushImmediate, 0, CType.Void);
-                Emit(Stk.Return);
+                Emit(Tag.PushImmediate, 0, CType.Void);
+                Emit(Tag.Return);
             }
             else if (decl.Match(Tag.Constant, out type, out name, out body))
             {
@@ -46,15 +46,15 @@ class Compiler
                     Program.Error("expression must be constant");
                 }
 
-                Emit(Stk.Constant, type, name, value);
+                Emit(Tag.Constant, type, name, value);
             }
             else if (decl.Match(Tag.Variable, out region, out type, out name))
             {
-                Emit(Stk.Variable, region, type, name);
+                Emit(Tag.Variable, region, type, name);
             }
             else if (decl.Match(Tag.Struct, out name, out fields))
             {
-                Emit(Stk.Struct, name, fields);
+                Emit(Tag.Struct, name, fields);
             }
             else
             {
@@ -73,11 +73,11 @@ class Compiler
         Expr subexpr, init, test, induction, body, left, indexExpr;
         if (e.Match(Tag.Int, out value))
         {
-            Emit(Stk.PushImmediate, value);
+            Emit(Tag.PushImmediate, value);
         }
         else if (e.Match(Tag.Name, out name))
         {
-            Emit(Stk.PushVariable, name);
+            Emit(Tag.PushVariable, name);
         }
         else if (e.Match(Tag.Empty))
         {
@@ -100,23 +100,23 @@ class Compiler
 
                 // If this clause's condition is false, try the next clause:
                 CompileExpression(args[i]);
-                Emit(Stk.JumpIfFalse, nextClause);
+                Emit(Tag.JumpIfFalse, nextClause);
                 // If the condition was true, execute the clause body:
                 CompileExpression(args[i + 1]);
                 // After executing the body of a clause, skip the rest of the clauses:
-                Emit(Stk.Jump, end);
-                Emit(Stk.Label, nextClause);
+                Emit(Tag.Jump, end);
+                Emit(Tag.Label, nextClause);
             }
 
-            Emit(Stk.Label, end);
+            Emit(Tag.Label, end);
         }
         else if (e.Match(Tag.Continue))
         {
-            Emit(Stk.Jump, Loop.ContinueLabel);
+            Emit(Tag.Jump, Loop.ContinueLabel);
         }
         else if (e.Match(Tag.Break))
         {
-            Emit(Stk.Jump, Loop.BreakLabel);
+            Emit(Tag.Jump, Loop.BreakLabel);
         }
         else if (e.Match(Tag.For, out init, out test, out induction, out body))
         {
@@ -128,30 +128,30 @@ class Compiler
             };
 
             CompileExpression(init);
-            Emit(Stk.Label, Loop.ContinueLabel);
+            Emit(Tag.Label, Loop.ContinueLabel);
             CompileExpression(test);
-            Emit(Stk.JumpIfFalse, Loop.BreakLabel);
+            Emit(Tag.JumpIfFalse, Loop.BreakLabel);
             CompileExpression(body);
             CompileExpression(induction);
-            Emit(Stk.Jump, Loop.ContinueLabel);
-            Emit(Stk.Label, Loop.BreakLabel);
+            Emit(Tag.Jump, Loop.ContinueLabel);
+            Emit(Tag.Label, Loop.BreakLabel);
         }
         else if (e.Match(Tag.Return, out subexpr))
         {
             CompileExpression(subexpr);
-            Emit(Stk.Return);
+            Emit(Tag.Return);
         }
         else if (e.Match(Tag.Field, out left, out fieldName))
         {
             CompileExpression(left);
-            Emit(Stk.PushFieldName, fieldName);
-            Emit(Stk.Field);
+            Emit(Tag.PushFieldName, fieldName);
+            Emit(Tag.Field);
         }
         else if (e.Match(Tag.Index, out left, out indexExpr))
         {
             CompileExpression(left);
             CompileExpression(indexExpr);
-            Emit(Stk.Index);
+            Emit(Tag.Index);
         }
         else if (e.Match(Tag.Cast, out type, out subexpr))
         {
@@ -159,31 +159,31 @@ class Compiler
         }
         else if (e.Match(Tag.Local, out region, out type, out name))
         {
-            Emit(Stk.Variable, region, type, name);
+            Emit(Tag.Variable, region, type, name);
         }
         else if (e.Match(Tag.Scope, out subexpr))
         {
-            Emit(Stk.BeginScope);
+            Emit(Tag.BeginScope);
             CompileExpression(subexpr);
-            Emit(Stk.EndScope);
+            Emit(Tag.EndScope);
         }
         else if (e.Match(Tag.Label, out target))
         {
-            Emit(Stk.Label, target);
+            Emit(Tag.Label, target);
         }
         else if (e.Match(Tag.Goto, out target))
         {
-            Emit(Stk.Jump, target);
+            Emit(Tag.Jump, target);
         }
         else if (e.Match(Tag.GotoIf, out subexpr, out target))
         {
             CompileExpression(subexpr);
-            Emit(Stk.JumpIfTrue, target);
+            Emit(Tag.JumpIfTrue, target);
         }
         else if (e.Match(Tag.GotoIfNot, out subexpr, out target))
         {
             CompileExpression(subexpr);
-            Emit(Stk.JumpIfFalse, target);
+            Emit(Tag.JumpIfFalse, target);
         }
         else if (e.MatchTag(Tag.Asm))
         {
@@ -196,7 +196,7 @@ class Compiler
             {
                 CompileExpression(arg);
             }
-            Emit(Stk.Call, functionName);
+            Emit(Tag.Call, functionName);
         }
         else
         {

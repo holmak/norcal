@@ -281,7 +281,7 @@ partial class Parser
                     {
                         object operand = ParseAssemblyOperand();
                         Expect(TokenType.NEWLINE);
-                        args.Add(Expr.Make(Tag.Asm, mnemonic, operand, Asm.Immediate));
+                        args.Add(Expr.Make(Tag.Asm, mnemonic, operand, Tag.Immediate));
                     }
                     else if (TryParse(TokenType.LPAREN))
                     {
@@ -290,13 +290,13 @@ partial class Parser
                         Expect(TokenType.COMMA);
                         ExpectKeyword("Y");
                         Expect(TokenType.NEWLINE);
-                        args.Add(Expr.Make(Tag.Asm, mnemonic, operand, Asm.IndirectY));
+                        args.Add(Expr.Make(Tag.Asm, mnemonic, operand, Tag.IndirectY));
                     }
                     else
                     {
                         object operand = ParseAssemblyOperand();
                         Expect(TokenType.NEWLINE);
-                        args.Add(Expr.Make(Tag.Asm, mnemonic, operand, Asm.Absolute));
+                        args.Add(Expr.Make(Tag.Asm, mnemonic, operand, Tag.Absolute));
                     }
                 }
             }

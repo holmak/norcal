@@ -77,15 +77,15 @@ static class Assembler
             string label;
             int skipTarget;
 
-            if (e.MatchTag(Asm.Comment))
+            if (e.MatchTag(Tag.Comment))
             {
                 // Ignore.
             }
-            else if (e.Match(Asm.Function, out label) || e.Match(Asm.Label, out label))
+            else if (e.Match(Tag.Function, out label) || e.Match(Tag.Label, out label))
             {
                 defineLabel(label, PrgRomBase + prg.Count);
             }
-            else if (e.Match(Asm.SkipTo, out skipTarget))
+            else if (e.Match(Tag.SkipTo, out skipTarget))
             {
                 skipTarget -= PrgRomBase;
 
@@ -97,7 +97,7 @@ static class Assembler
                     prg.Add(0);
                 }
             }
-            else if (e.Match(Asm.Word, out label))
+            else if (e.Match(Tag.Word, out label))
             {
                 int address = findLabel(label, 0);
                 prg.Add(LowByte(address));
@@ -115,9 +115,9 @@ static class Assembler
                 }
                 else if (e.Match(out mnemonic, out operand, out modifier))
                 {
-                    if (modifier == Asm.Absolute) operandFormat = AsmInfo.ABS;
-                    else if (modifier == Asm.Immediate) operandFormat = AsmInfo.IMM;
-                    else if (modifier == Asm.IndirectY) operandFormat = AsmInfo.ZYI;
+                    if (modifier == Tag.Absolute) operandFormat = AsmInfo.ABS;
+                    else if (modifier == Tag.Immediate) operandFormat = AsmInfo.IMM;
+                    else if (modifier == Tag.IndirectY) operandFormat = AsmInfo.ZYI;
                     else Program.Panic("unknown assembly modifier: {0}", modifier);
                 }
                 else if (e.Match(out mnemonic, out label))
@@ -215,19 +215,4 @@ public class Instruction
     public byte Opcode;
     public int Operand;
     public int OperandFormat;
-}
-
-public static class Asm
-{
-    // Directives:
-    public static readonly string Comment = "comment";
-    public static readonly string Function = "function";
-    public static readonly string Label = "label";
-    public static readonly string SkipTo = "skip_to";
-    public static readonly string Word = "word";
-
-    // Instruction modifiers:
-    public static readonly string Absolute = "absolute";
-    public static readonly string Immediate = "immediate";
-    public static readonly string IndirectY = "indirect_y";
 }
