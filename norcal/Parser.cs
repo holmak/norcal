@@ -195,7 +195,7 @@ partial class Parser
                 else
                 {
                     // Create a fake test that is always true:
-                    expr.Add(Expr.Make(Tag.Int, 1, CType.UInt8));
+                    expr.Add(Expr.Make(Tag.Int, 1));
 
                     // Parse the body:
                     expr.Add(ParseStatementBlock());
@@ -430,7 +430,7 @@ partial class Parser
             Expr ifTrue = ParseExpr();
             Expect(TokenType.COLON);
             Expr ifFalse = ParseConditionalExpr();
-            e = Expr.Make(Tag.Switch, test, ifTrue, Expr.Make(Tag.Int, 1, CType.UInt8), ifFalse);
+            e = Expr.Make(Tag.Switch, test, ifTrue, Expr.Make(Tag.Int, 1), ifFalse);
         }
 
         return e;
@@ -446,8 +446,8 @@ partial class Parser
             {
                 Expr right = ParseLogicalAndExpr();
                 e = Expr.Make(Tag.Switch,
-                    ConvertToBool(e), Expr.Make(Tag.Int, 1, CType.UInt8),
-                    Expr.Make(Tag.Int, 1, CType.UInt8), ConvertToBool(right));
+                    ConvertToBool(e), Expr.Make(Tag.Int, 1),
+                    Expr.Make(Tag.Int, 1), ConvertToBool(right));
             }
             else
             {
@@ -466,8 +466,8 @@ partial class Parser
             {
                 Expr right = ParseBitwiseOrExpr();
                 e = Expr.Make(Tag.Switch,
-                    Expr.Make(Tag.LogicalNotGeneric, ConvertToBool(e)), Expr.Make(Tag.Int, 0, CType.UInt8),
-                    Expr.Make(Tag.Int, 1, CType.UInt8), ConvertToBool(right));
+                    Expr.Make(Tag.LogicalNotGeneric, ConvertToBool(e)), Expr.Make(Tag.Int, 0),
+                    Expr.Make(Tag.Int, 1), ConvertToBool(right));
             }
             else
             {
@@ -754,7 +754,7 @@ partial class Parser
         string name;
         if (TryParseInt(out n))
         {
-            return Expr.Make(Tag.Int, n, CType.UInt16);
+            return Expr.Make(Tag.Int, n);
         }
         else if (TryParseAnyName(out name))
         {

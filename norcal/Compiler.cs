@@ -8,84 +8,20 @@ using System.Threading.Tasks;
 
 class Compiler
 {
-    int ZeroPageNext = ZeroPageStart;
-    int RamNext = RamStart;
-    int NextLabelNumber = 0;
-    Dictionary<string, CFunctionInfo> Functions = new Dictionary<string, CFunctionInfo>();
-    Dictionary<string, CStructInfo> StructTypes = new Dictionary<string, CStructInfo>();
     List<Expr> StackCode = new List<Expr>();
+    int NextLabelNumber = 0;
+    LoopScope Loop;
 
-    static readonly int ZeroPageStart = 0x000;
-    static readonly int ZeroPageEnd = 0x100;
-    static readonly int RamStart = 0x300;
-    static readonly int RamEnd = 0x800;
-
-    public List<Expr> CompileProgram(List<Expr> program)
+    public static List<Expr> Compile(List<Expr> declarations)
     {
-        // Pass: Declare global symbols and replace symbols with addresses
-        program = ApplyFirstPass(program);
-
-        // Simplification passes:
-        program = ApplyPass("replace-fields", ReplaceFields, program);
-        program = ApplyPass("replace-address-of", ReplaceAddressOf, program);
-        program = ApplyPass("replace-generics", ReplaceGenericFunctions, program);
-
-        // Pass: Typechecking
-        foreach (FunctionDeclaration function in EnumerateFunctions(program))
-        {
-            CFunctionInfo functionInfo = GetFunctionInfo(function.Name);
-            CheckTypes(function.Body, functionInfo.ReturnType);
-        }
-
-        // Post-typechecking passes:
-        program = ApplyPass("replace-loops", x => ReplaceLoops(x, null), program);
-        program = ApplyPass("fold-constants", SimplifyConstantExpressions, program);
-        program = ApplyPass("simplify-casts", SimplifyCasts, program);
-        program = RemoveUncalledFunctionsAndDetectRecursion(program, new[] { "nmi", "reset", "brk" });
-
-        // Pass: Codegen
-        foreach (FunctionDeclaration function in EnumerateFunctions(program))
-        {
-            Emit(Stk.Function, function.Name);
-            CompileExpression(function.Body);
-
-            // Functions that return non-void should never reach this point.
-            Emit(Stk.PushImmediate, 0, CType.Void);
-            Emit(Stk.Return);
-        }
-
-        // TODO: Make sure interrupt-handling functions have the right type signature and are defined.
-
-        return StackCode;
+        Compiler compiler = new Compiler();
+        compiler.CompileDeclarations(declarations);
+        return compiler.StackCode;
     }
 
-    /// <summary>
-    /// Enumerate the function declarations from a list.
-    /// </summary>
-    IEnumerable<FunctionDeclaration> EnumerateFunctions(IEnumerable<Expr> declarations)
+    void CompileDeclarations(List<Expr> declarations)
     {
         foreach (Expr decl in declarations)
-        {
-            FunctionDeclaration function;
-            if (MatchFunctionDeclaration(decl, out function))
-            {
-                yield return function;
-            }
-        }
-    }
-
-    bool MatchFunctionDeclaration(Expr declaration, out FunctionDeclaration function)
-    {
-        function = new FunctionDeclaration();
-        return declaration.Match(Tag.Function, out function.ReturnType, out function.Name, out function.Parameters, out function.Body);
-    }
-
-    List<Expr> ApplyFirstPass(List<Expr> program)
-    {
-        LexicalScope globalScope = new LexicalScope();
-
-        List<Expr> newProgram = new List<Expr>();
-        foreach (Expr decl in program)
         {
             MemoryRegion region;
             CType returnType, type;
@@ -94,750 +30,54 @@ class Compiler
             Expr body;
             if (decl.Match(Tag.Function, out returnType, out name, out fields, out body))
             {
-                // Allocate space for each parameter and store it in the symbol table.
-                CType[] paramTypes = new CType[fields.Length];
-                int[] addresses = new int[fields.Length];
-                for (int i = 0; i < fields.Length; i++)
-                {
-                    CType fieldType = fields[i].Type;
-                    paramTypes[i] = fieldType;
-                    addresses[i] = AllocGlobal(fields[i].Region, SizeOf(fieldType));
-                }
-                DeclareFunction(name, paramTypes, returnType, addresses);
-                EmitComment("declare function " + name);
+                Emit(Stk.Function, returnType, name, fields);
+                CompileExpression(body);
 
-                // Define each of the function's parameters as a local variable:
-                LexicalScope functionScope = PushScope(globalScope);
-                for (int i = 0; i < fields.Length; i++)
-                {
-                    FieldInfo f = fields[i];
-                    DefineSymbol(functionScope, SymbolTag.Variable, f.Name, addresses[i], f.Type);
-                }
-
-                newProgram.Add(Expr.Make(
-                    Tag.Function,
-                    returnType,
-                    name,
-                    fields,
-                    ReplaceNamedVariables(body, functionScope)));
+                // Functions that return non-void should never reach this point.
+                Emit(Stk.PushImmediate, 0, CType.Void);
+                Emit(Stk.Return);
             }
             else if (decl.Match(Tag.Constant, out type, out name, out body))
             {
-                // TODO: Make sure the declared type matches the actual type.
-                CType valueType;
+                // TODO: Make sure the value fits in the specified type.
                 int value;
-                if (!body.Match(Tag.Int, out value, out valueType))
+                if (!body.Match(Tag.Int, out value))
                 {
                     Program.Error("expression must be constant");
                 }
-                DefineSymbol(globalScope, SymbolTag.Constant, name, value, type);
+
+                Emit(Stk.Constant, type, name, value);
             }
             else if (decl.Match(Tag.Variable, out region, out type, out name))
             {
-                DefineVariable(globalScope, region, type, name);
+                Emit(Stk.Variable, region, type, name);
             }
             else if (decl.Match(Tag.Struct, out name, out fields))
             {
-                CField[] structFields = new CField[fields.Length];
-                int offset = 0;
-                for (int i = 0; i < fields.Length; i++)
-                {
-                    structFields[i] = new CField
-                    {
-                        Type = fields[i].Type,
-                        Name = fields[i].Name,
-                        Offset = offset,
-                    };
-                    offset += SizeOf(fields[i].Type);
-                }
-                StructTypes.Add(name, new CStructInfo
-                {
-                    TotalSize = offset,
-                    Fields = structFields,
-                });
+                Emit(Stk.Struct, name, fields);
             }
             else
             {
                 Program.UnhandledCase();
             }
         }
-        Program.WritePassOutputToFile("replace-vars", newProgram);
-        return newProgram;
-    }
-
-    /// <summary>
-    /// This overload is for the majority of passes which don't need to know the function's return type.
-    /// </summary>
-    List<Expr> ApplyPass(string passName, Func<Expr, Expr> apply, List<Expr> program)
-    {
-        return ApplyPass(passName, (expr, returnType) => apply(expr), program);
-    }
-
-    List<Expr> ApplyPass(string passName, Func<Expr, CType, Expr> apply, List<Expr> program)
-    {
-        List<Expr> newProgram = new List<Expr>();
-        foreach (Expr decl in program)
-        {
-            CType returnType;
-            string name;
-            FieldInfo[] parameters;
-            Expr body;
-            if (decl.Match(Tag.Function, out returnType, out name, out parameters, out body))
-            {
-                newProgram.Add(Expr.Make(
-                    Tag.Function,
-                    returnType,
-                    name,
-                    parameters,
-                    apply(body, returnType)));
-            }
-            else
-            {
-                newProgram.Add(decl);
-            }
-        }
-        Program.WritePassOutputToFile(passName, newProgram);
-        return newProgram;
-    }
-
-    Expr ReplaceNamedVariables(Expr e, LexicalScope scope)
-    {
-        string name, mnemonic, mode;
-        Expr body, operand;
-        MemoryRegion region;
-        CType type;
-        int offset;
-        if (e.Match(Tag.Name, out name))
-        {
-            Symbol sym;
-            if (!FindSymbol(scope, name, out sym)) Program.Error("symbol not defined: {0}", name);
-            if (sym.Tag == SymbolTag.Constant)
-            {
-                // TODO: Make sure the constant value fits in the specified type.
-                return Expr.Make(Tag.Int, sym.Value, sym.Type);
-            }
-            else if (sym.Tag == SymbolTag.Variable)
-            {
-                Expr address = Expr.Make(Tag.Int, sym.Value, CType.MakePointer(sym.Type));
-                return Expr.Make(Tag.LoadGeneric, address);
-            }
-            Program.UnhandledCase();
-            return null;
-        }
-        else if (e.Match(Tag.Scope, out body))
-        {
-            // Remove the "scope" node, which isn't needed once all the variables have been replaced:
-            return ReplaceNamedVariables(body, PushScope(scope));
-        }
-        else if (e.Match(Tag.Local, out region, out type, out name))
-        {
-            DefineVariable(scope, region, type, name);
-            // There is no need to keep the declaration node:
-            return Expr.Make(Tag.Empty);
-        }
-        else if (e.Match(Tag.Asm, out mnemonic, out operand, out mode) && operand.Match(Tag.AsmOperand, out name, out offset))
-        {
-            Symbol sym;
-            if (!FindSymbol(scope, name, out sym)) Program.Error("symbol not defined: {0}", name);
-
-            int address;
-            if (sym.Tag == SymbolTag.Constant || sym.Tag == SymbolTag.Variable)
-            {
-                // TODO: Make sure the constant value fits in the specified type.
-                address = sym.Value;
-            }
-            else
-            {
-                Program.UnhandledCase();
-                address = 0;
-            }
-
-            return Expr.Make(Tag.Asm, mnemonic, address + offset, mode);
-        }
-        else
-        {
-            return e.Map(x => ReplaceNamedVariables(x, scope));
-        }
-    }
-
-    Expr ReplaceAddressOf(Expr e)
-    {
-        Expr lvalue;
-        if (e.Match(Tag.AddressOf, out lvalue))
-        {
-            Expr addressExpr;
-            if (lvalue.Match(Tag.LoadGeneric, out addressExpr))
-            {
-                return ReplaceAddressOf(addressExpr);
-            }
-
-            // TODO: Show the appropriate one of these two error messages:
-            Program.Error("cannot take address of this expression, or, cannot assign to constants");
-            return null;
-        }
-        else
-        {
-            return e.Map(ReplaceAddressOf);
-        }
-    }
-
-    Expr ReplaceFields(Expr e)
-    {
-        Expr left, indexExpr;
-        string fieldName;
-        if (e.Match(Tag.Field, out left, out fieldName))
-        {
-            left = ReplaceFields(left);
-
-            CType structType = TypeOf(left);
-            if (!structType.IsStruct) Program.Error("left side must have struct type");
-            CStructInfo structInfo = GetStructInfo(structType.Name);
-            CField fieldInfo = structInfo.Fields.FirstOrDefault(x => x.Name == fieldName);
-            if (fieldInfo == null) Program.Error("type does not contain a field with this name: {0}", fieldName);
-
-            return Expr.Make(
-                Tag.Cast,
-                CType.MakePointer(fieldInfo.Type),
-                Expr.Make(
-                    Tag.AddU16,
-                    Expr.Make(
-                        Tag.Cast,
-                        CType.UInt8Ptr,
-                        Expr.Make(Tag.AddressOf, left)),
-                    Expr.Make(
-                        Tag.Int,
-                        fieldInfo.Offset,
-                        CType.UInt16)));
-        }
-        else if (e.Match(Tag.Index, out left, out indexExpr))
-        {
-            left = ReplaceFields(left);
-            indexExpr = ReplaceFields(indexExpr);
-            return Expr.Make(
-                Tag.AddGeneric,
-                Expr.Make(Tag.AddressOf, left),
-                indexExpr);
-        }
-        else
-        {
-            return e.Map(ReplaceFields);
-        }
-    }
-
-    static Dictionary<string, string> UnaryOperators = new Dictionary<string, string>
-    {
-        { Tag.BoolFromGeneric, "bool" },
-        { Tag.BitwiseNotGeneric, "bitwise_not" },
-        { Tag.LogicalNotGeneric, "logical_not" },
-        { Tag.PredecrementGeneric, "predec" },
-        { Tag.PostdecrementGeneric, "postdec" },
-        { Tag.PreincrementGeneric, "preinc" },
-        { Tag.PostincrementGeneric, "postinc" },
-    };
-
-    static Dictionary<string, string> SymmetricBinaryOperators = new Dictionary<string, string>
-    {
-        { Tag.SubtractGeneric, "sub" },
-        { Tag.MultiplyGeneric, "mul" },
-        { Tag.DivideGeneric, "div" },
-        { Tag.ModulusGeneric, "mod" },
-        { Tag.EqualGeneric, "eq" },
-        { Tag.NotEqualGeneric, "ne" },
-        { Tag.LessThanGeneric, "lt" },
-        { Tag.LessThanOrEqualGeneric, "le" },
-        { Tag.GreaterThanGeneric, "gt" },
-        { Tag.GreaterThanOrEqualGeneric, "ge" },
-        { Tag.BitwiseAndGeneric, "bitwise_and" },
-        { Tag.BitwiseOrGeneric, "bitwise_or" },
-        { Tag.BitwiseXorGeneric, "bitwise_xor" },
-        { Tag.ShiftLeftGeneric, "shift_left" },
-        { Tag.ShiftRightGeneric, "shift_right" },
-    };
-
-    Expr ReplaceGenericFunctions(Expr e, CType returnType)
-    {
-        // Recursively apply this pass to all arguments:
-        e = e.Map(x => ReplaceGenericFunctions(x, returnType));
-
-        string tag, functionBaseName;
-        Expr left, right;
-        if (e.Match(Tag.Return, out left))
-        {
-            if (!TryToChangeType(ref left, returnType)) Program.Error("return expression has wrong type");
-            return Expr.Make(Tag.Return, left);
-        }
-        else if (e.Match(Tag.LoadGeneric, out left))
-        {
-            // TODO: This is just typechecking; move it there.
-            CType addressType = TypeOf(left);
-            CType resultType = Dereference(addressType, "load address must have pointer type");
-            return e;
-        }
-        else if (e.Match(Tag.StoreGeneric, out left, out right))
-        {
-            // TODO: This is just typechecking; move it there.
-            CType addressType = TypeOf(left);
-            CType expectedTypeOfValue = Dereference(addressType, "store address must have pointer type");
-            if (!TryToChangeType(ref right, expectedTypeOfValue)) Program.Error("types in assignment must match");
-            return e;
-        }
-        else if (e.Match(Tag.AddGeneric, out left, out right))
-        {
-            CType leftType = TypeOf(left);
-            CType rightType = TypeOf(right);
-
-            if (leftType.IsPointer)
-            {
-                if (!TryToChangeType(ref right, CType.UInt16)) Program.Panic("pointer offset must have integer type");
-                int elementSize = SizeOf(leftType.Subtype);
-                return Expr.Make(
-                    Tag.Cast,
-                    leftType,
-                    Expr.Make(
-                        Tag.AddU16,
-                        left,
-                        Expr.Make(
-                            Tag.MultiplyU16,
-                            right,
-                            Expr.Make(
-                                Tag.Int,
-                                elementSize,
-                                CType.UInt16))));
-            }
-            else if (rightType.IsPointer)
-            {
-                // TODO: Swap the operands and use the usual (pointer + offset) logic.
-                Program.NYI();
-                return null;
-            }
-            else
-            {
-                // The operands must have the same type, and it must be an integer type. (You can't add pointers together.)
-                if (!TryToChangeType(ref right, leftType)) Program.Error("types in binary expression must match");
-
-                string specificName = null;
-                if (leftType == CType.UInt8) specificName = Tag.AddU8;
-                else if (leftType == CType.UInt16) specificName = Tag.AddU16;
-                else Program.NYI();
-
-                return Expr.Make(specificName, left, right);
-            }
-        }
-        else if (e.Match(out tag, out left) && UnaryOperators.TryGetValue(tag, out functionBaseName))
-        {
-            CType leftType = TypeOf(left);
-            return Expr.Make(string.Format("_rt_{0}_{1}", functionBaseName, GetTypeCode(leftType)), left);
-        }
-        else if (e.Match(out tag, out left, out right) && SymmetricBinaryOperators.TryGetValue(tag, out functionBaseName))
-        {
-            CType leftType = TypeOf(left);
-            if (!TryToChangeType(ref right, leftType)) Program.Error("types in binary expression must match");
-            return Expr.Make(string.Format("_rt_{0}_{1}", functionBaseName, GetTypeCode(leftType)), left, right);
-        }
-        else
-        {
-            return e;
-        }
-    }
-
-    static string GetTypeCode(CType type)
-    {
-        if (type == CType.UInt8 || type == CType.UInt8Ptr) return "u8";
-        else if (type == CType.UInt16 || type == CType.UInt16Ptr) return "u16";
-        Program.NYI();
-        return null;
-    }
-
-    /// <summary>
-    /// It is possible to interpret some expressions, such as integer literals, as any of several types.
-    /// If possible, change the type of the given expression to the expected type.
-    /// </summary>
-    bool TryToChangeType(ref Expr e, CType expectedType)
-    {
-        int value;
-        CType type;
-        if (TypeOf(e) == expectedType)
-        {
-            return true;
-        }
-        else if (e.Match(Tag.Int, out value, out type))
-        {
-            // Make sure the actual value is small enough to fit.
-            if (expectedType == CType.UInt8 && value >= 0 && value <= byte.MaxValue)
-            {
-                e = Expr.Make(Tag.Int, value, CType.UInt8);
-                return true;
-            }
-            else if (expectedType == CType.UInt16 && value >= 0 && value <= ushort.MaxValue)
-            {
-                e = Expr.Make(Tag.Int, value, CType.UInt16);
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    void CheckTypes(Expr e, CType returnType)
-    {
-        string name;
-        int value;
-        CType type;
-        Expr[] args;
-        Expr arg;
-
-        // Typecheck each subexpression:
-        if (e.MatchAny(out name, out args))
-        {
-            foreach (Expr sub in args.OfType<Expr>())
-            {
-                CheckTypes(sub, returnType);
-            }
-        }
-
-        if (e.Match(Tag.Int, out value, out type))
-        {
-            // This should have had a specific type assigned to it by now:
-            if (type == CType.Implied) Program.Panic("integer literal has not been given a type");
-        }
-        else if (e.MatchAny(Tag.Switch, out args))
-        {
-            // Each condition must have type "uint8_t":
-            for (int i = 0; i < args.Length; i += 2)
-            {
-                if (TypeOf(args[i]) != CType.UInt8) Program.Panic("switch test has wrong type");
-            }
-
-            // Each then-clause must have the same type:
-            CType bodyType = TypeOf(args[1]);
-            for (int i = 3; i < args.Length; i += 2)
-            {
-                if (TypeOf(args[i]) != bodyType) Program.Error("conditional expression types do not match");
-            }
-        }
-        else if (e.Match(Tag.For))
-        {
-            // TODO: Are there any special rules?
-        }
-        else if (e.Match(Tag.Return, out arg))
-        {
-            CType actual = TypeOf(arg);
-            if (actual != returnType) Program.Error("return expression has wrong type");
-        }
-        else if (e.Match(Tag.Cast, out type, out arg))
-        {
-            // TODO: Make sure that the cast is allowed.
-        }
-        else if (e.MatchTag(Tag.Label))
-        {
-            // NOP
-        }
-        else if (e.MatchTag(Tag.Asm))
-        {
-            // Ignore inline assembly.
-        }
-        else if (e.MatchAny(out name, out args))
-        {
-            // Don't try to typecheck special AST nodes, which start with "$".
-            if (!name.StartsWith("$"))
-            {
-                CFunctionInfo functionInfo = GetFunctionInfo(name);
-                if (functionInfo.ParameterTypes.Length != args.Length) Program.Error("wrong number of arguments to function: {0}", name);
-                // Check that each of the actual and expected parameter types match:
-                for (int i = 0; i < args.Length; i++)
-                {
-                    CType argType = TypeOf(args[i]);
-                    if (argType != functionInfo.ParameterTypes[i]) Program.Error("argument to function has wrong type");
-                }
-            }
-        }
-        else
-        {
-            Program.Panic("type checker: unhandled case");
-        }
-    }
-
-    List<Expr> RemoveUncalledFunctionsAndDetectRecursion(List<Expr> program, string[] functionsToNeverRemove)
-    {
-        List<Expr> newProgram = new List<Expr>(program);
-
-        // Figure out which functions each function could call:
-        Dictionary<string, HashSet<string>> callGraph = new Dictionary<string, HashSet<string>>();
-        foreach (FunctionDeclaration function in EnumerateFunctions(program))
-        {
-            HashSet<string> calledFunctions = new HashSet<string>();
-            callGraph[function.Name] = calledFunctions;
-
-            Action<Expr> findCalls = null;
-            findCalls = (expr) =>
-            {
-                string tag = expr.GetArgs().First() as string;
-                if (tag != null && !tag.StartsWith("$"))
-                {
-                    calledFunctions.Add(tag);
-                }
-
-                foreach (object arg in expr.GetArgs())
-                {
-                    Expr child = arg as Expr;
-                    if (child != null)
-                    {
-                        findCalls(child);
-                    }
-                }
-            };
-
-            findCalls(function.Body);
-        }
-
-        // Repeatedly remove uncalled functions from the program (but not interrupt vectors):
-        {
-            KeepSearching:
-            foreach (string func in callGraph.Keys)
-            {
-                if (functionsToNeverRemove.Contains(func))
-                {
-                    continue;
-                }
-
-                if (!callGraph.Values.Any(x => x.Contains(func)))
-                {
-                    callGraph.Remove(func);
-                    newProgram.RemoveAll(decl =>
-                    {
-                        FunctionDeclaration function;
-                        return MatchFunctionDeclaration(decl, out function) && function.Name == func;
-                    });
-                    goto KeepSearching;
-                }
-            }
-        }
-
-        // Find all of the remaining functions that have no incoming calls:
-        Queue<string> rootFunctions = new Queue<string>();
-        foreach (string func in functionsToNeverRemove)
-        {
-            if (callGraph.ContainsKey(func))
-            {
-                rootFunctions.Enqueue(func);
-            }
-        }
-
-        // Perform a topological sort, discarding the actual sorted list:
-        while (rootFunctions.Count > 0)
-        {
-            string func = rootFunctions.Dequeue();
-            HashSet<string> callees = callGraph[func];
-            callGraph.Remove(func);
-
-            foreach (string otherFunc in callees)
-            {
-                if (!callGraph.Values.Any(x => x.Contains(otherFunc)))
-                {
-                    rootFunctions.Enqueue(otherFunc);
-                }
-            }
-        }
-
-        // If any functions remain in the call graph it means a cycle exists:
-        if (callGraph.Count > 0)
-        {
-            // Repeatedly remove leaf node functions in an attempt to clean up the error message:
-            KeepSearching:
-            foreach (var funcAndCallees in callGraph)
-            {
-                if (funcAndCallees.Value.Count == 0)
-                {
-                    foreach (var callees in callGraph.Values)
-                    {
-                        callees.Remove(funcAndCallees.Key);
-                    }
-
-                    callGraph.Remove(funcAndCallees.Key);
-                    goto KeepSearching;
-                }
-            }
-
-            Program.Error("functions called recursively: {0}", string.Join(", ", callGraph.Keys));
-        }
-
-        Program.WritePassOutputToFile("remove-uncalled-functions", newProgram);
-        return newProgram;
-    }
-
-    Expr ReplaceLoops(Expr e, LoopScope loop)
-    {
-        Expr init, test, induction, body;
-        if (e.Match(Tag.Continue))
-        {
-            return Expr.Make(Tag.Goto, loop.ContinueLabel);
-        }
-        else if (e.Match(Tag.Break))
-        {
-            return Expr.Make(Tag.Goto, loop.BreakLabel);
-        }
-        else if (e.Match(Tag.For, out init, out test, out induction, out body))
-        {
-            loop = new LoopScope
-            {
-                Outer = loop,
-                ContinueLabel = MakeUniqueLabel("for_top_"),
-                BreakLabel = MakeUniqueLabel("for_bottom_"),
-            };
-
-            return Expr.Make(Tag.Sequence,
-                init,
-                Expr.Make(Tag.Label, loop.ContinueLabel),
-                Expr.Make(Tag.GotoIfNot, test, loop.BreakLabel),
-                ReplaceLoops(body, loop),
-                induction,
-                Expr.Make(Tag.Goto, loop.ContinueLabel),
-                Expr.Make(Tag.Label, loop.BreakLabel));
-        }
-        else
-        {
-            // Recursively apply this pass to all arguments:
-            return e.Map(x => ReplaceLoops(x, loop));
-        }
-    }
-
-    Expr SimplifyConstantExpressions(Expr e)
-    {
-        // Recursively apply this pass to all arguments:
-        e = e.Map(SimplifyConstantExpressions);
-
-        Expr left, right;
-        CType type;
-        int a, b;
-
-        if (e.Match(Tag.AddU16, out left, out right) &&
-            left.Match(Tag.Int, out a, out type) &&
-            right.Match(Tag.Int, out b, out type))
-        {
-            return Expr.Make(Tag.Int, (a + b) % (1 << 16), CType.UInt16);
-        }
-        else if (e.Match(Tag.MultiplyU16, out left, out right) &&
-            left.Match(Tag.Int, out a, out type) &&
-            right.Match(Tag.Int, out b, out type))
-        {
-            return Expr.Make(Tag.Int, (a * b) % (1 << 16), CType.UInt16);
-        }
-        else
-        {
-            return e;
-        }
-    }
-
-    // Simplify the AST by combining casts that are applied to simple integer constants.
-    Expr SimplifyCasts(Expr e)
-    {
-        // Recursively apply this pass to all arguments:
-        e = e.Map(SimplifyCasts);
-
-        Expr subexpr;
-        CType imposedType, ignoredType;
-        int value;
-
-        if (e.Match(Tag.Cast, out imposedType, out subexpr) &&
-            subexpr.Match(Tag.Int, out value, out ignoredType))
-        {
-            return Expr.Make(Tag.Int, value, imposedType);
-        }
-        else
-        {
-            return e;
-        }
-    }
-
-    CType TypeOf(Expr e)
-    {
-        // In most contexts, a pointer to an array "decays" into a pointer to the first element of the array.
-        CType type = TypeOfWithoutDecay(e);
-        CType decayedType;
-        if (type.IsPointer && type.Subtype.IsArray)
-        {
-            decayedType = CType.MakePointer(type.Subtype.Subtype);
-        }
-        else
-        {
-            decayedType = type;
-        }
-        return decayedType;
-    }
-
-    CType TypeOfWithoutDecay(Expr e)
-    {
-        int value;
-        string name;
-        CType type;
-        Expr body, subexpr;
-        Expr[] args;
-        if (e.Match(Tag.Empty))
-        {
-            return CType.Void;
-        }
-        else if (e.Match(Tag.Int, out value, out type))
-        {
-            return type;
-        }
-        else if (e.Match(Tag.Scope, out body))
-        {
-            return TypeOf(body);
-        }
-        else if (e.MatchAny(Tag.Sequence, out args))
-        {
-            if (args.Length > 0) return TypeOf(args.Last());
-            else return CType.Void;
-        }
-        else if (e.Match(Tag.AddressOf, out subexpr))
-        {
-            return CType.MakePointer(TypeOf(subexpr));
-        }
-        else if (e.MatchAny(Tag.Switch, out args))
-        {
-            return TypeOf(args[1]);
-        }
-        else if (e.MatchTag(Tag.For) || e.MatchTag(Tag.Return))
-        {
-            return CType.Void;
-        }
-        else if (e.Match(Tag.Cast, out type, out subexpr))
-        {
-            return type;
-        }
-        else if (e.Match(Tag.LoadGeneric, out subexpr))
-        {
-            CType innerType = TypeOf(subexpr);
-            return Dereference(innerType, "an expression with pointer type is required");
-        }
-        else if (e.MatchAny(out name, out args))
-        {
-            return GetFunctionInfo(name).ReturnType;
-        }
-        else
-        {
-            Program.Panic("type of: unhandled case");
-            return null;
-        }
-    }
-
-    CStructInfo GetStructInfo(string name)
-    {
-        CStructInfo info;
-        if (!StructTypes.TryGetValue(name, out info)) Program.Error("struct not defined: {0}", name);
-        return info;
     }
 
     void CompileExpression(Expr e)
     {
         int value;
-        string functionName, target;
+        string name, functionName, target, fieldName;
+        MemoryRegion region;
         CType type;
         Expr[] args;
-        Expr subexpr;
-        if (e.Match(Tag.Int, out value, out type))
+        Expr subexpr, init, test, induction, body, left, indexExpr;
+        if (e.Match(Tag.Int, out value))
         {
-            Emit(Stk.PushImmediate, value, type);
+            Emit(Stk.PushImmediate, value);
+        }
+        else if (e.Match(Tag.Name, out name))
+        {
+            Emit(Stk.PushVariable, name);
         }
         else if (e.Match(Tag.Empty))
         {
@@ -852,11 +92,12 @@ class Compiler
         }
         else if (e.MatchAny(Tag.Switch, out args))
         {
-            string end = MakeUniqueLabel();
+            string end = MakeUniqueLabel("end_if");
 
             for (int i = 0; i < args.Length; i += 2)
             {
-                string nextClause = MakeUniqueLabel();
+                string nextClause = MakeUniqueLabel("else");
+
                 // If this clause's condition is false, try the next clause:
                 CompileExpression(args[i]);
                 Emit(Stk.JumpIfFalse, nextClause);
@@ -864,21 +105,67 @@ class Compiler
                 CompileExpression(args[i + 1]);
                 // After executing the body of a clause, skip the rest of the clauses:
                 Emit(Stk.Jump, end);
-                EmitComment("end of switch clause");
                 Emit(Stk.Label, nextClause);
             }
 
-            EmitComment("end of switch");
             Emit(Stk.Label, end);
+        }
+        else if (e.Match(Tag.Continue))
+        {
+            Emit(Stk.Jump, Loop.ContinueLabel);
+        }
+        else if (e.Match(Tag.Break))
+        {
+            Emit(Stk.Jump, Loop.BreakLabel);
+        }
+        else if (e.Match(Tag.For, out init, out test, out induction, out body))
+        {
+            Loop = new LoopScope
+            {
+                Outer = Loop,
+                ContinueLabel = MakeUniqueLabel("for_top"),
+                BreakLabel = MakeUniqueLabel("for_bottom"),
+            };
+
+            CompileExpression(init);
+            Emit(Stk.Label, Loop.ContinueLabel);
+            CompileExpression(test);
+            Emit(Stk.JumpIfFalse, Loop.BreakLabel);
+            CompileExpression(body);
+            CompileExpression(induction);
+            Emit(Stk.Jump, Loop.ContinueLabel);
+            Emit(Stk.Label, Loop.BreakLabel);
         }
         else if (e.Match(Tag.Return, out subexpr))
         {
             CompileExpression(subexpr);
             Emit(Stk.Return);
         }
+        else if (e.Match(Tag.Field, out left, out fieldName))
+        {
+            CompileExpression(left);
+            Emit(Stk.PushFieldName, fieldName);
+            Emit(Stk.Field);
+        }
+        else if (e.Match(Tag.Index, out left, out indexExpr))
+        {
+            CompileExpression(left);
+            CompileExpression(indexExpr);
+            Emit(Stk.Index);
+        }
         else if (e.Match(Tag.Cast, out type, out subexpr))
         {
             CompileExpression(subexpr);
+        }
+        else if (e.Match(Tag.Local, out region, out type, out name))
+        {
+            Emit(Stk.Variable, region, type, name);
+        }
+        else if (e.Match(Tag.Scope, out subexpr))
+        {
+            Emit(Stk.BeginScope);
+            CompileExpression(subexpr);
+            Emit(Stk.EndScope);
         }
         else if (e.Match(Tag.Label, out target))
         {
@@ -917,161 +204,15 @@ class Compiler
         }
     }
 
-    CType Dereference(CType pointerType, string error)
-    {
-        if (!pointerType.IsPointer) Program.Panic(error);
-        return pointerType.Subtype;
-    }
-
-    void DefineVariable(LexicalScope scope, MemoryRegion region, CType type, string name)
-    {
-        int address = AllocGlobal(region, SizeOf(type));
-        DefineSymbol(scope, SymbolTag.Variable, name, address, type);
-    }
-
-    string MakeUniqueLabel() => MakeUniqueLabel("L");
-
     string MakeUniqueLabel(string prefix)
     {
-        return string.Format("@{0}{1}", prefix, NextLabelNumber++);
-    }
-
-    static int LowByte(int n)
-    {
-        return n & 0xFF;
-    }
-
-    static int HighByte(int n)
-    {
-        return (n >> 8) & 0xFF;
-    }
-
-    int SizeOf(CType type)
-    {
-        if (type.IsSimple)
-        {
-            if (type.SimpleType == CSimpleType.UInt8) return 1;
-            else if (type.SimpleType == CSimpleType.UInt16) return 2;
-        }
-        else if (type.IsPointer)
-        {
-            return 2;
-        }
-        else if (type.IsStruct)
-        {
-            CStructInfo info = GetStructInfo(type.Name);
-            return info.TotalSize;
-        }
-        else if (type.IsArray)
-        {
-            return type.Dimension * SizeOf(type.Subtype);
-        }
-
-        Program.NYI();
-        return 1;
-    }
-
-    void DeclareFunction(string name, CType[] paramTypes, CType returnType, int[] paramAddresses)
-    {
-        // TODO: It should be allowed to declare a function multiple times as long as the types match.
-        if (Functions.ContainsKey(name))
-        {
-            Program.Error("function already declared: " + name);
-        }
-
-        Functions[name] = new CFunctionInfo
-        {
-            ParameterTypes = paramTypes,
-            ReturnType = returnType,
-            ParameterAddresses = paramAddresses,
-        };
-    }
-
-    CFunctionInfo GetFunctionInfo(string name)
-    {
-        CFunctionInfo info;
-        if (Functions.TryGetValue(name, out info)) return info;
-        Program.Error("function not declared: {0}", name);
-        return null;
-    }
-
-    void DefineSymbol(LexicalScope scope, SymbolTag tag, string name, int value, CType type)
-    {
-        // It is an error to define two things with the same name in the same scope.
-        if (scope.Symbols.Any(x => x.Name == name))
-        {
-            Program.Error("symbols cannot be redefined: {0}", name);
-        }
-
-        scope.Symbols.Add(new Symbol
-        {
-            Tag = tag,
-            Name = name,
-            Value = value,
-            Type = type,
-        });
-    }
-
-    bool FindSymbol(LexicalScope scope, string name, out Symbol found)
-    {
-        // Inspect all scopes, starting from the innermost.
-        for (; scope != null; scope = scope.Outer)
-        {
-            foreach (Symbol sym in scope.Symbols)
-            {
-                if (sym.Name == name)
-                {
-                    found = sym;
-                    return true;
-                }
-            }
-        }
-
-        found = null;
-        return false;
-    }
-
-    // Allocate 'size' bytes in RAM and return the address.
-    int AllocGlobal(MemoryRegion region, int size)
-    {
-        int address;
-        if (region == MemoryRegion.ZeroPage)
-        {
-            if (ZeroPageNext + size > ZeroPageEnd) Program.Error("Not enough zero page RAM to allocate global.");
-            address = ZeroPageNext;
-            ZeroPageNext += size;
-        }
-        else if (region == MemoryRegion.Ram)
-        {
-            if (RamNext + size > RamEnd) Program.Error("Not enough RAM to allocate global.");
-            address = RamNext;
-            RamNext += size;
-        }
-        else
-        {
-            Program.NYI();
-            address = -1;
-        }
-
-        return address;
-    }
-
-    static LexicalScope PushScope(LexicalScope scope)
-    {
-        LexicalScope inner = new LexicalScope();
-        inner.Outer = scope;
-        return inner;
+        return string.Format("@{0}_{1}", prefix, NextLabelNumber++);
     }
 
     void Emit(params object[] args)
     {
         Expr e = Expr.Make(args);
         StackCode.Add(e);
-    }
-
-    void EmitComment(string message)
-    {
-        Emit(Stk.Comment, message);
     }
 }
 
@@ -1080,8 +221,8 @@ class Symbol
 {
     public SymbolTag Tag;
     public string Name;
-    public int Value;
     public CType Type;
+    public int Value;
 }
 
 enum SymbolTag
@@ -1103,16 +244,13 @@ class CField
     public int Offset;
 }
 
+[DebuggerDisplay("{Show(),nq}")]
 partial class CFunctionInfo
 {
     public CType[] ParameterTypes;
     public CType ReturnType;
     public int[] ParameterAddresses;
-}
 
-[DebuggerDisplay("{Show(),nq}")]
-partial class CFunctionInfo
-{
     public override bool Equals(object obj)
     {
         throw new NotSupportedException();
@@ -1134,6 +272,13 @@ class LexicalScope
 {
     public LexicalScope Outer;
     public List<Symbol> Symbols = new List<Symbol>();
+
+    public LexicalScope Push()
+    {
+        LexicalScope inner = new LexicalScope();
+        inner.Outer = this;
+        return inner;
+    }
 }
 
 class LoopScope
@@ -1147,12 +292,4 @@ enum MemoryRegion
 {
     ZeroPage,
     Ram,
-}
-
-class FunctionDeclaration
-{
-    public CType ReturnType;
-    public string Name;
-    public FieldInfo[] Parameters;
-    public Expr Body;
 }

@@ -70,12 +70,11 @@ static class Program
         }
         WritePassOutputToFile("parse", program);
 
-        Compiler compiler = new Compiler();
-        List<Expr> stackCode = compiler.CompileProgram(program);
+        List<Expr> stackCode = Compiler.Compile(program);
         if (EnableDebugOutput) ShowStackCode(stackCode);
         List<Expr> assembly = StackAssembler.Convert(stackCode);
         if (EnableDebugOutput) ShowAssembly(assembly);
-        Assembler.Assemble(stackCode, outputFilename);
+        Assembler.Assemble(assembly, outputFilename);
 
         if (EnableDebugOutput)
         {
@@ -264,9 +263,27 @@ static class Tag
     public static readonly string ShiftLeftGeneric = "$shift_left";
     public static readonly string ShiftRightGeneric = "$shift_right";
     public static readonly string LogicalNotGeneric = "$logical_not";
+}
 
-    // Runtime functions:
-    public static readonly string AddU8 = "_rt_add_u8";
-    public static readonly string AddU16 = "_rt_add_u16";
-    public static readonly string MultiplyU16 = "_rt_mul_u16";
+static class Stk
+{
+    public static readonly string Function = "vsm/function";
+    public static readonly string Struct = "vsm/struct";
+    public static readonly string Constant = "vsm/constant";
+    public static readonly string Variable = "vsm/variable";
+    public static readonly string Label = "vsm/label";
+    public static readonly string BeginScope = "vsm/begin_scope";
+    public static readonly string EndScope = "vsm/end_scope";
+
+    public static readonly string PushImmediate = "vsm/push";
+    public static readonly string PushVariable = "vsm/pushv";
+    public static readonly string PushAddressOfVariable = "vsm/pushav";
+    public static readonly string PushFieldName = "vsm/pushfn";
+    public static readonly string Jump = "vsm/j";
+    public static readonly string JumpIfTrue = "vsm/jt";
+    public static readonly string JumpIfFalse = "vsm/jf";
+    public static readonly string Call = "vsm/call";
+    public static readonly string Return = "vsm/ret";
+    public static readonly string Field = "vsm/field";
+    public static readonly string Index = "vsm/index";
 }
