@@ -179,15 +179,4 @@ public static class AsmInfo
         "BVC",
         "BVS",
     };
-
-    public static readonly string[] LongJumpInstructions = new string[]
-    {
-        "JMP",
-        "JSR",
-    };
-
-    public static bool IsJumpInstruction(string mnemonic)
-    {
-        return ShortJumpInstructions.Contains(mnemonic) || LongJumpInstructions.Contains(mnemonic);
-    }
 }

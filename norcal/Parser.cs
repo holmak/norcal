@@ -255,48 +255,42 @@ partial class Parser
             args.Add(Tag.Sequence);
             while (!TryParse(TokenType.RBRACE))
             {
-                string mnemonic;
                 if (TryParse(TokenType.NEWLINE))
                 {
                     // Ignore blank lines.
                 }
                 else
                 {
-                    mnemonic = ExpectAnyName();
-                    if (AsmInfo.IsJumpInstruction(mnemonic))
+                    string symbol = ExpectAnyName();
+                    if (TryParse(TokenType.NEWLINE))
                     {
-                        string target = ExpectAnyName();
-                        args.Add(Expr.Make(Tag.Asm, mnemonic, MakeScopedLabel(target)));
-                    }
-                    else if (TryParse(TokenType.NEWLINE))
-                    {
-                        args.Add(Expr.Make(Tag.Asm, mnemonic));
+                        args.Add(Expr.Make(Tag.Asm, symbol));
                     }
                     else if (TryParse(TokenType.COLON))
                     {
                         Expect(TokenType.NEWLINE);
-                        args.Add(Expr.Make(Tag.Label, MakeScopedLabel(mnemonic)));
+                        args.Add(Expr.Make(Tag.Label, symbol));
                     }
                     else if (TryParse(TokenType.NUMBER_SIGN))
                     {
-                        object operand = ParseAssemblyOperand();
+                        Expr operand = ParseAssemblyOperand();
                         Expect(TokenType.NEWLINE);
-                        args.Add(Expr.Make(Tag.Asm, mnemonic, operand, Tag.Immediate));
+                        args.Add(Expr.Make(Tag.Asm, symbol, operand, Tag.Immediate));
                     }
                     else if (TryParse(TokenType.LPAREN))
                     {
-                        object operand = ParseAssemblyOperand();
+                        Expr operand = ParseAssemblyOperand();
                         Expect(TokenType.RPAREN);
                         Expect(TokenType.COMMA);
                         ExpectKeyword("Y");
                         Expect(TokenType.NEWLINE);
-                        args.Add(Expr.Make(Tag.Asm, mnemonic, operand, Tag.IndirectY));
+                        args.Add(Expr.Make(Tag.Asm, symbol, operand, Tag.IndirectY));
                     }
                     else
                     {
-                        object operand = ParseAssemblyOperand();
+                        Expr operand = ParseAssemblyOperand();
                         Expect(TokenType.NEWLINE);
-                        args.Add(Expr.Make(Tag.Asm, mnemonic, operand, Tag.Absolute));
+                        args.Add(Expr.Make(Tag.Asm, symbol, operand, Tag.Absolute));
                     }
                 }
             }
@@ -338,19 +332,13 @@ partial class Parser
         return stmt;
     }
 
-    string MakeScopedLabel(string unqualifiedName)
+    Expr ParseAssemblyOperand()
     {
-        return CurrentFunctionName + "." + unqualifiedName;
-    }
-
-    object ParseAssemblyOperand()
-    {
-        // Possible formats: "number", "name+number"
-        int number;
         string name;
+        int number;
         if (TryParseInt(out number))
         {
-            return number;
+            return Expr.Make(Tag.AsmOperand, number);
         }
         else if (TryParseAnyName(out name))
         {

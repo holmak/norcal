@@ -61,54 +61,6 @@ class Expr
         return false;
     }
 
-    public bool Match<T0>(out T0 var0)
-    {
-        if (Args.Length == 1 &&
-            Args[0] is T0)
-        {
-            var0 = (T0)Args[0];
-            return true;
-        }
-
-        var0 = default(T0);
-        return false;
-    }
-
-    public bool Match<T0, T1>(out T0 var0, out T1 var1)
-    {
-        if (Args.Length == 2 &&
-            Args[0] is T0 &&
-            Args[1] is T1)
-        {
-            var0 = (T0)Args[0];
-            var1 = (T1)Args[1];
-            return true;
-        }
-
-        var0 = default(T0);
-        var1 = default(T1);
-        return false;
-    }
-
-    public bool Match<T0, T1, T2>(out T0 var0, out T1 var1, out T2 var2)
-    {
-        if (Args.Length == 3 &&
-            Args[0] is T0 &&
-            Args[1] is T1 &&
-            Args[2] is T2)
-        {
-            var0 = (T0)Args[0];
-            var1 = (T1)Args[1];
-            var2 = (T2)Args[2];
-            return true;
-        }
-
-        var0 = default(T0);
-        var1 = default(T1);
-        var2 = default(T2);
-        return false;
-    }
-
     public bool Match<T1>(string tag, out T1 var1)
     {
         if (Args.Length == 2 &&

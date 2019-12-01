@@ -5,8 +5,18 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-static class Assembler
+class Assembler
 {
+    LabelScope Labels = new LabelScope();
+    List<Fixup> Fixups = new List<Fixup>();
+    int ZeroPageNext = ZeroPageStart;
+    int RamNext = RamStart;
+
+    static readonly int ZeroPageStart = 0x000;
+    static readonly int ZeroPageEnd = 0x100;
+    static readonly int RamStart = 0x300;
+    static readonly int RamEnd = 0x800;
+
     // PRG must be exactly 32k, and CHR must be exactly 8k.
     static readonly int ChrRomSize = 0x2000;
     static readonly int PrgRomBase = 0x8000;
@@ -25,54 +35,17 @@ static class Assembler
 
     public static void Assemble(List<Expr> assembly, string outputFilename)
     {
+        Assembler assembler = new Assembler();
+        assembler.Run(assembly, outputFilename);
+    }
+
+    void Run(List<Expr> assembly, string outputFilename)
+    {
         // TODO: Use a specified CHR ROM input file.
         byte[] chr = new byte[ChrRomSize];
 
-        // First pass: Calculate label values.
-        Dictionary<string, int> labels = new Dictionary<string, int>();
-        RunPass(
-            assembly,
-            (label, address) =>
-            {
-                // TODO: Make sure the address is in the allowed range.
-                labels[label] = address;
-            },
-            (label, baseAddress) => 0);
-
-        // Second pass: Generate machine code.
-        List<byte> prg = RunPass(
-            assembly,
-            (label, address) => { /* ignored */ },
-            (label, baseAddress) =>
-            {
-                int address;
-                if (labels.TryGetValue(label, out address)) return address - baseAddress;
-                Program.Panic("assembler: label not defined: {0}", label);
-                return 0;
-            });
-
-        // TODO: Make sure that the PRG ROM size limit isn't exceeded. It must not overwrite the vector table.
-        if (prg.Count != PrgRomSize) Program.Error("assembler: program has wrong length");
-
-        using (BinaryWriter w = new BinaryWriter(new FileStream(outputFilename, FileMode.Create)))
-        {
-            w.Write(Header);
-            w.Write(prg.ToArray());
-            w.Write(chr);
-        }
-    }
-
-    enum LabelType
-    {
-        Relative,
-        Absolute,
-    }
-
-    static List<byte> RunPass(List<Expr> input, Action<string, int> defineLabel, Func<string, int, int> findLabel)
-    {
         List<byte> prg = new List<byte>();
-
-        foreach (Expr e in input)
+        foreach (Expr e in assembly)
         {
             string label;
             int skipTarget;
@@ -83,7 +56,21 @@ static class Assembler
             }
             else if (e.Match(Tag.Function, out label) || e.Match(Tag.Label, out label))
             {
-                defineLabel(label, PrgRomBase + prg.Count);
+                DefineLabel(label, PrgRomBase + prg.Count);
+            }
+            else if (e.Match(Tag.BeginScope))
+            {
+                Labels = new LabelScope
+                {
+                    Outer = Labels,
+                };
+            }
+            else if (e.Match(Tag.EndScope))
+            {
+                Labels = Labels.Outer;
+
+                // TODO: If we reach the global scope and there are any unresolved fixups, it is an error.
+                //Program.Panic("assembler: label not defined: {0}", label);
             }
             else if (e.Match(Tag.SkipTo, out skipTarget))
             {
@@ -99,85 +86,144 @@ static class Assembler
             }
             else if (e.Match(Tag.Word, out label))
             {
-                int address = findLabel(label, 0);
+                int address;
+                if (!TryFindLabel(label, out address))
+                {
+                    // TODO: Figure out what to do if an entrypoint is not defined.
+                    Program.Warning("assembler: label not defined: {0}", label);
+                    address = PrgRomBase;
+                }
                 prg.Add(LowByte(address));
                 prg.Add(HighByte(address));
             }
             else
             {
-                string mnemonic = "???";
-                int operand = 0;
-                string modifier;
-                int operandFormat = AsmInfo.INV;
-                if (e.Match(out mnemonic))
+                MemoryRegion region;
+                int size, number, operandFormat = AsmInfo.INV, operandOffset = 0;
+                string name, mnemonic = "???", mode;
+                Maybe<string> operandBase = Maybe.Nothing;
+                bool isInstruction = false;
+                Expr compoundOperand;
+
+                if (e.Match(Tag.Constant, out name, out number))
                 {
+                    DefineLabel(name, number);
+                }
+                else if (e.Match(Tag.Variable, out region, out size, out name))
+                {
+                    AllocateGlobal(region, size);
+                }
+                else if (e.Match(Tag.Asm, out mnemonic))
+                {
+                    isInstruction = true;
                     operandFormat = AsmInfo.IMP;
                 }
-                else if (e.Match(out mnemonic, out operand, out modifier))
+                else if (e.Match(Tag.Asm, out mnemonic, out compoundOperand, out mode))
                 {
-                    if (modifier == Tag.Absolute) operandFormat = AsmInfo.ABS;
-                    else if (modifier == Tag.Immediate) operandFormat = AsmInfo.IMM;
-                    else if (modifier == Tag.IndirectY) operandFormat = AsmInfo.ZYI;
-                    else Program.Panic("unknown assembly modifier: {0}", modifier);
-                }
-                else if (e.Match(out mnemonic, out label))
-                {
-                    int baseAddress;
+                    isInstruction = true;
+                    operandFormat = ParseAddressMode(mode);
+                    int baseAddress = 0;
+
                     if (AsmInfo.ShortJumpInstructions.Contains(mnemonic))
                     {
                         operandFormat = AsmInfo.REL;
-                        // Relative jumps are always relative to the address of the *following* instruction:
+                        // Relative jumps are relative to the address of the subsequent instruction:
                         baseAddress = PrgRomBase + prg.Count + 2;
                     }
-                    else if (AsmInfo.LongJumpInstructions.Contains(mnemonic))
+
+                    if (compoundOperand.Match(Tag.AsmOperand, out operandOffset))
                     {
-                        operandFormat = AsmInfo.ABS;
-                        baseAddress = 0;
+                        operandBase = Maybe.Nothing;
+                    }
+                    else if (compoundOperand.Match(Tag.AsmOperand, out label, out operandOffset))
+                    {
+                        operandBase = label;
                     }
                     else
                     {
-                        operandFormat = AsmInfo.INV;
-                        baseAddress = 0;
+                        Program.Panic("invalid assembly operand format");
                     }
-                    operand = findLabel(label, baseAddress);
                 }
                 else
                 {
                     Program.Panic("invalid instruction format: {0}", e.Show());
                 }
 
-                int formalSize = AsmInfo.OperandSizes[operandFormat];
-
-                int actualSize;
-                if (operandFormat == AsmInfo.IMP) actualSize = 0;
-                else if (operand >= sbyte.MinValue && operand <= byte.MaxValue) actualSize = 1;
-                else if (operand >= short.MinValue && operand <= ushort.MaxValue) actualSize = 2;
-                else actualSize = 99;
-
-                if (actualSize > formalSize)
+                if (isInstruction)
                 {
-                    Program.Panic("assembly operand is too large: {0}", e.Show());
-                }
+                    int formalSize = AsmInfo.OperandSizes[operandFormat];
 
-                // Search for a matching instruction:
-                List<byte> candidates = new List<byte>();
-                for (int opcode = 0; opcode < 256; opcode++)
-                {
-                    if (mnemonic == AsmInfo.Mnemonics[opcode] &&
-                        operandFormat == AsmInfo.OperandFormats[opcode])
+                    // Search for a matching instruction:
+                    List<byte> candidates = new List<byte>();
+                    for (int opcode = 0; opcode < 256; opcode++)
                     {
-                        candidates.Add((byte)opcode);
-                    }
-                }
-
-                if (candidates.Count == 1)
-                {
-                    if (AsmInfo.ShortJumpInstructions.Contains(mnemonic) && (operand < sbyte.MinValue || operand > sbyte.MaxValue))
-                    {
-                        Program.Panic("relative branch offset is too large");
+                        if (mnemonic == AsmInfo.Mnemonics[opcode] &&
+                            operandFormat == AsmInfo.OperandFormats[opcode])
+                        {
+                            candidates.Add((byte)opcode);
+                        }
                     }
 
-                    prg.Add(candidates[0]);
+                    if (candidates.Count == 1)
+                    {
+                        prg.Add(candidates[0]);
+                    }
+                    else if (candidates.Count == 0)
+                    {
+                        Program.Panic("invalid combination of instruction and mode: {0}", e.Show());
+                    }
+                    else
+                    {
+                        Program.Panic("ambiguous instruction and mode: {0}", e.Show());
+                    }
+
+                    int operand = 0;
+                    bool checkOperandRange = true;
+                    if (!operandBase.HasValue)
+                    {
+                        operand = operandOffset;
+                    }
+                    else if (TryFindLabel(operandBase.Value, out operand))
+                    {
+                        operand += operandOffset;
+                    }
+                    else
+                    {
+                        checkOperandRange = false;
+                        Fixups.Add(new Fixup
+                        {
+                            Name = operandBase.Value,
+                            Location = prg.Count,
+                            Type = (operandFormat == AsmInfo.REL) ? FixupType.Relative : FixupType.Absolute,
+                        });
+                    }
+
+                    // Relative jumps are calculated relative to the address of the subsequent instruction.
+                    if (operandFormat == AsmInfo.REL)
+                    {
+                        operand -= (PrgRomBase + prg.Count + 1);
+                    }
+
+                    if (checkOperandRange)
+                    {
+                        if (operandFormat == AsmInfo.REL && (operand < sbyte.MinValue || operand > sbyte.MaxValue))
+                        {
+                            Program.Panic("relative branch offset is too large: {0}", e.Show());
+                        }
+                        else
+                        {
+                            int actualSize;
+                            if (operandFormat == AsmInfo.IMP) actualSize = 0;
+                            else if (operand >= sbyte.MinValue && operand <= byte.MaxValue) actualSize = 1;
+                            else if (operand >= short.MinValue && operand <= ushort.MaxValue) actualSize = 2;
+                            else actualSize = 99;
+
+                            if (actualSize > formalSize)
+                            {
+                                Program.Panic("assembly operand is too large: {0}", e.Show());
+                            }
+                        }
+                    }
 
                     if (formalSize == 1)
                     {
@@ -189,14 +235,54 @@ static class Assembler
                         prg.Add(HighByte(operand));
                     }
                 }
-                else
-                {
-                    Program.Panic("invalid or ambiguous instruction: {0}", e.Show());
-                }
             }
         }
 
-        return prg;
+        // TODO: Make sure that the PRG ROM size limit isn't exceeded. It must not overwrite the vector table.
+        if (prg.Count != PrgRomSize) Program.Error("assembler: program has wrong length");
+
+        using (BinaryWriter w = new BinaryWriter(new FileStream(outputFilename, FileMode.Create)))
+        {
+            w.Write(Header);
+            w.Write(prg.ToArray());
+            w.Write(chr);
+        }
+    }
+
+    void DefineLabel(string label, int address)
+    {
+        // TODO: Check for duplicates.
+
+        Labels.Table.Add(label, address);
+
+        // TODO: Fix fixups.
+    }
+
+    bool TryFindLabel(string label, out int value)
+    {
+        for (LabelScope scope = Labels; scope != null; scope = scope.Outer)
+        {
+            if (scope.Table.TryGetValue(label, out value))
+            {
+                return true;
+            }
+        }
+
+        value = 0;
+        return false;
+    }
+
+    static int ParseAddressMode(string mode)
+    {
+        if (mode == Tag.Absolute) return AsmInfo.ABS;
+        else if (mode == Tag.Immediate) return AsmInfo.IMM;
+        else if (mode == Tag.IndirectY) return AsmInfo.ZYI;
+        else if (mode == Tag.Relative) return AsmInfo.REL;
+        else
+        {
+            Program.Panic("unknown assembly modifier: {0}", mode);
+            return AsmInfo.INV;
+        }
     }
 
     static byte LowByte(int n)
@@ -208,11 +294,47 @@ static class Assembler
     {
         return (byte)((n >> 8) & 0xFF);
     }
+
+    int AllocateGlobal(MemoryRegion region, int size)
+    {
+        int address;
+        if (region == MemoryRegion.ZeroPage)
+        {
+            if (ZeroPageNext + size > ZeroPageEnd) Program.Error("Not enough zero page RAM to allocate global.");
+            address = ZeroPageNext;
+            ZeroPageNext += size;
+        }
+        else if (region == MemoryRegion.Ram)
+        {
+            if (RamNext + size > RamEnd) Program.Error("Not enough RAM to allocate global.");
+            address = RamNext;
+            RamNext += size;
+        }
+        else
+        {
+            Program.NYI();
+            address = -1;
+        }
+
+        return address;
+    }
 }
 
-public class Instruction
+class LabelScope
 {
-    public byte Opcode;
-    public int Operand;
-    public int OperandFormat;
+    public LabelScope Outer = null;
+    public Dictionary<string, int> Table = new Dictionary<string, int>();
+}
+
+enum FixupType
+{
+    Absolute,
+    Relative,
+}
+
+class Fixup
+{
+    public string Name;
+    public int Location;
+    public FixupType Type;
 }

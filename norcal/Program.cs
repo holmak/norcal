@@ -71,9 +71,9 @@ static class Program
         WritePassOutputToFile("parse", program);
 
         List<Expr> stackCode = Compiler.Compile(program);
-        if (EnableDebugOutput) ShowStackCode(stackCode);
+        if (EnableDebugOutput) WritePassOutputToFile("stack-code", ShowAssembly(stackCode));
         List<Expr> assembly = StackAssembler.Convert(stackCode);
-        if (EnableDebugOutput) ShowAssembly(assembly);
+        if (EnableDebugOutput) WritePassOutputToFile("assembly", ShowAssembly(assembly));
         Assembler.Assemble(assembly, outputFilename);
 
         if (EnableDebugOutput)
@@ -114,44 +114,72 @@ static class Program
         return sb.ToString();
     }
 
-    static void ShowStackCode(List<Expr> stackCode)
-    {
-        StringBuilder sb = new StringBuilder();
-        foreach (Expr e in stackCode)
-        {
-            sb.AppendLine(e.Show());
-        }
-        WritePassOutputToFile("stack-code", sb.ToString());
-    }
-
-    static void ShowAssembly(List<Expr> assembly)
+    static string ShowAssembly(List<Expr> assembly)
     {
         StringBuilder sb = new StringBuilder();
         foreach (Expr e in assembly)
         {
             string line;
+            string mnemonic, text, mode, name;
+            int number;
+            Expr compoundOperand;
 
-            string mnemonic, text, mode;
-            int operand;
+            // Put a blank line before each new function:
+            if (e.MatchTag(Tag.Function)) sb.AppendLine();
+
             if (e.Match(Tag.Comment, out text)) line = "\t; " + text;
             else if (e.Match(Tag.Label, out text)) line = text + ":";
-            else if (e.Match(Tag.Function, out text)) line = string.Format("\nfunction {0}:", text);
-            else if (e.Match(out mnemonic)) line = string.Format("\t{0}", mnemonic);
-            else if (e.Match(out mnemonic, out text)) line = string.Format("\t{0} {1}", mnemonic, text);
-            else if (e.Match(out mnemonic, out operand, out mode))
+            else if (e.Match(Tag.Function, out text)) line = string.Format("function {0}:", text);
+            else if (e.MatchTag(Tag.Function)) line = e.Show();
+            else if (e.Match(Tag.Asm, out mnemonic)) line = FormatAssembly(mnemonic, "<implicit>", Tag.Implicit);
+            else if (e.Match(Tag.Asm, out mnemonic, out compoundOperand, out mode))
             {
-                string format;
-                if (mode == Tag.Absolute) format = "\t{0} ${1:X}";
-                else if (mode == Tag.Immediate) format = "\t{0} #${1:X}";
-                else if (mode == Tag.IndirectY) format = "\t{0} (${1:X}),Y";
-                else format = "\t{0} ${1:X} ???";
-                line = string.Format(format, mnemonic, operand);
+                string operandText;
+                if (compoundOperand.Match(Tag.AsmOperand, out number))
+                {
+                    operandText = FormatAssemblyInteger(number);
+                }
+                else if (compoundOperand.Match(Tag.AsmOperand, out name, out number))
+                {
+                    if (number == 0)
+                    {
+                        operandText = name;
+                    }
+                    else
+                    {
+                        operandText = string.Format("{0}+{1}", name, FormatAssemblyInteger(number));
+                    }
+                }
+                else
+                {
+                    Panic("invalid assembly operand format");
+                    operandText = "???";
+                }
+
+                line = FormatAssembly(mnemonic, operandText, mode);
             }
             else line = '\t' + e.Show();
 
             sb.AppendLine(line);
         }
-        WritePassOutputToFile("assembly", sb.ToString());
+        return sb.ToString();
+    }
+
+    static string FormatAssembly(string mnemonic, string operand, string mode)
+    {
+        string format;
+        if (mode == Tag.Implicit) format = "\t{0}";
+        else if (mode == Tag.Absolute) format = "\t{0} {1}";
+        else if (mode == Tag.Immediate) format = "\t{0} #{1}";
+        else if (mode == Tag.IndirectY) format = "\t{0} ({1}),Y";
+        else format = "\t{0} {1} ???";
+        return string.Format(format, mnemonic, operand);
+    }
+
+    static string FormatAssemblyInteger(int n)
+    {
+        if (n < 256) return n.ToString();
+        else return string.Format("${0:X}", n);
     }
 
     public static void Warning(string format, params object[] args)
@@ -229,9 +257,9 @@ static class Tag
     public static readonly string Field = "$field";
     public static readonly string Index = "$index";
     public static readonly string Label = "$label";
-    public static readonly string Goto = "$goto";
-    public static readonly string GotoIf = "$goto_if";
-    public static readonly string GotoIfNot = "$goto_if_not";
+    public static readonly string Jump = "$jump";
+    public static readonly string JumpIfTrue = "$jump_if_true";
+    public static readonly string JumpIfFalse = "$jump_if_false";
     public static readonly string Continue = "$continue";
     public static readonly string Break = "$break";
     public static readonly string Asm = "$asm";
@@ -271,18 +299,17 @@ static class Tag
     public static readonly string PushVariable = "$pushv";
     public static readonly string PushAddressOfVariable = "$pushav";
     public static readonly string PushFieldName = "$pushfn";
-    public static readonly string Jump = "$j";
-    public static readonly string JumpIfTrue = "$jt";
-    public static readonly string JumpIfFalse = "$jf";
     public static readonly string Call = "$call";
 
     // Assembly directives:
-    public static readonly string Comment = "comment";
-    public static readonly string SkipTo = "skip_to";
-    public static readonly string Word = "word";
+    public static readonly string Comment = "$comment";
+    public static readonly string SkipTo = "$skip_to";
+    public static readonly string Word = "$word";
 
     // 6502 address modes:
-    public static readonly string Absolute = "absolute";
-    public static readonly string Immediate = "immediate";
-    public static readonly string IndirectY = "indirect_y";
+    public static readonly string Implicit = "$implicit";
+    public static readonly string Absolute = "$absolute";
+    public static readonly string Immediate = "$immediate";
+    public static readonly string IndirectY = "$indirect_y";
+    public static readonly string Relative = "$relative";
 }

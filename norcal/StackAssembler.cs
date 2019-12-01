@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -9,15 +10,8 @@ class StackAssembler
     List<Expr> Output = new List<Expr>();
     Dictionary<string, CFunctionInfo> Functions = new Dictionary<string, CFunctionInfo>();
     Dictionary<string, CStructInfo> Structs = new Dictionary<string, CStructInfo>();
-    int ZeroPageNext = ZeroPageStart;
-    int RamNext = RamStart;
     LexicalScope Scope = new LexicalScope();
     List<Operand> Stack = new List<Operand>();
-
-    static readonly int ZeroPageStart = 0x000;
-    static readonly int ZeroPageEnd = 0x100;
-    static readonly int RamStart = 0x300;
-    static readonly int RamEnd = 0x800;
 
     /// <summary>
     /// Convert stack machine code to 6502 assembly code.
@@ -31,12 +25,6 @@ class StackAssembler
 
     void Run(List<Expr> input)
     {
-        // HACK: If you don't define an interrupt handler, it will target address zero.
-        // TODO: What should the compiler do if an interrupt handler isn't defined? Is it an error?
-        Emit(Tag.Label, "nmi");
-        Emit(Tag.Label, "reset");
-        Emit(Tag.Label, "brk");
-
         foreach (Expr op in input)
         {
             string name, functionName;
@@ -48,41 +36,33 @@ class StackAssembler
             {
                 if (Functions.ContainsKey(functionName)) Program.Error("function is already defined: " + functionName);
 
-                // Allocate space for each parameter and store it in the symbol table.
-                int[] addresses = new int[fields.Length];
-                for (int i = 0; i < fields.Length; i++)
+                Emit(Tag.Function, functionName);
+
+                // Allocate a global variable for each parameter:
+                foreach (FieldInfo field in fields)
                 {
-                    addresses[i] = AllocGlobal(fields[i].Region, SizeOf(fields[i].Type));
+                    Emit(Tag.Variable, field.Region, SizeOf(field.Type), string.Format("{0}.{1}", functionName, field.Name));
                 }
 
                 CFunctionInfo function = new CFunctionInfo
                 {
                     ParameterTypes = fields.Select(x => x.Type).ToArray(),
-                    ParameterAddresses = addresses,
                     ReturnType = returnType,
                 };
                 Functions.Add(functionName, function);
-
-                // Get the call frame address (and type information) from the function's type entry.
-                CType[] paramTypes = function.ParameterTypes;
-                int[] paramAddresses = function.ParameterAddresses;
-
-                // Define each of the function's parameters as a local variable:
-                Scope = Scope.Push();
-                foreach (FieldInfo f in fields)
-                {
-                    DefineSymbol(SymbolTag.Variable, f.Name, f.Type, f.Address);
-                }
             }
             else if (op.Match(Tag.Constant, out type, out name, out number))
             {
                 // TODO: Make sure the value fits in the specified type.
-                DefineSymbol(SymbolTag.Constant, name, type, number);
+                DeclareSymbol(SymbolTag.Constant, name, type, number);
+                // Remove the type information:
+                Emit(Tag.Constant, name, number);
             }
             else if (op.Match(Tag.Variable, out region, out type, out name))
             {
-                int address = AllocGlobal(region, SizeOf(type));
-                DefineSymbol(SymbolTag.Variable, name, type, address);
+                DeclareSymbol(SymbolTag.Variable, name, type, 0);
+                // Replace the type information with just a size:
+                Emit(Tag.Variable, region, SizeOf(type), name);
             }
             else if (op.Match(Tag.Struct, out name, out fields))
             {
@@ -105,6 +85,16 @@ class StackAssembler
                     Fields = structFields,
                 });
             }
+            else if (op.Match(Tag.BeginScope))
+            {
+                Scope = Scope.Push();
+                Emit(op);
+            }
+            else if (op.Match(Tag.EndScope))
+            {
+                Scope = Scope.Outer;
+                Emit(op);
+            }
             else if (op.Match(Tag.PushImmediate, out number))
             {
                 PushImmediate(number);
@@ -118,39 +108,44 @@ class StackAssembler
                 if (functionName == Tag.StoreGeneric)
                 {
                     Operand value = Pop();
-                    Operand address = Pop();
-                    EmitOp("LDA", value);
-                    EmitOp("STA", address);
+                    Operand dest = Pop();
+                    EmitOp(Tag.Asm, "LDA", value);
+                    EmitOp(Tag.Asm, "STA", dest);
                 }
                 else if (functionName == Tag.AddGeneric)
                 {
                     Operand right = Pop();
                     Operand left = Pop();
-                    Emit("CLC");
-                    EmitOp("LDA", left);
-                    EmitOp("ADC", right);
+                    Emit(Tag.Asm, "CLC");
+                    EmitOp(Tag.Asm, "LDA", left);
+                    EmitOp(Tag.Asm, "ADC", right);
                     PushAccumulator();
                 }
                 else if (functionName == Tag.SubtractGeneric)
                 {
                     Operand right = Pop();
                     Operand left = Pop();
-                    Emit("SEC");
-                    EmitOp("LDA", left);
-                    EmitOp("SBC", right);
+                    Emit(Tag.Asm, "SEC");
+                    EmitOp(Tag.Asm, "LDA", left);
+                    EmitOp(Tag.Asm, "SBC", right);
                     PushAccumulator();
                 }
                 else
                 {
                     // This is a general-purpose call.
                     // TODO: Copy the arguments into the function's call frame.
-                    Emit("JSR", functionName);
+                    Emit(Tag.Asm, "JSR", functionName);
                 }
             }
             else if (op.Match(Tag.Return))
             {
                 // TODO: "Return" must load top-of-stack into the accumulator, then RTS.
-                Emit("RTS");
+                Emit(Tag.Asm, "RTS");
+            }
+            else
+            {
+                // Pass anything else through unchanged.
+                Emit(op);
             }
         }
 
@@ -163,10 +158,15 @@ class StackAssembler
 
     void Emit(params object[] args)
     {
-        Output.Add(Expr.Make(args));
+        Emit(Expr.Make(args));
     }
 
-    void DefineSymbol(SymbolTag tag, string name, CType type, int value)
+    void Emit(Expr e)
+    {
+        Output.Add(e);
+    }
+
+    void DeclareSymbol(SymbolTag tag, string name, CType type, int value)
     {
         // It is an error to define two things with the same name in the same scope.
         if (Scope.Symbols.Any(x => x.Name == name))
@@ -209,33 +209,6 @@ class StackAssembler
         return info;
     }
 
-    /// <summary>
-    /// Allocate 'size' bytes in RAM and return the address.
-    /// </summary>
-    int AllocGlobal(MemoryRegion region, int size)
-    {
-        int address;
-        if (region == MemoryRegion.ZeroPage)
-        {
-            if (ZeroPageNext + size > ZeroPageEnd) Program.Error("Not enough zero page RAM to allocate global.");
-            address = ZeroPageNext;
-            ZeroPageNext += size;
-        }
-        else if (region == MemoryRegion.Ram)
-        {
-            if (RamNext + size > RamEnd) Program.Error("Not enough RAM to allocate global.");
-            address = RamNext;
-            RamNext += size;
-        }
-        else
-        {
-            Program.NYI();
-            address = -1;
-        }
-
-        return address;
-    }
-
     int SizeOf(CType type)
     {
         if (type.IsSimple)
@@ -263,6 +236,8 @@ class StackAssembler
 
     void PushAccumulator()
     {
+        // TODO: If there are any other accumulator operands on the virtual stack, they must be flushed to temporaries.
+
         Stack.Add(new Operand
         {
             Tag = OperandTag.Accumulator,
@@ -286,7 +261,7 @@ class StackAssembler
         Stack.Add(new Operand
         {
             Tag = OperandTag.Variable,
-            Value = sym.Value,
+            Name = name,
         });
     }
 
@@ -297,7 +272,7 @@ class StackAssembler
         return r;
     }
 
-    void EmitOp(string mnemonic, Operand r)
+    void EmitOp(string tag, string mnemonic, Operand r)
     {
         // TODO: When the operation would affect the accumulator or flag register, flush all acc/flag
         // values on the stack to temporaries.
@@ -315,7 +290,11 @@ class StackAssembler
         }
         else if (r.Tag == OperandTag.Immediate)
         {
-            Emit(mnemonic, r.Value, Tag.Immediate);
+            Emit(tag, mnemonic, Expr.Make(Tag.AsmOperand, r.Value), Tag.Immediate);
+        }
+        else if (r.Tag == OperandTag.Variable)
+        {
+            Emit(tag, mnemonic, Expr.Make(Tag.AsmOperand, r.Name, 0), Tag.Absolute);
         }
         else
         {
@@ -324,10 +303,25 @@ class StackAssembler
     }
 }
 
+[DebuggerDisplay("{Show(),nq}")]
 class Operand
 {
     public OperandTag Tag;
     public int Value;
+    public string Name;
+
+    public string Show()
+    {
+        if (Tag == OperandTag.Accumulator) return "A";
+        else if (Tag == OperandTag.Immediate) return "#" + Value;
+        else if (Tag == OperandTag.Variable) return Name;
+        else if (Tag == OperandTag.VariableAddress) return "&" + Name;
+        else if (Tag == OperandTag.FlagZero) return "ZF";
+        else if (Tag == OperandTag.FlagNotZero) return "!ZF";
+        else if (Tag == OperandTag.FlagCarry) return "CF";
+        else if (Tag == OperandTag.FlatNotCarry) return "!CF";
+        else return "???";
+    }
 }
 
 enum OperandTag
@@ -335,5 +329,9 @@ enum OperandTag
     Accumulator,
     Immediate,
     Variable,
-    Flag,
+    VariableAddress,
+    FlagZero,
+    FlagNotZero,
+    FlagCarry,
+    FlatNotCarry,
 }

@@ -23,7 +23,6 @@ class Compiler
     {
         foreach (Expr decl in declarations)
         {
-            MemoryRegion region;
             CType returnType, type;
             string name;
             FieldInfo[] fields;
@@ -34,7 +33,7 @@ class Compiler
                 CompileExpression(body);
 
                 // Functions that return non-void should never reach this point.
-                Emit(Tag.PushImmediate, 0, CType.Void);
+                Emit(Tag.PushImmediate, 0);
                 Emit(Tag.Return);
             }
             else if (decl.Match(Tag.Constant, out type, out name, out body))
@@ -48,13 +47,13 @@ class Compiler
 
                 Emit(Tag.Constant, type, name, value);
             }
-            else if (decl.Match(Tag.Variable, out region, out type, out name))
+            else if (decl.MatchTag(Tag.Variable))
             {
-                Emit(Tag.Variable, region, type, name);
+                Emit(decl);
             }
-            else if (decl.Match(Tag.Struct, out name, out fields))
+            else if (decl.MatchTag(Tag.Struct))
             {
-                Emit(Tag.Struct, name, fields);
+                Emit(decl);
             }
             else
             {
@@ -171,24 +170,24 @@ class Compiler
         {
             Emit(Tag.Label, target);
         }
-        else if (e.Match(Tag.Goto, out target))
+        else if (e.Match(Tag.Jump, out target))
         {
-            Emit(Tag.Jump, target);
+            Emit(e);
         }
-        else if (e.Match(Tag.GotoIf, out subexpr, out target))
+        else if (e.Match(Tag.JumpIfTrue, out subexpr, out target))
         {
             CompileExpression(subexpr);
             Emit(Tag.JumpIfTrue, target);
         }
-        else if (e.Match(Tag.GotoIfNot, out subexpr, out target))
+        else if (e.Match(Tag.JumpIfFalse, out subexpr, out target))
         {
             CompileExpression(subexpr);
             Emit(Tag.JumpIfFalse, target);
         }
         else if (e.MatchTag(Tag.Asm))
         {
-            // Copy assembly instructions almost verbatim:
-            Emit(e.GetArgs().Skip(1).ToArray());
+            // Copy assembly instructions verbatim:
+            Emit(e);
         }
         else if (e.MatchAny(out functionName, out args))
         {
@@ -211,7 +210,11 @@ class Compiler
 
     void Emit(params object[] args)
     {
-        Expr e = Expr.Make(args);
+        Emit(Expr.Make(args));
+    }
+
+    void Emit(Expr e)
+    {
         StackCode.Add(e);
     }
 }
@@ -249,7 +252,6 @@ partial class CFunctionInfo
 {
     public CType[] ParameterTypes;
     public CType ReturnType;
-    public int[] ParameterAddresses;
 
     public override bool Equals(object obj)
     {
