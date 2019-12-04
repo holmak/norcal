@@ -286,7 +286,8 @@ class Compiler
     {
         var table = Scopes.Last().QualifiedNames;
         if (table.ContainsKey(name)) Program.Error("symbol already defined: {0}", name);
-        string qualifiedName = string.Join(NamespaceSeparator, Scopes.Skip(1).Select(x => x.Name)) + NamespaceSeparator + name;
+        string qualifiers = string.Join(NamespaceSeparator, Scopes.Skip(1).Select(x => x.Name));
+        string qualifiedName = (qualifiers.Length > 0) ? (qualifiers + NamespaceSeparator + name) : name;
         table.Add(name, qualifiedName);
         return qualifiedName;
     }
