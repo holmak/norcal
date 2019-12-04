@@ -227,7 +227,7 @@ class Assembler
 
     void DefineLabel(string label, int address)
     {
-        // TODO: Check for duplicates.
+        // TODO: Check for duplicates. (But this should have been caught by the compiler.)
 
         Labels.Table.Add(label, address);
 

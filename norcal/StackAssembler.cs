@@ -208,7 +208,8 @@ class StackAssembler
 
     void PushAccumulator()
     {
-        // TODO: If there are any other accumulator operands on the virtual stack, they must be flushed to temporaries.
+        // TODO: If there are any other accumulator operands on the virtual stack, they should have been flushed
+        // before a new value was put in the accumulator!
 
         Stack.Add(new Operand
         {
