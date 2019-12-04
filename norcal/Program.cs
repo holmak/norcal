@@ -120,9 +120,8 @@ static class Program
         foreach (Expr e in assembly)
         {
             string line;
-            string mnemonic, text, mode, name;
-            int number;
-            Expr compoundOperand;
+            string mnemonic, text, mode;
+            AsmOperand operand;
 
             // Put a blank line before each new function:
             if (e.MatchTag(Tag.Function)) sb.AppendLine();
@@ -131,33 +130,7 @@ static class Program
             else if (e.Match(Tag.Label, out text)) line = text + ":";
             else if (e.Match(Tag.Function, out text)) line = string.Format("function {0}:", text);
             else if (e.MatchTag(Tag.Function)) line = e.Show();
-            else if (e.Match(Tag.Asm, out mnemonic)) line = FormatAssembly(mnemonic, "<implicit>", Tag.Implicit);
-            else if (e.Match(Tag.Asm, out mnemonic, out compoundOperand, out mode))
-            {
-                string operandText;
-                if (compoundOperand.Match(Tag.AsmOperand, out number))
-                {
-                    operandText = FormatAssemblyInteger(number);
-                }
-                else if (compoundOperand.Match(Tag.AsmOperand, out name, out number))
-                {
-                    if (number == 0)
-                    {
-                        operandText = name;
-                    }
-                    else
-                    {
-                        operandText = string.Format("{0}+{1}", name, FormatAssemblyInteger(number));
-                    }
-                }
-                else
-                {
-                    Panic("invalid assembly operand format");
-                    operandText = "???";
-                }
-
-                line = FormatAssembly(mnemonic, operandText, mode);
-            }
+            else if (e.Match(Tag.Asm, out mnemonic, out operand, out mode)) line = FormatAssembly(mnemonic, operand, mode);
             else line = '\t' + e.Show();
 
             sb.AppendLine(line);
@@ -165,18 +138,18 @@ static class Program
         return sb.ToString();
     }
 
-    static string FormatAssembly(string mnemonic, string operand, string mode)
+    static string FormatAssembly(string mnemonic, AsmOperand operand, string mode)
     {
         string format;
         if (mode == Tag.Implicit) format = "\t{0}";
-        else if (mode == Tag.Absolute) format = "\t{0} {1}";
+        else if (mode == Tag.Absolute || mode == Tag.Relative) format = "\t{0} {1}";
         else if (mode == Tag.Immediate) format = "\t{0} #{1}";
         else if (mode == Tag.IndirectY) format = "\t{0} ({1}),Y";
         else format = "\t{0} {1} ???";
-        return string.Format(format, mnemonic, operand);
+        return string.Format(format, mnemonic, operand.Show());
     }
 
-    static string FormatAssemblyInteger(int n)
+    public static string FormatAssemblyInteger(int n)
     {
         if (n < 256) return n.ToString();
         else return string.Format("${0:X}", n);

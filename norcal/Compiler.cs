@@ -34,14 +34,31 @@ class Compiler
             Expr body;
             if (decl.Match(Tag.Function, out returnType, out name, out fields, out body))
             {
-                Emit(Tag.Function, returnType, name, fields);
                 BeginScope(name);
+
+                foreach (FieldInfo f in fields)
+                {
+                    DefineQualifiedVariableName(f.Name);
+                }
+
+                // Find labels in this function and forward-declare them.
+                body.ForEach(subexpr =>
+                {
+                    string label;
+                    if (subexpr.Match(Tag.Label, out label))
+                    {
+                        DefineQualifiedLabelName(label);
+                    }
+                });
+
+                Emit(Tag.Function, returnType, name, fields);
                 CompileExpression(body);
-                EndScope();
 
                 // Functions that return non-void should never reach this point.
                 Emit(Tag.PushImmediate, 0);
                 Emit(Tag.Return);
+
+                EndScope();
             }
             else if (decl.Match(Tag.Constant, out type, out name, out body))
             {
@@ -71,11 +88,12 @@ class Compiler
     void CompileExpression(Expr e)
     {
         int value;
-        string name, functionName, target, fieldName;
+        string name, functionName, target, fieldName, mnemonic, mode;
         MemoryRegion region;
         CType type;
         Expr[] args;
         Expr subexpr, init, test, induction, body, left, indexExpr;
+        AsmOperand operand;
         if (e.Match(Tag.Int, out value))
         {
             Emit(Tag.PushImmediate, value);
@@ -176,17 +194,21 @@ class Compiler
         }
         else if (e.Match(Tag.Label, out target))
         {
-            Emit(Tag.Label, DefineQualifiedLabelName(target));
+            // Labels are declared before this point, so just look it up.
+            Emit(Tag.Label, FindQualifiedName(target));
         }
         else if (e.Match(Tag.Jump, out target))
         {
             Emit(e);
         }
-        else if (e.MatchTag(Tag.Asm))
+        else if (e.Match(Tag.Asm, out mnemonic, out operand, out mode))
         {
-            // TODO: Find and qualify label/variable names used as assembly operands.
-            //TODO;
-            Emit(e);
+            // Replace any identifiers in assembly instructions with the fully qualified equivalent.
+            if (operand.Base.HasValue)
+            {
+                operand = new AsmOperand(FindQualifiedName(operand.Base.Value), operand.Offset);
+            }
+            Emit(Expr.MakeAsm(mnemonic, operand, mode));
         }
         else if (e.MatchAny(out functionName, out args))
         {

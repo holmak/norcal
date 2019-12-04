@@ -100,38 +100,38 @@ class StackAssembler
                 {
                     Operand value = Pop();
                     Operand dest = Pop();
-                    EmitOp(Tag.Asm, "LDA", value);
-                    EmitOp(Tag.Asm, "STA", dest);
+                    EmitAsm("LDA", value);
+                    EmitAsm("STA", dest);
                 }
                 else if (functionName == Tag.AddGeneric)
                 {
                     Operand right = Pop();
                     Operand left = Pop();
-                    Emit(Tag.Asm, "CLC");
-                    EmitOp(Tag.Asm, "LDA", left);
-                    EmitOp(Tag.Asm, "ADC", right);
+                    EmitAsm("CLC");
+                    EmitAsm("LDA", left);
+                    EmitAsm("ADC", right);
                     PushAccumulator();
                 }
                 else if (functionName == Tag.SubtractGeneric)
                 {
                     Operand right = Pop();
                     Operand left = Pop();
-                    Emit(Tag.Asm, "SEC");
-                    EmitOp(Tag.Asm, "LDA", left);
-                    EmitOp(Tag.Asm, "SBC", right);
+                    EmitAsm("SEC");
+                    EmitAsm("LDA", left);
+                    EmitAsm("SBC", right);
                     PushAccumulator();
                 }
                 else
                 {
                     // This is a general-purpose call.
                     // TODO: Copy the arguments into the function's call frame.
-                    Emit(Tag.Asm, "JSR", Expr.Make(Tag.AsmOperand, functionName, 0), Tag.Absolute);
+                    Emit(Expr.MakeAsm("JSR", new AsmOperand(functionName)));
                 }
             }
             else if (op.Match(Tag.Return))
             {
                 // TODO: "Return" must load top-of-stack into the accumulator, then RTS.
-                Emit(Tag.Asm, "RTS");
+                Emit(Expr.MakeAsm("RTS"));
             }
             else
             {
@@ -244,7 +244,12 @@ class StackAssembler
         return r;
     }
 
-    void EmitOp(string tag, string mnemonic, Operand r)
+    void EmitAsm(string mnemonic)
+    {
+        Emit(Expr.MakeAsm(mnemonic));
+    }
+
+    void EmitAsm(string mnemonic, Operand r)
     {
         // TODO: When the operation would affect the accumulator or flag register, flush all acc/flag
         // values on the stack to temporaries.
@@ -262,11 +267,11 @@ class StackAssembler
         }
         else if (r.Tag == OperandTag.Immediate)
         {
-            Emit(tag, mnemonic, Expr.Make(Tag.AsmOperand, r.Value), Tag.Immediate);
+            Emit(Expr.MakeAsm(mnemonic, new AsmOperand(r.Value), Tag.Immediate));
         }
         else if (r.Tag == OperandTag.Variable)
         {
-            Emit(tag, mnemonic, Expr.Make(Tag.AsmOperand, r.Name, 0), Tag.Absolute);
+            Emit(Expr.MakeAsm(mnemonic, new AsmOperand(r.Name)));
         }
         else
         {

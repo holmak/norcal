@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -99,11 +100,9 @@ class Assembler
             else
             {
                 MemoryRegion region;
-                int size, number, operandFormat = AsmInfo.INV, operandOffset = 0;
+                int size, number, operandFormat = AsmInfo.INV;
                 string name, mnemonic = "???", mode;
-                Maybe<string> operandBase = Maybe.Nothing;
-                bool isInstruction = false;
-                Expr compoundOperand;
+                AsmOperand operand;
 
                 if (e.Match(Tag.Constant, out name, out number))
                 {
@@ -113,44 +112,17 @@ class Assembler
                 {
                     AllocateGlobal(region, size);
                 }
-                else if (e.Match(Tag.Asm, out mnemonic))
+                else if (e.Match(Tag.Asm, out mnemonic, out operand, out mode))
                 {
-                    isInstruction = true;
-                    operandFormat = AsmInfo.IMP;
-                }
-                else if (e.Match(Tag.Asm, out mnemonic, out compoundOperand, out mode))
-                {
-                    isInstruction = true;
                     operandFormat = ParseAddressMode(mode);
-                    int baseAddress = 0;
 
-                    if (AsmInfo.ShortJumpInstructions.Contains(mnemonic))
+                    int baseAddress = 0;
+                    if (mode == Tag.Relative)
                     {
-                        operandFormat = AsmInfo.REL;
                         // Relative jumps are relative to the address of the subsequent instruction:
                         baseAddress = PrgRomBase + prg.Count + 2;
                     }
 
-                    if (compoundOperand.Match(Tag.AsmOperand, out operandOffset))
-                    {
-                        operandBase = Maybe.Nothing;
-                    }
-                    else if (compoundOperand.Match(Tag.AsmOperand, out label, out operandOffset))
-                    {
-                        operandBase = label;
-                    }
-                    else
-                    {
-                        Program.Panic("invalid assembly operand format");
-                    }
-                }
-                else
-                {
-                    Program.Panic("invalid instruction format: {0}", e.Show());
-                }
-
-                if (isInstruction)
-                {
                     int formalSize = AsmInfo.OperandSizes[operandFormat];
 
                     // Search for a matching instruction:
@@ -177,22 +149,22 @@ class Assembler
                         Program.Panic("ambiguous instruction and mode: {0}", e.Show());
                     }
 
-                    int operand = 0;
+                    int operandValue = 0;
                     bool checkOperandRange = true;
-                    if (!operandBase.HasValue)
+                    if (!operand.Base.HasValue)
                     {
-                        operand = operandOffset;
+                        operandValue = operand.Offset;
                     }
-                    else if (TryFindLabel(operandBase.Value, out operand))
+                    else if (TryFindLabel(operand.Base.Value, out operandValue))
                     {
-                        operand += operandOffset;
+                        operandValue += operand.Offset;
                     }
                     else
                     {
                         checkOperandRange = false;
                         Fixups.Add(new Fixup
                         {
-                            Name = operandBase.Value,
+                            Operand = operand,
                             Location = prg.Count,
                             Type = (operandFormat == AsmInfo.REL) ? FixupType.Relative : FixupType.Absolute,
                         });
@@ -201,12 +173,12 @@ class Assembler
                     // Relative jumps are calculated relative to the address of the subsequent instruction.
                     if (operandFormat == AsmInfo.REL)
                     {
-                        operand -= (PrgRomBase + prg.Count + 1);
+                        operandValue -= (PrgRomBase + prg.Count + 1);
                     }
 
                     if (checkOperandRange)
                     {
-                        if (operandFormat == AsmInfo.REL && (operand < sbyte.MinValue || operand > sbyte.MaxValue))
+                        if (operandFormat == AsmInfo.REL && (operandValue < sbyte.MinValue || operandValue > sbyte.MaxValue))
                         {
                             Program.Panic("relative branch offset is too large: {0}", e.Show());
                         }
@@ -214,8 +186,8 @@ class Assembler
                         {
                             int actualSize;
                             if (operandFormat == AsmInfo.IMP) actualSize = 0;
-                            else if (operand >= sbyte.MinValue && operand <= byte.MaxValue) actualSize = 1;
-                            else if (operand >= short.MinValue && operand <= ushort.MaxValue) actualSize = 2;
+                            else if (operandValue >= sbyte.MinValue && operandValue <= byte.MaxValue) actualSize = 1;
+                            else if (operandValue >= short.MinValue && operandValue <= ushort.MaxValue) actualSize = 2;
                             else actualSize = 99;
 
                             if (actualSize > formalSize)
@@ -227,13 +199,17 @@ class Assembler
 
                     if (formalSize == 1)
                     {
-                        prg.Add(LowByte(operand));
+                        prg.Add(LowByte(operandValue));
                     }
                     else if (formalSize == 2)
                     {
-                        prg.Add(LowByte(operand));
-                        prg.Add(HighByte(operand));
+                        prg.Add(LowByte(operandValue));
+                        prg.Add(HighByte(operandValue));
                     }
+                }
+                else
+                {
+                    Program.Panic("invalid instruction format: {0}", e.Show());
                 }
             }
         }
@@ -274,7 +250,8 @@ class Assembler
 
     static int ParseAddressMode(string mode)
     {
-        if (mode == Tag.Absolute) return AsmInfo.ABS;
+        if (mode == Tag.Implicit) return AsmInfo.IMP;
+        else if (mode == Tag.Absolute) return AsmInfo.ABS;
         else if (mode == Tag.Immediate) return AsmInfo.IMM;
         else if (mode == Tag.IndirectY) return AsmInfo.ZYI;
         else if (mode == Tag.Relative) return AsmInfo.REL;
@@ -334,7 +311,40 @@ enum FixupType
 
 class Fixup
 {
-    public string Name;
+    public AsmOperand Operand;
     public int Location;
     public FixupType Type;
+}
+
+[DebuggerDisplay("{Show(),nq}")]
+class AsmOperand
+{
+    public readonly Maybe<string> Base = Maybe.Nothing;
+    public readonly int Offset = 0;
+
+    public AsmOperand(string actualBase) : this(actualBase, 0) { }
+
+    public AsmOperand(int value) : this(Maybe.Nothing, value) { }
+
+    public AsmOperand(Maybe<string> optionalBase, int offset)
+    {
+        Base = optionalBase;
+        Offset = offset;
+    }
+
+    public string Show()
+    {
+        if (!Base.HasValue)
+        {
+            return Program.FormatAssemblyInteger(Offset);
+        }
+        else if (Offset == 0)
+        {
+            return Base.Value;
+        }
+        else
+        {
+            return string.Format("{0}+{1}", Base.Value, Program.FormatAssemblyInteger(Offset));
+        }
+    }
 }

@@ -262,9 +262,10 @@ partial class Parser
                 else
                 {
                     string symbol = ExpectAnyName();
+
                     if (TryParse(TokenType.NEWLINE))
                     {
-                        args.Add(Expr.Make(Tag.Asm, symbol));
+                        args.Add(Expr.MakeAsm(symbol));
                     }
                     else if (TryParse(TokenType.COLON))
                     {
@@ -273,24 +274,24 @@ partial class Parser
                     }
                     else if (TryParse(TokenType.NUMBER_SIGN))
                     {
-                        Expr operand = ParseAssemblyOperand();
+                        AsmOperand operand = ParseAssemblyOperand();
                         Expect(TokenType.NEWLINE);
-                        args.Add(Expr.Make(Tag.Asm, symbol, operand, Tag.Immediate));
+                        args.Add(Expr.MakeAsm(symbol, operand, Tag.Immediate));
                     }
                     else if (TryParse(TokenType.LPAREN))
                     {
-                        Expr operand = ParseAssemblyOperand();
+                        AsmOperand operand = ParseAssemblyOperand();
                         Expect(TokenType.RPAREN);
                         Expect(TokenType.COMMA);
                         ExpectKeyword("Y");
                         Expect(TokenType.NEWLINE);
-                        args.Add(Expr.Make(Tag.Asm, symbol, operand, Tag.IndirectY));
+                        args.Add(Expr.MakeAsm(symbol, operand, Tag.IndirectY));
                     }
                     else
                     {
-                        Expr operand = ParseAssemblyOperand();
+                        AsmOperand operand = ParseAssemblyOperand();
                         Expect(TokenType.NEWLINE);
-                        args.Add(Expr.Make(Tag.Asm, symbol, operand, Tag.Absolute));
+                        args.Add(Expr.MakeAsm(symbol, operand, Tag.Absolute));
                     }
                 }
             }
@@ -332,13 +333,13 @@ partial class Parser
         return stmt;
     }
 
-    Expr ParseAssemblyOperand()
+    AsmOperand ParseAssemblyOperand()
     {
         string name;
         int number;
         if (TryParseInt(out number))
         {
-            return Expr.Make(Tag.AsmOperand, number);
+            return new AsmOperand(number);
         }
         else if (TryParseAnyName(out name))
         {
@@ -347,7 +348,7 @@ partial class Parser
             {
                 number = ExpectInt();
             }
-            return Expr.Make(Tag.AsmOperand, name, number);
+            return new AsmOperand(name, number);
         }
         else
         {

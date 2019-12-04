@@ -18,7 +18,7 @@ class Expr
         foreach (object arg in args)
         {
             if (arg == null) throw new Exception("Null in tuple.");
-            if (!(arg is int || arg is string || arg is MemoryRegion || arg is CType || arg is FieldInfo[] || arg is Expr))
+            if (!(arg is int || arg is string || arg is MemoryRegion || arg is CType || arg is FieldInfo[] || arg is Expr || arg is AsmOperand))
             {
                 throw new Exception("Unsupported type in tuple: " + arg.GetType());
             }
@@ -31,12 +31,18 @@ class Expr
 
     public static Expr MakeAsm(string mnemonic)
     {
-        return MakeAsm(mnemonic, Maybe.Nothing, 0, Tag.Implicit);
+        return MakeAsm(mnemonic, new AsmOperand(0), Tag.Implicit);
     }
 
-    public static Expr MakeAsm(string mnemonic, Maybe<string> operandBase, int operandOffset, string mode)
+    public static Expr MakeAsm(string mnemonic, AsmOperand operand)
     {
-        return Make(Tag.Asm, mnemonic, operandBase, operandOffset, mode);
+        return MakeAsm(mnemonic, operand, Tag.Absolute);
+    }
+
+    public static Expr MakeAsm(string mnemonic, AsmOperand operand, string mode)
+    {
+        if (AsmInfo.ShortJumpInstructions.Contains(mnemonic)) mode = Tag.Relative;
+        return Make(Tag.Asm, mnemonic, operand, mode);
     }
 
     public IEnumerable<object> GetArgs() => Args;
@@ -176,6 +182,18 @@ class Expr
     }
 
     /// <summary>
+    /// Run an action on each node in this expression tree.
+    /// </summary>
+    public void ForEach(Action<Expr> p)
+    {
+        foreach (Expr subexpr in Args.OfType<Expr>())
+        {
+            p(subexpr);
+            subexpr.ForEach(p);
+        }
+    }
+
+    /// <summary>
     /// Apply a function to this expression tree.
     /// </summary>
     public Expr Map(Func<Expr, Expr> f)
@@ -223,6 +241,8 @@ class Expr
             MemoryRegion? region = Args[i] as MemoryRegion?;
             CType type = Args[i] as CType;
             FieldInfo[] fields = Args[i] as FieldInfo[];
+            AsmOperand operand = Args[i] as AsmOperand;
+
             if (integer != null)
             {
                 int n = integer.Value;
@@ -247,6 +267,10 @@ class Expr
             else if (fields != null)
             {
                 tree[i] = "<fields>";
+            }
+            else if (operand != null)
+            {
+                tree[i] = operand.Show();
             }
             else
             {
