@@ -61,6 +61,8 @@ public struct Maybe<T> : IEquatable<Maybe<T>>, IEnumerable<T>
         return new Maybe<T>(true, value);
     }
 
+    public static readonly Maybe<T> Nothing = new Maybe<T>(false, default(T));
+
     public static implicit operator Maybe<T>(T value)
     {
         return Just(value);
@@ -68,7 +70,7 @@ public struct Maybe<T> : IEquatable<Maybe<T>>, IEnumerable<T>
 
     public static implicit operator Maybe<T>(Maybe value)
     {
-        return new Maybe<T>(false, default(T));
+        return Nothing;
     }
 
     /// <summary>
