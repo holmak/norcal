@@ -10,6 +10,8 @@ Differences from C (by design)
 
 - Extension: "define" declarations, which are typed, replace "#define" declarations -- and only work with numeric constants; `define uint8_t MAX_SPRITES = 6;`.
 
+- Labels and "ordinary" identifiers share the same namespace. Labels still have function scope, not lexical scope.
+
 
 Extension: Register declarations
 --------------------------------

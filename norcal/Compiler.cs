@@ -9,8 +9,10 @@ using System.Threading.Tasks;
 class Compiler
 {
     List<Expr> StackCode = new List<Expr>();
-    int NextLabelNumber = 0;
+    List<LexicalScope> Scopes = new List<LexicalScope>();
     LoopScope Loop;
+
+    public static readonly string NamespaceSeparator = ":";
 
     public static List<Expr> Compile(List<Expr> declarations)
     {
@@ -21,8 +23,11 @@ class Compiler
 
     void CompileDeclarations(List<Expr> declarations)
     {
+        Scopes.Add(new LexicalScope("<global>"));
+
         foreach (Expr decl in declarations)
         {
+            MemoryRegion region;
             CType returnType, type;
             string name;
             FieldInfo[] fields;
@@ -30,7 +35,9 @@ class Compiler
             if (decl.Match(Tag.Function, out returnType, out name, out fields, out body))
             {
                 Emit(Tag.Function, returnType, name, fields);
+                BeginScope(name);
                 CompileExpression(body);
+                EndScope();
 
                 // Functions that return non-void should never reach this point.
                 Emit(Tag.PushImmediate, 0);
@@ -38,18 +45,17 @@ class Compiler
             }
             else if (decl.Match(Tag.Constant, out type, out name, out body))
             {
-                // TODO: Make sure the value fits in the specified type.
                 int value;
                 if (!body.Match(Tag.Int, out value))
                 {
                     Program.Error("expression must be constant");
                 }
 
-                Emit(Tag.Constant, type, name, value);
+                Emit(Tag.Constant, type, DefineQualifiedVariableName(name), value);
             }
-            else if (decl.MatchTag(Tag.Variable))
+            else if (decl.Match(Tag.Variable, out region, out type, out name))
             {
-                Emit(decl);
+                Emit(Tag.Variable, region, type, DefineQualifiedVariableName(name));
             }
             else if (decl.MatchTag(Tag.Struct))
             {
@@ -76,7 +82,7 @@ class Compiler
         }
         else if (e.Match(Tag.Name, out name))
         {
-            Emit(Tag.PushVariable, name);
+            Emit(Tag.PushVariable, FindQualifiedName(name));
         }
         else if (e.Match(Tag.Empty))
         {
@@ -126,6 +132,7 @@ class Compiler
                 BreakLabel = MakeUniqueLabel("for_bottom"),
             };
 
+            BeginScope("for");
             CompileExpression(init);
             Emit(Tag.Label, Loop.ContinueLabel);
             CompileExpression(test);
@@ -134,6 +141,7 @@ class Compiler
             CompileExpression(induction);
             Emit(Tag.Jump, Loop.ContinueLabel);
             Emit(Tag.Label, Loop.BreakLabel);
+            EndScope();
         }
         else if (e.Match(Tag.Return, out subexpr))
         {
@@ -156,37 +164,28 @@ class Compiler
         {
             CompileExpression(subexpr);
         }
-        else if (e.Match(Tag.Local, out region, out type, out name))
+        else if (e.Match(Tag.Variable, out region, out type, out name))
         {
-            Emit(Tag.Variable, region, type, name);
+            Emit(Tag.Variable, region, type, DefineQualifiedVariableName(name));
         }
         else if (e.Match(Tag.Scope, out subexpr))
         {
-            Emit(Tag.BeginScope);
+            BeginScope("scope");
             CompileExpression(subexpr);
-            Emit(Tag.EndScope);
+            EndScope();
         }
         else if (e.Match(Tag.Label, out target))
         {
-            Emit(Tag.Label, target);
+            Emit(Tag.Label, DefineQualifiedLabelName(target));
         }
         else if (e.Match(Tag.Jump, out target))
         {
             Emit(e);
         }
-        else if (e.Match(Tag.JumpIfTrue, out subexpr, out target))
-        {
-            CompileExpression(subexpr);
-            Emit(Tag.JumpIfTrue, target);
-        }
-        else if (e.Match(Tag.JumpIfFalse, out subexpr, out target))
-        {
-            CompileExpression(subexpr);
-            Emit(Tag.JumpIfFalse, target);
-        }
         else if (e.MatchTag(Tag.Asm))
         {
-            // Copy assembly instructions verbatim:
+            // TODO: Find and qualify label/variable names used as assembly operands.
+            //TODO;
             Emit(e);
         }
         else if (e.MatchAny(out functionName, out args))
@@ -203,11 +202,6 @@ class Compiler
         }
     }
 
-    string MakeUniqueLabel(string prefix)
-    {
-        return string.Format("@{0}_{1}", prefix, NextLabelNumber++);
-    }
-
     void Emit(params object[] args)
     {
         Emit(Expr.Make(args));
@@ -217,21 +211,82 @@ class Compiler
     {
         StackCode.Add(e);
     }
-}
 
-[DebuggerDisplay("{Tag} {Name} = 0x{Value,h} ({Type.Show(),nq})")]
-class Symbol
-{
-    public SymbolTag Tag;
-    public string Name;
-    public CType Type;
-    public int Value;
-}
+    void BeginScope(string prefix)
+    {
+        LexicalScope outer = Scopes.Last();
 
-enum SymbolTag
-{
-    Constant,
-    Variable,
+        // Find a unique name:
+        string qualifiedName = prefix;
+        int suffix = 0;
+        while (outer.SubscopeNames.Contains(qualifiedName))
+        {
+            suffix += 1;
+            qualifiedName = string.Format("{0}_{1}", prefix, suffix);
+        }
+
+        outer.SubscopeNames.Add(qualifiedName);
+        Scopes.Add(new LexicalScope(qualifiedName));
+    }
+
+    void EndScope()
+    {
+        Scopes.RemoveAt(Scopes.Count - 1);
+    }
+
+    string MakeUniqueLabel(string prefix)
+    {
+        var table = Scopes[1].QualifiedNames;
+
+        // Find a unique name:
+        string name = prefix;
+        int suffix = 0;
+        while (table.ContainsKey(name))
+        {
+            suffix += 1;
+            name = string.Format("{0}_{1}", prefix, suffix);
+        }
+
+        return DefineQualifiedLabelName(name);
+    }
+
+    string DefineQualifiedLabelName(string name)
+    {
+        // Labels have function scope, not full lexical scope.
+        LexicalScope functionScope = Scopes[1];
+        if (functionScope.QualifiedNames.ContainsKey(name)) Program.Error("symbol already defined: {0}", name);
+        string qualifiedName = functionScope.Name + NamespaceSeparator + name;
+        functionScope.QualifiedNames.Add(name, qualifiedName);
+        return qualifiedName;
+    }
+
+    string DefineQualifiedVariableName(string name)
+    {
+        var table = Scopes.Last().QualifiedNames;
+        if (table.ContainsKey(name)) Program.Error("symbol already defined: {0}", name);
+        string qualifiedName = string.Join(NamespaceSeparator, Scopes.Skip(1).Select(x => x.Name)) + NamespaceSeparator + name;
+        table.Add(name, qualifiedName);
+        return qualifiedName;
+    }
+
+    string FindQualifiedName(string name)
+    {
+        // Search all scopes, starting from the innermost.
+        foreach (LexicalScope scope in Enumerable.Reverse(Scopes))
+        {
+            string found;
+            if (scope.QualifiedNames.TryGetValue(name, out found)) return found;
+        }
+
+        Program.Error("symbol not defined: {0}", name);
+        return null;
+    }
+
+    enum ScopingRule
+    {
+        Function,
+        Lexical,
+    }
 }
 
 class CStructInfo
@@ -272,14 +327,13 @@ partial class CFunctionInfo
 
 class LexicalScope
 {
-    public LexicalScope Outer;
-    public List<Symbol> Symbols = new List<Symbol>();
+    public readonly string Name;
+    public readonly HashSet<string> SubscopeNames = new HashSet<string>();
+    public readonly Dictionary<string, string> QualifiedNames = new Dictionary<string, string>();
 
-    public LexicalScope Push()
+    public LexicalScope(string name)
     {
-        LexicalScope inner = new LexicalScope();
-        inner.Outer = this;
-        return inner;
+        Name = name;
     }
 }
 

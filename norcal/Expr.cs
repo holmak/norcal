@@ -29,6 +29,16 @@ class Expr
 
     public static Expr Make(params object[] args) => new Expr(args);
 
+    public static Expr MakeAsm(string mnemonic)
+    {
+        return MakeAsm(mnemonic, Maybe.Nothing, 0, Tag.Implicit);
+    }
+
+    public static Expr MakeAsm(string mnemonic, Maybe<string> operandBase, int operandOffset, string mode)
+    {
+        return Make(Tag.Asm, mnemonic, operandBase, operandOffset, mode);
+    }
+
     public IEnumerable<object> GetArgs() => Args;
 
     public bool MatchTag(string tag)

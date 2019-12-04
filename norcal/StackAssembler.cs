@@ -10,7 +10,7 @@ class StackAssembler
     List<Expr> Output = new List<Expr>();
     Dictionary<string, CFunctionInfo> Functions = new Dictionary<string, CFunctionInfo>();
     Dictionary<string, CStructInfo> Structs = new Dictionary<string, CStructInfo>();
-    LexicalScope Scope = new LexicalScope();
+    Dictionary<string, Symbol> Symbols = new Dictionary<string, Symbol>();
     List<Operand> Stack = new List<Operand>();
 
     /// <summary>
@@ -41,7 +41,8 @@ class StackAssembler
                 // Allocate a global variable for each parameter:
                 foreach (FieldInfo field in fields)
                 {
-                    Emit(Tag.Variable, field.Region, SizeOf(field.Type), string.Format("{0}.{1}", functionName, field.Name));
+                    string qualifiedName = string.Format("{0}{1}{2}", functionName, Compiler.NamespaceSeparator, field.Name);
+                    Emit(Tag.Variable, field.Region, SizeOf(field.Type), qualifiedName);
                 }
 
                 CFunctionInfo function = new CFunctionInfo
@@ -85,16 +86,6 @@ class StackAssembler
                     Fields = structFields,
                 });
             }
-            else if (op.Match(Tag.BeginScope))
-            {
-                Scope = Scope.Push();
-                Emit(op);
-            }
-            else if (op.Match(Tag.EndScope))
-            {
-                Scope = Scope.Outer;
-                Emit(op);
-            }
             else if (op.Match(Tag.PushImmediate, out number))
             {
                 PushImmediate(number);
@@ -134,7 +125,7 @@ class StackAssembler
                 {
                     // This is a general-purpose call.
                     // TODO: Copy the arguments into the function's call frame.
-                    Emit(Tag.Asm, "JSR", functionName);
+                    Emit(Tag.Asm, "JSR", Expr.Make(Tag.AsmOperand, functionName, 0), Tag.Absolute);
                 }
             }
             else if (op.Match(Tag.Return))
@@ -169,37 +160,18 @@ class StackAssembler
     void DeclareSymbol(SymbolTag tag, string name, CType type, int value)
     {
         // It is an error to define two things with the same name in the same scope.
-        if (Scope.Symbols.Any(x => x.Name == name))
+        if (Symbols.ContainsKey(name))
         {
             Program.Error("symbols cannot be redefined: {0}", name);
         }
 
-        Scope.Symbols.Add(new Symbol
+        Symbols.Add(name, new Symbol
         {
             Tag = tag,
             Name = name,
             Type = type,
             Value = value,
         });
-    }
-
-    bool FindSymbol(string name, out Symbol found)
-    {
-        // Search all scopes, starting from the innermost.
-        for (; Scope != null; Scope = Scope.Outer)
-        {
-            foreach (Symbol sym in Scope.Symbols)
-            {
-                if (sym.Name == name)
-                {
-                    found = sym;
-                    return true;
-                }
-            }
-        }
-
-        found = null;
-        return false;
     }
 
     CStructInfo GetStructInfo(string name)
@@ -256,7 +228,7 @@ class StackAssembler
     void PushVariable(string name)
     {
         Symbol sym;
-        if (!FindSymbol(name, out sym)) Program.Error("variable not defined: {0}", name);
+        if (!Symbols.TryGetValue(name, out sym)) Program.Error("variable not defined: {0}", name);
 
         Stack.Add(new Operand
         {
@@ -300,6 +272,21 @@ class StackAssembler
         {
             Program.NYI();
         }
+    }
+
+    [DebuggerDisplay("{Tag} {Name} = 0x{Value,h} ({Type.Show(),nq})")]
+    class Symbol
+    {
+        public SymbolTag Tag;
+        public string Name;
+        public CType Type;
+        public int Value;
+    }
+
+    enum SymbolTag
+    {
+        Constant,
+        Variable,
     }
 }
 

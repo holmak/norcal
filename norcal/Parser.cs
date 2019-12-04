@@ -99,7 +99,7 @@ partial class Parser
                     {
                         args.Add(ParseStatement(true));
                     }
-                    Expr body = Expr.Make(Tag.Scope, Expr.Make(args.ToArray()));
+                    Expr body = Expr.Make(args.ToArray());
                     return Expr.Make(Tag.Function, type, name, fields.ToArray(), body);
                 }
                 else
@@ -321,12 +321,12 @@ partial class Parser
             Expr value = ParseExpr();
             stmt = Expr.Make(
                 Tag.Sequence,
-                Expr.Make(Tag.Local, region, type, localname),
+                Expr.Make(Tag.Variable, region, type, localname),
                 MakeAssignExpr(Expr.Make(Tag.Name, localname), value));
         }
         else
         {
-            stmt = Expr.Make(Tag.Local, region, type, localname);
+            stmt = Expr.Make(Tag.Variable, region, type, localname);
         }
         Expect(TokenType.SEMICOLON);
         return stmt;

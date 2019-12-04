@@ -248,7 +248,6 @@ static class Tag
     public static readonly string Name = "$name";
     public static readonly string Scope = "$scope";
     public static readonly string Sequence = "$sequence";
-    public static readonly string Local = "$local";
     public static readonly string AddressOf = "$address_of";
     public static readonly string Switch = "$switch";
     public static readonly string For = "$for";
@@ -263,7 +262,6 @@ static class Tag
     public static readonly string Continue = "$continue";
     public static readonly string Break = "$break";
     public static readonly string Asm = "$asm";
-    public static readonly string AsmOperand = "$asm_operand";
 
     // Type-generic pseudo-functions:
     public static readonly string AddGeneric = "$add";
