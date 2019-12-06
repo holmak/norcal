@@ -119,19 +119,22 @@ static class Program
         StringBuilder sb = new StringBuilder();
         foreach (Expr e in assembly)
         {
-            string line;
+            string line = "";
             string mnemonic, text, mode;
             AsmOperand operand;
 
-            // Put a blank line before each new function:
-            if (e.MatchTag(Tag.Function)) sb.AppendLine();
+            // Put a blank line before top-level constructs.
+            // Indent most other things.
+            bool isTopLevel = e.MatchTag(Tag.Function) || e.MatchTag(Tag.Constant);
+            if (isTopLevel) sb.AppendLine();
+            if (!isTopLevel && !e.MatchTag(Tag.Label)) line = "\t";
 
-            if (e.Match(Tag.Comment, out text)) line = "\t; " + text;
-            else if (e.Match(Tag.Label, out text)) line = text + ":";
-            else if (e.Match(Tag.Function, out text)) line = string.Format("function {0}:", text);
-            else if (e.MatchTag(Tag.Function)) line = e.Show();
-            else if (e.Match(Tag.Asm, out mnemonic, out operand, out mode)) line = FormatAssembly(mnemonic, operand, mode);
-            else line = '\t' + e.Show();
+            if (e.Match(Tag.Comment, out text)) line += "; " + text;
+            else if (e.Match(Tag.Label, out text)) line += text + ":";
+            else if (e.Match(Tag.Function, out text)) line += string.Format("function {0}:", text);
+            else if (e.MatchTag(Tag.Function)) line += e.Show();
+            else if (e.Match(Tag.Asm, out mnemonic, out operand, out mode)) line += FormatAssembly(mnemonic, operand, mode);
+            else line += e.Show();
 
             sb.AppendLine(line);
         }
@@ -141,12 +144,12 @@ static class Program
     static string FormatAssembly(string mnemonic, AsmOperand operand, string mode)
     {
         string format;
-        if (mode == Tag.Implicit) format = "\t{0}";
-        else if (mode == Tag.Absolute) format = "\t{0} {1}";
-        else if (mode == Tag.Relative) format = "\t{0} +{1}";
-        else if (mode == Tag.Immediate) format = "\t{0} #{1}";
-        else if (mode == Tag.IndirectY) format = "\t{0} ({1}),Y";
-        else format = "\t{0} {1} ???";
+        if (mode == Tag.Implicit) format = "{0}";
+        else if (mode == Tag.Absolute) format = "{0} {1}";
+        else if (mode == Tag.Relative) format = "{0} +{1}";
+        else if (mode == Tag.Immediate) format = "{0} #{1}";
+        else if (mode == Tag.IndirectY) format = "{0} ({1}),Y";
+        else format = "{0} {1} ???";
         return string.Format(format, mnemonic, operand.Show());
     }
 
