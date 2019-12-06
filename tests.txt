@@ -523,6 +523,22 @@ void reset()
     *STOP = 0;
 }
 
+@out 10 11 20 21
+void reset()
+{
+    for (uint8_t i = 10; i < 12; i++)
+    {
+        *OUT = i;
+    }
+
+    for (uint8_t j = 20; j < 22; j++)
+    {
+        *OUT = j;
+    }
+
+    *STOP = 0;
+}
+
 @ while loops
 @out 5 4 3 2 1
 void reset()
