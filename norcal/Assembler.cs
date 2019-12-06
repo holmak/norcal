@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 
 class Assembler
 {
-    LabelScope Labels = new LabelScope();
+    Dictionary<string, int> Symbols = new Dictionary<string, int>();
     List<Fixup> Fixups = new List<Fixup>();
     int ZeroPageNext = ZeroPageStart;
     int RamNext = RamStart;
@@ -57,21 +57,7 @@ class Assembler
             }
             else if (e.Match(Tag.Function, out label) || e.Match(Tag.Label, out label))
             {
-                DefineLabel(label, PrgRomBase + prg.Count);
-            }
-            else if (e.Match(Tag.BeginScope))
-            {
-                Labels = new LabelScope
-                {
-                    Outer = Labels,
-                };
-            }
-            else if (e.Match(Tag.EndScope))
-            {
-                Labels = Labels.Outer;
-
-                // TODO: If we reach the global scope and there are any unresolved fixups, it is an error.
-                //Program.Panic("assembler: label not defined: {0}", label);
+                DefineSymbol(label, PrgRomBase + prg.Count);
             }
             else if (e.Match(Tag.SkipTo, out skipTarget))
             {
@@ -88,7 +74,7 @@ class Assembler
             else if (e.Match(Tag.Word, out label))
             {
                 int address;
-                if (!TryFindLabel(label, out address))
+                if (!Symbols.TryGetValue(label, out address))
                 {
                     // TODO: Figure out what to do if an entrypoint is not defined.
                     Program.Warning("assembler: label not defined: {0}", label);
@@ -100,39 +86,40 @@ class Assembler
             else
             {
                 MemoryRegion region;
-                int size, number, operandFormat = AsmInfo.INV;
-                string name, mnemonic = "???", mode;
+                int size, number;
+                string name, mnemonic, mode;
                 AsmOperand operand;
 
                 if (e.Match(Tag.Constant, out name, out number))
                 {
-                    DefineLabel(name, number);
+                    DefineSymbol(name, number);
                 }
                 else if (e.Match(Tag.Variable, out region, out size, out name))
                 {
-                    AllocateGlobal(region, size);
+                    DefineSymbol(name, AllocateGlobal(region, size));
                 }
                 else if (e.Match(Tag.Asm, out mnemonic, out operand, out mode))
                 {
-                    operandFormat = ParseAddressMode(mode);
+                    bool isRelativeBranchToAbsoluteTarget = AsmInfo.ShortJumpInstructions.Contains(mnemonic) && mode == Tag.Absolute;
 
-                    int baseAddress = 0;
-                    if (mode == Tag.Relative)
+                    if (isRelativeBranchToAbsoluteTarget)
                     {
-                        // Relative jumps are relative to the address of the subsequent instruction:
-                        baseAddress = PrgRomBase + prg.Count + 2;
+                        mode = Tag.Relative;
                     }
 
-                    int formalSize = AsmInfo.OperandSizes[operandFormat];
-
                     // Search for a matching instruction:
+                    int formalSize;
                     List<byte> candidates = new List<byte>();
-                    for (int opcode = 0; opcode < 256; opcode++)
                     {
-                        if (mnemonic == AsmInfo.Mnemonics[opcode] &&
-                            operandFormat == AsmInfo.OperandFormats[opcode])
+                        int operandFormat = ParseAddressMode(mode);
+                        formalSize = AsmInfo.OperandSizes[operandFormat];
+
+                        for (int opcode = 0; opcode < 256; opcode++)
                         {
-                            candidates.Add((byte)opcode);
+                            if (mnemonic == AsmInfo.Mnemonics[opcode] && operandFormat == AsmInfo.OperandFormats[opcode])
+                            {
+                                candidates.Add((byte)opcode);
+                            }
                         }
                     }
 
@@ -149,52 +136,17 @@ class Assembler
                         Program.Panic("ambiguous instruction and mode: {0}", e.Show());
                     }
 
-                    int operandValue = 0;
-                    bool checkOperandRange = true;
-                    if (!operand.Base.HasValue)
+                    int operandValue;
+                    if (!TryGetOperandValue(operand, mode, prg.Count, isRelativeBranchToAbsoluteTarget, out operandValue))
                     {
-                        operandValue = operand.Offset;
-                    }
-                    else if (TryFindLabel(operand.Base.Value, out operandValue))
-                    {
-                        operandValue += operand.Offset;
-                    }
-                    else
-                    {
-                        checkOperandRange = false;
                         Fixups.Add(new Fixup
                         {
                             Operand = operand,
                             Location = prg.Count,
-                            Type = (operandFormat == AsmInfo.REL) ? FixupType.Relative : FixupType.Absolute,
+                            Mode = mode,
+                            IsRelativeBranchToAbsoluteTarget = isRelativeBranchToAbsoluteTarget,
                         });
-                    }
-
-                    // Relative jumps are calculated relative to the address of the subsequent instruction.
-                    if (operandFormat == AsmInfo.REL)
-                    {
-                        operandValue -= (PrgRomBase + prg.Count + 1);
-                    }
-
-                    if (checkOperandRange)
-                    {
-                        if (operandFormat == AsmInfo.REL && (operandValue < sbyte.MinValue || operandValue > sbyte.MaxValue))
-                        {
-                            Program.Panic("relative branch offset is too large: {0}", e.Show());
-                        }
-                        else
-                        {
-                            int actualSize;
-                            if (operandFormat == AsmInfo.IMP) actualSize = 0;
-                            else if (operandValue >= sbyte.MinValue && operandValue <= byte.MaxValue) actualSize = 1;
-                            else if (operandValue >= short.MinValue && operandValue <= ushort.MaxValue) actualSize = 2;
-                            else actualSize = 99;
-
-                            if (actualSize > formalSize)
-                            {
-                                Program.Panic("assembly operand is too large: {0}", e.Show());
-                            }
-                        }
+                        operandValue = 0;
                     }
 
                     if (formalSize == 1)
@@ -214,6 +166,26 @@ class Assembler
             }
         }
 
+        foreach (Fixup fixup in Fixups)
+        {
+            int target = 0;
+            if (!TryGetOperandValue(fixup.Operand, fixup.Mode, fixup.Location, fixup.IsRelativeBranchToAbsoluteTarget, out target))
+            {
+                Program.Panic("symbol not defined: {0}", fixup.Operand.Show());
+            }
+
+            int formalSize = GetFormalOperandSize(fixup.Mode);
+            if (formalSize == 1)
+            {
+                prg[fixup.Location] = LowByte(target);
+            }
+            else if (formalSize == 2)
+            {
+                prg[fixup.Location] = LowByte(target);
+                prg[fixup.Location + 1] = HighByte(target);
+            }
+        }
+
         // TODO: Make sure that the PRG ROM size limit isn't exceeded. It must not overwrite the vector table.
         if (prg.Count != PrgRomSize) Program.Error("assembler: program has wrong length");
 
@@ -225,27 +197,56 @@ class Assembler
         }
     }
 
-    void DefineLabel(string label, int address)
+    void DefineSymbol(string symbol, int address)
     {
-        // TODO: Check for duplicates. (But this should have been caught by the compiler.)
-
-        Labels.Table.Add(label, address);
-
-        // TODO: Fix fixups.
+        if (Symbols.ContainsKey(symbol)) Program.Panic("duplicate symbol definitions should not reach the assembler");
+        Symbols.Add(symbol, address);
     }
 
-    bool TryFindLabel(string label, out int value)
+    bool TryGetOperandValue(AsmOperand operand, string mode, int location, bool isRelativeBranchToAbsoluteTarget, out int value)
     {
-        for (LabelScope scope = Labels; scope != null; scope = scope.Outer)
+        value = 0;
+
+        int symbolAddress;
+        if (!operand.Base.HasValue)
         {
-            if (scope.Table.TryGetValue(label, out value))
+            value += operand.Offset;
+        }
+        else if (Symbols.TryGetValue(operand.Base.Value, out symbolAddress))
+        {
+            value += symbolAddress;
+            value += operand.Offset;
+        }
+        else
+        {
+            return false;
+        }
+
+        if (isRelativeBranchToAbsoluteTarget)
+        {
+            // Relative jumps are calculated relative to the address of the subsequent instruction.
+            value -= (PrgRomBase + location + 1);
+        }
+
+        if (mode == Tag.Relative && (value < sbyte.MinValue || value > sbyte.MaxValue))
+        {
+            Program.Panic("relative branch offset is too large: {0}", operand.Show());
+        }
+        else
+        {
+            int actualSize;
+            if (mode == Tag.Implicit) actualSize = 0;
+            else if (value >= sbyte.MinValue && value <= byte.MaxValue) actualSize = 1;
+            else if (value >= short.MinValue && value <= ushort.MaxValue) actualSize = 2;
+            else actualSize = 99;
+
+            if (actualSize > GetFormalOperandSize(mode))
             {
-                return true;
+                Program.Panic("assembly operand is too large: {0}", operand.Show());
             }
         }
 
-        value = 0;
-        return false;
+        return true;
     }
 
     static int ParseAddressMode(string mode)
@@ -260,6 +261,11 @@ class Assembler
             Program.Panic("unknown assembly modifier: {0}", mode);
             return AsmInfo.INV;
         }
+    }
+
+    static int GetFormalOperandSize(string mode)
+    {
+        return AsmInfo.OperandSizes[ParseAddressMode(mode)];
     }
 
     static byte LowByte(int n)
@@ -297,23 +303,12 @@ class Assembler
     }
 }
 
-class LabelScope
-{
-    public LabelScope Outer = null;
-    public Dictionary<string, int> Table = new Dictionary<string, int>();
-}
-
-enum FixupType
-{
-    Absolute,
-    Relative,
-}
-
 class Fixup
 {
     public AsmOperand Operand;
     public int Location;
-    public FixupType Type;
+    public string Mode;
+    public bool IsRelativeBranchToAbsoluteTarget;
 }
 
 [DebuggerDisplay("{Show(),nq}")]

@@ -142,7 +142,8 @@ static class Program
     {
         string format;
         if (mode == Tag.Implicit) format = "\t{0}";
-        else if (mode == Tag.Absolute || mode == Tag.Relative) format = "\t{0} {1}";
+        else if (mode == Tag.Absolute) format = "\t{0} {1}";
+        else if (mode == Tag.Relative) format = "\t{0} +{1}";
         else if (mode == Tag.Immediate) format = "\t{0} #{1}";
         else if (mode == Tag.IndirectY) format = "\t{0} ({1}),Y";
         else format = "\t{0} {1} ???";

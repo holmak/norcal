@@ -41,7 +41,6 @@ class Expr
 
     public static Expr MakeAsm(string mnemonic, AsmOperand operand, string mode)
     {
-        if (AsmInfo.ShortJumpInstructions.Contains(mnemonic)) mode = Tag.Relative;
         return Make(Tag.Asm, mnemonic, operand, mode);
     }
 
