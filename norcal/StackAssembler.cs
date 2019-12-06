@@ -27,7 +27,7 @@ class StackAssembler
     {
         foreach (Expr op in input)
         {
-            string name, functionName;
+            string name, functionName, target;
             MemoryRegion region;
             CType type, returnType;
             FieldInfo[] fields;
@@ -94,44 +94,82 @@ class StackAssembler
             {
                 PushVariable(name);
             }
-            else if (op.Match(Tag.Call, out functionName))
+            else if (op.Match(Tag.Jump, out target))
             {
-                if (functionName == Tag.StoreGeneric)
+                Emit(Expr.MakeAsm("JMP", new AsmOperand(target)));
+            }
+            else if (op.Match(Tag.JumpIfTrue, out target))
+            {
+                Operand cond = Pop();
+                EmitAsm("LDA", cond);
+                Emit(Expr.MakeAsm("BNE", new AsmOperand(target)));
+            }
+            else if (op.Match(Tag.JumpIfFalse, out target))
+            {
+                Operand cond = Pop();
+                EmitAsm("LDA", cond);
+                Emit(Expr.MakeAsm("BEQ", new AsmOperand(target)));
+            }
+            else if (op.Match(Tag.AddressOf))
+            {
+                Operand r = Pop();
+                if (r.Tag == OperandTag.Variable)
                 {
-                    Operand value = Pop();
-                    Operand dest = Pop();
-                    EmitAsm("LDA", value);
-                    EmitAsm("STA", dest);
+                    PushVariableAddress(r.Name);
                 }
-                else if (functionName == Tag.AddGeneric)
+            }
+            else if (op.Match(Tag.StoreGeneric))
+            {
+                Operand value = Pop();
+                Operand dest = Pop();
+                EmitAsm("LDA", value);
+                EmitAsm("LDX", value, 1);
+                EmitAsm("STA", dest);
+                EmitAsm("STX", dest, 1);
+            }
+            else if (op.Match(Tag.LoadGeneric))
+            {
+                Operand address = Pop();
+                if (address.Tag == OperandTag.Variable)
                 {
-                    Operand right = Pop();
-                    Operand left = Pop();
-                    EmitAsm("CLC");
-                    EmitAsm("LDA", left);
-                    EmitAsm("ADC", right);
-                    PushAccumulator();
-                }
-                else if (functionName == Tag.SubtractGeneric)
-                {
-                    Operand right = Pop();
-                    Operand left = Pop();
-                    EmitAsm("SEC");
-                    EmitAsm("LDA", left);
-                    EmitAsm("SBC", right);
+                    EmitAsm("LDA", address);
+                    EmitAsm("LDX", address, 1);
                     PushAccumulator();
                 }
                 else
                 {
-                    // This is a general-purpose call.
-                    // TODO: Copy the arguments into the function's call frame.
-                    Emit(Expr.MakeAsm("JSR", new AsmOperand(functionName)));
+                    Program.NYI();
                 }
+            }
+            else if (op.Match(Tag.AddGeneric))
+            {
+                Operand right = Pop();
+                Operand left = Pop();
+                EmitAsm("CLC");
+                EmitAsm("LDA", left);
+                EmitAsm("ADC", right);
+                PushAccumulator();
+            }
+            else if (op.Match(Tag.SubtractGeneric))
+            {
+                Operand right = Pop();
+                Operand left = Pop();
+                EmitAsm("SEC");
+                EmitAsm("LDA", left);
+                EmitAsm("SBC", right);
+                PushAccumulator();
             }
             else if (op.Match(Tag.Return))
             {
                 // TODO: "Return" must load top-of-stack into the accumulator, then RTS.
+                Operand result = Pop();
                 Emit(Expr.MakeAsm("RTS"));
+            }
+            else if (op.Match(out functionName))
+            {
+                // This is a general-purpose call.
+                // TODO: Copy the arguments into the function's call frame.
+                Emit(Expr.MakeAsm("JSR", new AsmOperand(functionName)));
             }
             else
             {
@@ -208,9 +246,6 @@ class StackAssembler
 
     void PushAccumulator()
     {
-        // TODO: If there are any other accumulator operands on the virtual stack, they should have been flushed
-        // before a new value was put in the accumulator!
-
         Stack.Add(new Operand
         {
             Tag = OperandTag.Accumulator,
@@ -238,6 +273,18 @@ class StackAssembler
         });
     }
 
+    void PushVariableAddress(string name)
+    {
+        Symbol sym;
+        if (!Symbols.TryGetValue(name, out sym)) Program.Error("variable not defined: {0}", name);
+
+        Stack.Add(new Operand
+        {
+            Tag = OperandTag.VariableAddress,
+            Name = name,
+        });
+    }
+
     Operand Pop()
     {
         Operand r = Stack[Stack.Count - 1];
@@ -250,10 +297,14 @@ class StackAssembler
         Emit(Expr.MakeAsm(mnemonic));
     }
 
-    void EmitAsm(string mnemonic, Operand r)
+    void EmitAsm(string mnemonic, Operand r) => EmitAsm(mnemonic, r, 0);
+
+    void EmitAsm(string mnemonic, Operand r, int offset)
     {
         // TODO: When the operation would affect the accumulator or flag register, flush all acc/flag
         // values on the stack to temporaries.
+
+        // TODO: Handle all operand sizes.
 
         if (r.Tag == OperandTag.Accumulator)
         {
@@ -272,7 +323,11 @@ class StackAssembler
         }
         else if (r.Tag == OperandTag.Variable)
         {
-            Emit(Expr.MakeAsm(mnemonic, new AsmOperand(r.Name)));
+            Emit(Expr.MakeAsm(mnemonic, new AsmOperand(r.Name, offset)));
+        }
+        else if (r.Tag == OperandTag.VariableAddress)
+        {
+            Emit(Expr.MakeAsm(mnemonic, new AsmOperand(r.Name, offset), Tag.Immediate));
         }
         else
         {

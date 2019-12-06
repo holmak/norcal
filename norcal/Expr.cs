@@ -76,6 +76,19 @@ class Expr
         return false;
     }
 
+    public bool Match<T0>(out T0 var0)
+    {
+        if (Args.Length == 1 &&
+            Args[0] is T0)
+        {
+            var0 = (T0)Args[0];
+            return true;
+        }
+
+        var0 = default(T0);
+        return false;
+    }
+
     public bool Match<T1>(string tag, out T1 var1)
     {
         if (Args.Length == 2 &&

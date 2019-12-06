@@ -777,7 +777,7 @@ partial class Parser
 
     Expr MakeAssignExpr(Expr dst, Expr src)
     {
-        return Expr.Make(Tag.StoreGeneric, AddressOf(dst), src);
+        return Expr.Make(Tag.StoreGeneric, dst, src);
     }
 
     Token PeekToken()

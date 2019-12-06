@@ -216,7 +216,7 @@ class Compiler
             {
                 CompileExpression(arg);
             }
-            Emit(Tag.Call, functionName);
+            Emit(functionName);
         }
         else
         {
@@ -303,12 +303,6 @@ class Compiler
 
         Program.Error("symbol not defined: {0}", name);
         return null;
-    }
-
-    enum ScopingRule
-    {
-        Function,
-        Lexical,
     }
 }
 
