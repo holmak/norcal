@@ -159,12 +159,14 @@ static class Program
         else return string.Format("${0:X}", n);
     }
 
+    [DebuggerStepThrough]
     public static void Warning(string format, params object[] args)
     {
         string message = string.Format(format, args);
         Console.Error.WriteLine(message);
     }
 
+    [DebuggerStepThrough]
     public static void Error(string format, params object[] args)
     {
         string message = string.Format(format, args);
@@ -172,6 +174,7 @@ static class Program
         Exit(1);
     }
 
+    [DebuggerStepThrough]
     public static void Panic(string format, params object[] args)
     {
         string message = string.Format(format, args);
@@ -179,6 +182,7 @@ static class Program
         Exit(2);
     }
 
+    [DebuggerStepThrough]
     static void Exit(int code)
     {
         if (AttachDebuggerOnError)
@@ -186,11 +190,15 @@ static class Program
             Debugger.Launch();
         }
 
+        Debugger.Break();
+
         Environment.Exit(code);
     }
 
+    [DebuggerStepThrough]
     public static void NYI() => Panic("not yet implemented");
 
+    [DebuggerStepThrough]
     public static void UnhandledCase() => Panic("unhandled case");
 }
 
