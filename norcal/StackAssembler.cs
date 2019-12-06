@@ -96,19 +96,19 @@ class StackAssembler
             }
             else if (op.Match(Tag.Jump, out target))
             {
-                Emit(Expr.MakeAsm("JMP", new AsmOperand(target)));
+                Emit(Expr.MakeAsm("JMP", new AsmOperand(target), Tag.Absolute));
             }
             else if (op.Match(Tag.JumpIfTrue, out target))
             {
                 Operand cond = Pop();
                 EmitAsm("LDA", cond);
-                Emit(Expr.MakeAsm("BNE", new AsmOperand(target)));
+                Emit(Expr.MakeAsm("BNE", new AsmOperand(target), Tag.Absolute));
             }
             else if (op.Match(Tag.JumpIfFalse, out target))
             {
                 Operand cond = Pop();
                 EmitAsm("LDA", cond);
-                Emit(Expr.MakeAsm("BEQ", new AsmOperand(target)));
+                Emit(Expr.MakeAsm("BEQ", new AsmOperand(target), Tag.Absolute));
             }
             else if (op.Match(Tag.AddressOf))
             {
@@ -122,8 +122,7 @@ class StackAssembler
             {
                 Operand value = Pop();
                 Operand dest = Pop();
-                EmitAsm("LDA", value);
-                EmitAsm("LDX", value, 1);
+                EmitLoadAccumulator(value);
                 EmitAsm("STA", dest);
                 EmitAsm("STX", dest, 1);
             }
@@ -169,7 +168,7 @@ class StackAssembler
             {
                 // This is a general-purpose call.
                 // TODO: Copy the arguments into the function's call frame.
-                Emit(Expr.MakeAsm("JSR", new AsmOperand(functionName)));
+                Emit(Expr.MakeAsm("JSR", new AsmOperand(functionName), Tag.Absolute));
             }
             else
             {
@@ -292,6 +291,30 @@ class StackAssembler
         return r;
     }
 
+    void EmitLoadAccumulator(Operand r)
+    {
+        // TODO: Handle all operand sizes.
+
+        if (r.Tag == OperandTag.Accumulator)
+        {
+            // NOP
+        }
+        else if (r.Tag == OperandTag.Immediate)
+        {
+            Emit(Expr.MakeAsm("LDA", new AsmOperand(LowByte(r.Value)), Tag.Immediate));
+            Emit(Expr.MakeAsm("LDX", new AsmOperand(HighByte(r.Value)), Tag.Immediate));
+        }
+        else if (r.Tag == OperandTag.Variable)
+        {
+            Emit(Expr.MakeAsm("LDA", new AsmOperand(r.Name), Tag.Absolute));
+            Emit(Expr.MakeAsm("LDX", new AsmOperand(r.Name, 1), Tag.Absolute));
+        }
+        else
+        {
+            Program.NYI();
+        }
+    }
+
     void EmitAsm(string mnemonic)
     {
         Emit(Expr.MakeAsm(mnemonic));
@@ -308,14 +331,7 @@ class StackAssembler
 
         if (r.Tag == OperandTag.Accumulator)
         {
-            if (mnemonic == "LDA")
-            {
-                // NOP
-            }
-            else
-            {
-                Program.NYI();
-            }
+            Emit(Expr.MakeAsm(mnemonic));
         }
         else if (r.Tag == OperandTag.Immediate)
         {
@@ -323,7 +339,7 @@ class StackAssembler
         }
         else if (r.Tag == OperandTag.Variable)
         {
-            Emit(Expr.MakeAsm(mnemonic, new AsmOperand(r.Name, offset)));
+            Emit(Expr.MakeAsm(mnemonic, new AsmOperand(r.Name, offset), Tag.Absolute));
         }
         else if (r.Tag == OperandTag.VariableAddress)
         {
@@ -333,6 +349,16 @@ class StackAssembler
         {
             Program.NYI();
         }
+    }
+
+    static int LowByte(int n)
+    {
+        return n & 0xFF;
+    }
+
+    static int HighByte(int n)
+    {
+        return (n >> 8) & 0xFF;
     }
 
     [DebuggerDisplay("{Tag} {Name} = 0x{Value,h} ({Type.Show(),nq})")]

@@ -1,163 +1,163 @@
 @ Minimal working program
 void reset()
 {
-    *STOP = 0;
+    STOP = 0;
 }
 
 @ Output
 @out 1 2 3
 void reset()
 {
-    *OUT = 1;
-    *OUT = 2;
-    *OUT = 3;
-    *STOP = 0;
+    OUT = 1;
+    OUT = 2;
+    OUT = 3;
+    STOP = 0;
 }
 
 @ Integer parsing
 @out 0
 void reset()
 {
-    *OUT = 0;
-    *STOP = 0;
+    OUT = 0;
+    STOP = 0;
 }
 
 @error
 void reset()
 {
-    *OUT = 0x;
-    *STOP = 0;
+    OUT = 0x;
+    STOP = 0;
 }
 
 @error
 void reset()
 {
-    *OUT = 0x0x0x33;
-    *STOP = 0;
+    OUT = 0x0x0x33;
+    STOP = 0;
 }
 
 @out 0
 void reset()
 {
-    *OUT = 0x00000000;
-    *STOP = 0;
+    OUT = 0x00000000;
+    STOP = 0;
 }
 
 @out 0
 void reset()
 {
-    *OUT = $00;
-    *STOP = 0;
+    OUT = $00;
+    STOP = 0;
 }
 
 @out 1
 void reset()
 {
-    *OUT = 1;
-    *STOP = 0;
+    OUT = 1;
+    STOP = 0;
 }
 
 @out 2
 void reset()
 {
-    *OUT = 0x02;
-    *STOP = 0;
+    OUT = 0x02;
+    STOP = 0;
 }
 
 @out 3
 void reset()
 {
-    *OUT = $3;
-    *STOP = 0;
+    OUT = $3;
+    STOP = 0;
 }
 
 @out 20
 void reset()
 {
-    *OUT = 20;
-    *STOP = 0;
+    OUT = 20;
+    STOP = 0;
 }
 
 @out 32
 void reset()
 {
-    *OUT = 0x20;
-    *STOP = 0;
+    OUT = 0x20;
+    STOP = 0;
 }
 
 @out 42
 void reset()
 {
-    *OUT = 42;
-    *STOP = 0;
+    OUT = 42;
+    STOP = 0;
 }
 
 @out 43
 void reset()
 {
-    *OUT = 0x2B;
-    *STOP = 0;
+    OUT = 0x2B;
+    STOP = 0;
 }
 
 @out 255
 void reset()
 {
-    *OUT = 255;
-    *STOP = 0;
+    OUT = 255;
+    STOP = 0;
 }
 
 @out 255
 void reset()
 {
-    *OUT = 0xFF;
-    *STOP = 0;
+    OUT = 0xFF;
+    STOP = 0;
 }
 
 @out 255
 void reset()
 {
-    *OUT = $FF;
-    *STOP = 0;
+    OUT = $FF;
+    STOP = 0;
 }
 
 @out 65535
 void reset()
 {
-    *OUT = 65535;
-    *STOP = 0;
+    OUT = 65535;
+    STOP = 0;
 }
 
 @out 65535
 void reset()
 {
-    *OUT = $FFFF;
-    *STOP = 0;
+    OUT = $FFFF;
+    STOP = 0;
 }
 
 @ Binary operators
 @out 0x5100 0x1125
 void reset()
 {
-    *OUT = 0x20FF + 0x3001;
-    *OUT = 0x1234 - 0x010F;
-    *STOP = 0;
+    OUT = 0x20FF + 0x3001;
+    OUT = 0x1234 - 0x010F;
+    STOP = 0;
 }
 
 @ Parentheses
 @out 1 9
 void reset()
 {
-    *OUT = 10 - 5 - 4;
-    *OUT = 10 - (5 - 4);
-    *STOP = 0;
+    OUT = 10 - 5 - 4;
+    OUT = 10 - (5 - 4);
+    STOP = 0;
 }
 
 @ Nested assignment
 @out 0x1234 0x1234 0x1234
 void reset()
 {
-    *OUT = (*OUT = (*OUT = 0x1234));
-    *STOP = 0;
+    OUT = (OUT = (OUT = 0x1234));
+    STOP = 0;
 }
 
 @ Locals
@@ -165,8 +165,8 @@ void reset()
 void reset()
 {
     uint16_t a = 0x1122;
-    *OUT = a;
-    *STOP = 0;
+    OUT = a;
+    STOP = 0;
 }
 
 @ Locals
@@ -176,10 +176,10 @@ void reset()
     uint16_t b;
     uint16_t a = 0x1122;
     b = 0x3344;
-    *OUT = b;
-    *OUT = a;
-    *OUT = b;
-    *STOP = 0;
+    OUT = b;
+    OUT = a;
+    OUT = b;
+    STOP = 0;
 }
 
 @ If statement
@@ -188,14 +188,14 @@ void reset()
 {
     uint16_t a;
     a = 4;
-    if (a) *OUT = 1;
+    if (a) OUT = 1;
     a = 0x1200;
-    if (a) *OUT = 2;
+    if (a) OUT = 2;
     a = 0;
-    if (a) *OUT = 3;
+    if (a) OUT = 3;
     a = 6;
-    if (a) *OUT = 4;
-    *STOP = 0;
+    if (a) OUT = 4;
+    STOP = 0;
 }
 
 @ If statement
@@ -208,16 +208,16 @@ void reset()
 
     uint16_t x = 0;
     if (a) x = x + 1;
-    *OUT = x;
+    OUT = x;
     if (b) { x = x + 1; }
-    *OUT = x;
+    OUT = x;
     if (c)
     {
-        *OUT = 9;
+        OUT = 9;
         x = x + 1;
     }
-    *OUT = x;
-    *STOP = 0;
+    OUT = x;
+    STOP = 0;
 }
 
 @ If / else statements
@@ -226,19 +226,19 @@ void test(uint16_t i)
 {
     if (i % 3 == 0)
     {
-        if (i % 5 == 0) *OUT = 0xFFBB;
-        else *OUT = 0xFFFF;
+        if (i % 5 == 0) OUT = 0xFFBB;
+        else OUT = 0xFFFF;
     }
-    else if (i % 5 == 0) *OUT = 0xBBBB;
+    else if (i % 5 == 0) OUT = 0xBBBB;
     else
     {
-        *OUT = i;
+        OUT = i;
     }
 }
 void reset()
 {
     for (uint16_t i = 1; i <= 20; i++) test(i);
-    *STOP = 0;
+    STOP = 0;
 }
 
 @ Invalid else statement
@@ -246,36 +246,36 @@ void reset()
 void reset()
 {
     uint8_t i = 5;
-    if (i == 0) *OUTB = 0;
-    else if (i == 1) *OUTB = 1;
-    else if (i == 2) *OUTB = 2;
-    else *OUTB = 3;
-    else *OUTB = 4;
-    *STOP = 0;
+    if (i == 0) OUTB = 0;
+    else if (i == 1) OUTB = 1;
+    else if (i == 2) OUTB = 2;
+    else OUTB = 3;
+    else OUTB = 4;
+    STOP = 0;
 }
 
 @ Single line comments
 @out 1 4 5
 void reset()
 {
-    *OUT = 1;
-    //*OUT = 2;
-//    *OUT = 3;
-    *OUT = 4;
+    OUT = 1;
+    //OUT = 2;
+//    OUT = 3;
+    OUT = 4;
     //
-    *OUT = 5;
-    *STOP = 0;
+    OUT = 5;
+    STOP = 0;
 }
 
 @ Functions
 @out 1 2 1 3 1 4
-void f(uint16_t x) { *OUT = 1; *OUT = x; }
+void f(uint16_t x) { OUT = 1; OUT = x; }
 void reset()
 {
     f(2);
     f(3);
     f(4);
-    *STOP = 0;
+    STOP = 0;
 }
 
 @ Function arguments
@@ -283,8 +283,8 @@ void reset()
 
 void f(uint16_t red, uint16_t blue)
 {
-    *OUT = blue;
-    *OUT = red;
+    OUT = blue;
+    OUT = red;
 }
 
 void reset()
@@ -292,7 +292,7 @@ void reset()
     f(7, 1);
     f(8, 2);
     f(9, 3);
-    *STOP = 0;
+    STOP = 0;
 }
 
 @ Function return values
@@ -306,10 +306,10 @@ uint16_t f(uint16_t arg)
 
 void reset()
 {
-    *OUT = f(1);
-    *OUT = f(2);
-    *OUT = f(3);
-    *STOP = 0;
+    OUT = f(1);
+    OUT = f(2);
+    OUT = f(3);
+    STOP = 0;
 }
 
 @ Multiple functions
@@ -327,10 +327,10 @@ uint16_t g(uint16_t arg)
 
 void reset()
 {
-    *OUT = f(1);
-    *OUT = g(2);
-    *OUT = f(3);
-    *STOP = 0;
+    OUT = f(1);
+    OUT = g(2);
+    OUT = f(3);
+    STOP = 0;
 }
 
 @ Entry points
@@ -338,20 +338,20 @@ void reset()
 
 void nmi()
 {
-    *OUT = 0x7766;
-    *STOP = 0;
+    OUT = 0x7766;
+    STOP = 0;
 }
 
 void reset()
 {
-    *OUT = 0x9988;
-    *STOP = 0;
+    OUT = 0x9988;
+    STOP = 0;
 }
 
 void brk()
 {
-    *OUT = 0x2211;
-    *STOP = 0;
+    OUT = 0x2211;
+    STOP = 0;
 }
 
 @ Preprocessor support
@@ -361,8 +361,8 @@ void brk()
 
 void reset()
 {
-    *OUT = 0x4433;
-    *STOP = 0;
+    OUT = 0x4433;
+    STOP = 0;
 }
 
 @ "static"
@@ -376,7 +376,7 @@ static uint8_t f()
 
 void reset()
 {
-    *STOP = 0;
+    STOP = 0;
 }
 
 @ uint8_t
@@ -386,9 +386,9 @@ void reset()
 {
     uint8_t small = 0x22;
     uint16_t large = 0x4433;
-    *OUTB = small;
-    *OUT = large;
-    *STOP = 0;
+    OUTB = small;
+    OUT = large;
+    STOP = 0;
 }
 
 @ Choosing types of literals
@@ -403,9 +403,9 @@ void reset()
     large = 0x3456;
     small = small + 0x80;
     large = large + 0x4000;
-    *OUTB = small;
-    *OUT = large;
-    *STOP = 0;
+    OUTB = small;
+    OUT = large;
+    STOP = 0;
 }
 
 @ Typechecking pointers
@@ -414,8 +414,8 @@ void reset()
 void reset()
 {
     uint16_t number = 0x1122;
-    *OUT = number;
-    *STOP = 0;
+    OUT = number;
+    STOP = 0;
 }
 
 @ Typechecking pointers
@@ -425,8 +425,8 @@ void reset()
 void reset()
 {
     uint16_t *ptr = 0x3344;
-    *OUT = ptr;
-    *STOP = 0;
+    OUT = ptr;
+    STOP = 0;
 }
 
 @ Typecheck return statement
@@ -441,8 +441,8 @@ uint8_t fwide()
 
 void reset()
 {
-    *OUT = fwide();
-    *STOP = 0;
+    OUT = fwide();
+    STOP = 0;
 }
 
 @ Assigning to constant
@@ -453,7 +453,7 @@ void reset()
 {
     uint16_t *ptr = 0x3344;
     OUT = ptr;
-    *STOP = 0;
+    STOP = 0;
 }
 
 @ Global variables
@@ -464,7 +464,7 @@ static uint8_t small = 2;
 
 void reset()
 {
-    *STOP = 0;
+    STOP = 0;
 }
 
 @ Global variables
@@ -479,9 +479,9 @@ void reset()
     large = 0x3456;
     small = small + small;
     large = large + large;
-    *OUTB = small;
-    *OUT = large;
-    *STOP = 0;
+    OUTB = small;
+    OUT = large;
+    STOP = 0;
 }
 
 @ for loops
@@ -491,9 +491,9 @@ void reset()
 {
     for (uint8_t i = 5; i; i = i - 1)
     {
-        *OUTB = i;
+        OUTB = i;
     }
-    *STOP = 0;
+    STOP = 0;
 }
 
 @out 16
@@ -506,8 +506,8 @@ void reset()
         if (i > 3) continue;
         n = n + i;
     }
-    *OUTB = n;
-    *STOP = 0;
+    OUTB = n;
+    STOP = 0;
 }
 
 @out 22
@@ -519,8 +519,8 @@ void reset()
         n = n + i;
         if (i < 4) break;
     }
-    *OUTB = n;
-    *STOP = 0;
+    OUTB = n;
+    STOP = 0;
 }
 
 @out 10 11 20 21
@@ -528,15 +528,15 @@ void reset()
 {
     for (uint8_t i = 10; i < 12; i++)
     {
-        *OUT = i;
+        OUT = i;
     }
 
     for (uint8_t j = 20; j < 22; j++)
     {
-        *OUT = j;
+        OUT = j;
     }
 
-    *STOP = 0;
+    STOP = 0;
 }
 
 @ while loops
@@ -546,10 +546,10 @@ void reset()
     uint8_t i = 5;
     while (i)
     {
-        *OUTB = i;
+        OUTB = i;
         i = i - 1;
     }
-    *STOP = 0;
+    STOP = 0;
 }
 
 @out 16
@@ -563,8 +563,8 @@ void reset()
         if (i > 3) continue;
         n = n + i;
     }
-    *OUTB = n;
-    *STOP = 0;
+    OUTB = n;
+    STOP = 0;
 }
 
 @out 22
@@ -578,8 +578,8 @@ void reset()
         if (i < 4) break;
         i = i - 1;
     }
-    *OUTB = n;
-    *STOP = 0;
+    OUTB = n;
+    STOP = 0;
 }
 
 @ structs
@@ -593,8 +593,8 @@ void reset()
     struct Pair p;
     p.x = 10;
     p.y = p.x + 2;
-    *OUT = p.y;
-    *STOP = 0;
+    OUT = p.y;
+    STOP = 0;
 }
 
 @ structs
@@ -612,8 +612,8 @@ void reset()
     struct Pair p;
     p.a = 90;
     p.b = 45;
-    *OUTB = hadd(&p);
-    *STOP = 0;
+    OUTB = hadd(&p);
+    STOP = 0;
 }
 
 @ structs as globals
@@ -626,8 +626,8 @@ void reset()
 {
     r.a = 15;
     r.z = 60;
-    *OUTB = r.z - r.a;
-    *STOP = 0;
+    OUTB = r.z - r.a;
+    STOP = 0;
 }
 
 @ arrays
@@ -638,8 +638,8 @@ uint8_t factors[6];
 void reset()
 {
     factors[5] = 42;
-    *OUTB = factors[5];
-    *STOP = 0;
+    OUTB = factors[5];
+    STOP = 0;
 }
 
 @ arrays
@@ -649,8 +649,8 @@ void reset()
 {
     uint16_t factors[9];
     factors[8] = 43;
-    *OUT = factors[8];
-    *STOP = 0;
+    OUT = factors[8];
+    STOP = 0;
 }
 
 @ comparison: equal
@@ -659,8 +659,8 @@ void reset()
 {
     uint8_t a = 4;
     uint8_t b = 5;
-    *OUTB = a == b;
-    *STOP = 0;
+    OUTB = a == b;
+    STOP = 0;
 }
 
 @out 1
@@ -668,8 +668,8 @@ void reset()
 {
     uint8_t a = 5;
     uint8_t b = 5;
-    *OUTB = a == b;
-    *STOP = 0;
+    OUTB = a == b;
+    STOP = 0;
 }
 
 @out 0
@@ -677,8 +677,8 @@ void reset()
 {
     uint8_t a = 6;
     uint8_t b = 5;
-    *OUTB = a == b;
-    *STOP = 0;
+    OUTB = a == b;
+    STOP = 0;
 }
 
 @out 0
@@ -686,8 +686,8 @@ void reset()
 {
     uint8_t a = 255;
     uint8_t b = 0;
-    *OUTB = a == b;
-    *STOP = 0;
+    OUTB = a == b;
+    STOP = 0;
 }
 
 @out 1
@@ -695,8 +695,8 @@ void reset()
 {
     uint16_t a = 0x1234;
     uint16_t b = 0x1234;
-    *OUTB = a == b;
-    *STOP = 0;
+    OUTB = a == b;
+    STOP = 0;
 }
 
 @out 0
@@ -704,8 +704,8 @@ void reset()
 {
     uint16_t a = 0x4000;
     uint16_t b = 0x4001;
-    *OUTB = a == b;
-    *STOP = 0;
+    OUTB = a == b;
+    STOP = 0;
 }
 
 @out 0
@@ -713,8 +713,8 @@ void reset()
 {
     uint16_t a = 0x40FF;
     uint16_t b = 0x41FF;
-    *OUTB = a == b;
-    *STOP = 0;
+    OUTB = a == b;
+    STOP = 0;
 }
 
 @ comparison: not equal
@@ -723,8 +723,8 @@ void reset()
 {
     uint8_t a = 4;
     uint8_t b = 5;
-    *OUTB = a != b;
-    *STOP = 0;
+    OUTB = a != b;
+    STOP = 0;
 }
 
 @out 0
@@ -732,8 +732,8 @@ void reset()
 {
     uint8_t a = 5;
     uint8_t b = 5;
-    *OUTB = a != b;
-    *STOP = 0;
+    OUTB = a != b;
+    STOP = 0;
 }
 
 @out 1
@@ -741,8 +741,8 @@ void reset()
 {
     uint8_t a = 6;
     uint8_t b = 5;
-    *OUTB = a != b;
-    *STOP = 0;
+    OUTB = a != b;
+    STOP = 0;
 }
 
 @out 1
@@ -750,8 +750,8 @@ void reset()
 {
     uint8_t a = 255;
     uint8_t b = 0;
-    *OUTB = a != b;
-    *STOP = 0;
+    OUTB = a != b;
+    STOP = 0;
 }
 
 @out 0
@@ -759,8 +759,8 @@ void reset()
 {
     uint16_t a = 0x1234;
     uint16_t b = 0x1234;
-    *OUTB = a != b;
-    *STOP = 0;
+    OUTB = a != b;
+    STOP = 0;
 }
 
 @out 1
@@ -768,8 +768,8 @@ void reset()
 {
     uint16_t a = 0x4000;
     uint16_t b = 0x4001;
-    *OUTB = a != b;
-    *STOP = 0;
+    OUTB = a != b;
+    STOP = 0;
 }
 
 @out 1
@@ -777,8 +777,8 @@ void reset()
 {
     uint16_t a = 0x40FF;
     uint16_t b = 0x41FF;
-    *OUTB = a != b;
-    *STOP = 0;
+    OUTB = a != b;
+    STOP = 0;
 }
 
 @ comparison: less than
@@ -787,8 +787,8 @@ void reset()
 {
     uint8_t a = 4;
     uint8_t b = 5;
-    *OUTB = a < b;
-    *STOP = 0;
+    OUTB = a < b;
+    STOP = 0;
 }
 
 @out 0
@@ -796,8 +796,8 @@ void reset()
 {
     uint8_t a = 5;
     uint8_t b = 5;
-    *OUTB = a < b;
-    *STOP = 0;
+    OUTB = a < b;
+    STOP = 0;
 }
 
 @out 0
@@ -805,8 +805,8 @@ void reset()
 {
     uint8_t a = 6;
     uint8_t b = 5;
-    *OUTB = a < b;
-    *STOP = 0;
+    OUTB = a < b;
+    STOP = 0;
 }
 
 @out 0
@@ -814,8 +814,8 @@ void reset()
 {
     uint8_t a = 255;
     uint8_t b = 0;
-    *OUTB = a < b;
-    *STOP = 0;
+    OUTB = a < b;
+    STOP = 0;
 }
 
 @out 1
@@ -823,8 +823,8 @@ void reset()
 {
     uint16_t a = 0x1233;
     uint16_t b = 0x1234;
-    *OUTB = a < b;
-    *STOP = 0;
+    OUTB = a < b;
+    STOP = 0;
 }
 
 @out 1
@@ -832,8 +832,8 @@ void reset()
 {
     uint16_t a = 0x1135;
     uint16_t b = 0x1234;
-    *OUTB = a < b;
-    *STOP = 0;
+    OUTB = a < b;
+    STOP = 0;
 }
 
 @out 0
@@ -841,8 +841,8 @@ void reset()
 {
     uint16_t a = 0x1234;
     uint16_t b = 0x1234;
-    *OUTB = a < b;
-    *STOP = 0;
+    OUTB = a < b;
+    STOP = 0;
 }
 
 @out 0
@@ -850,8 +850,8 @@ void reset()
 {
     uint16_t a = 0x1235;
     uint16_t b = 0x1234;
-    *OUTB = a < b;
-    *STOP = 0;
+    OUTB = a < b;
+    STOP = 0;
 }
 
 @out 0
@@ -859,8 +859,8 @@ void reset()
 {
     uint16_t a = 0x1333;
     uint16_t b = 0x1234;
-    *OUTB = a < b;
-    *STOP = 0;
+    OUTB = a < b;
+    STOP = 0;
 }
 
 @ comparison: greater than
@@ -869,8 +869,8 @@ void reset()
 {
     uint8_t a = 4;
     uint8_t b = 5;
-    *OUTB = a > b;
-    *STOP = 0;
+    OUTB = a > b;
+    STOP = 0;
 }
 
 @out 0
@@ -878,8 +878,8 @@ void reset()
 {
     uint8_t a = 5;
     uint8_t b = 5;
-    *OUTB = a > b;
-    *STOP = 0;
+    OUTB = a > b;
+    STOP = 0;
 }
 
 @out 1
@@ -887,8 +887,8 @@ void reset()
 {
     uint8_t a = 6;
     uint8_t b = 5;
-    *OUTB = a > b;
-    *STOP = 0;
+    OUTB = a > b;
+    STOP = 0;
 }
 
 @out 0
@@ -896,8 +896,8 @@ void reset()
 {
     uint8_t a = 0;
     uint8_t b = 255;
-    *OUTB = a > b;
-    *STOP = 0;
+    OUTB = a > b;
+    STOP = 0;
 }
 
 @out 0
@@ -905,8 +905,8 @@ void reset()
 {
     uint16_t a = 0x1233;
     uint16_t b = 0x1234;
-    *OUTB = a > b;
-    *STOP = 0;
+    OUTB = a > b;
+    STOP = 0;
 }
 
 @out 0
@@ -914,8 +914,8 @@ void reset()
 {
     uint16_t a = 0x1135;
     uint16_t b = 0x1234;
-    *OUTB = a > b;
-    *STOP = 0;
+    OUTB = a > b;
+    STOP = 0;
 }
 
 @out 0
@@ -923,8 +923,8 @@ void reset()
 {
     uint16_t a = 0x1234;
     uint16_t b = 0x1234;
-    *OUTB = a > b;
-    *STOP = 0;
+    OUTB = a > b;
+    STOP = 0;
 }
 
 @out 1
@@ -932,8 +932,8 @@ void reset()
 {
     uint16_t a = 0x1235;
     uint16_t b = 0x1234;
-    *OUTB = a > b;
-    *STOP = 0;
+    OUTB = a > b;
+    STOP = 0;
 }
 
 @out 1
@@ -941,8 +941,8 @@ void reset()
 {
     uint16_t a = 0x1333;
     uint16_t b = 0x1234;
-    *OUTB = a > b;
-    *STOP = 0;
+    OUTB = a > b;
+    STOP = 0;
 }
 
 @ comparison: less than or equal
@@ -951,8 +951,8 @@ void reset()
 {
     uint8_t a = 4;
     uint8_t b = 5;
-    *OUTB = a <= b;
-    *STOP = 0;
+    OUTB = a <= b;
+    STOP = 0;
 }
 
 @out 1
@@ -960,8 +960,8 @@ void reset()
 {
     uint8_t a = 5;
     uint8_t b = 5;
-    *OUTB = a <= b;
-    *STOP = 0;
+    OUTB = a <= b;
+    STOP = 0;
 }
 
 @out 0
@@ -969,8 +969,8 @@ void reset()
 {
     uint8_t a = 6;
     uint8_t b = 5;
-    *OUTB = a <= b;
-    *STOP = 0;
+    OUTB = a <= b;
+    STOP = 0;
 }
 
 @out 0
@@ -978,8 +978,8 @@ void reset()
 {
     uint8_t a = 255;
     uint8_t b = 0;
-    *OUTB = a <= b;
-    *STOP = 0;
+    OUTB = a <= b;
+    STOP = 0;
 }
 
 @out 1
@@ -987,8 +987,8 @@ void reset()
 {
     uint16_t a = 0x1233;
     uint16_t b = 0x1234;
-    *OUTB = a <= b;
-    *STOP = 0;
+    OUTB = a <= b;
+    STOP = 0;
 }
 
 @out 1
@@ -996,8 +996,8 @@ void reset()
 {
     uint16_t a = 0x1135;
     uint16_t b = 0x1234;
-    *OUTB = a <= b;
-    *STOP = 0;
+    OUTB = a <= b;
+    STOP = 0;
 }
 
 @out 1
@@ -1005,8 +1005,8 @@ void reset()
 {
     uint16_t a = 0x1234;
     uint16_t b = 0x1234;
-    *OUTB = a <= b;
-    *STOP = 0;
+    OUTB = a <= b;
+    STOP = 0;
 }
 
 @out 0
@@ -1014,8 +1014,8 @@ void reset()
 {
     uint16_t a = 0x1235;
     uint16_t b = 0x1234;
-    *OUTB = a <= b;
-    *STOP = 0;
+    OUTB = a <= b;
+    STOP = 0;
 }
 
 @out 0
@@ -1023,8 +1023,8 @@ void reset()
 {
     uint16_t a = 0x1333;
     uint16_t b = 0x1234;
-    *OUTB = a <= b;
-    *STOP = 0;
+    OUTB = a <= b;
+    STOP = 0;
 }
 
 @ comparison: greater than or equal
@@ -1033,8 +1033,8 @@ void reset()
 {
     uint8_t a = 4;
     uint8_t b = 5;
-    *OUTB = a >= b;
-    *STOP = 0;
+    OUTB = a >= b;
+    STOP = 0;
 }
 
 @out 1
@@ -1042,8 +1042,8 @@ void reset()
 {
     uint8_t a = 5;
     uint8_t b = 5;
-    *OUTB = a >= b;
-    *STOP = 0;
+    OUTB = a >= b;
+    STOP = 0;
 }
 
 @out 1
@@ -1051,8 +1051,8 @@ void reset()
 {
     uint8_t a = 6;
     uint8_t b = 5;
-    *OUTB = a >= b;
-    *STOP = 0;
+    OUTB = a >= b;
+    STOP = 0;
 }
 
 @out 0
@@ -1060,8 +1060,8 @@ void reset()
 {
     uint8_t a = 0;
     uint8_t b = 255;
-    *OUTB = a >= b;
-    *STOP = 0;
+    OUTB = a >= b;
+    STOP = 0;
 }
 
 @out 0
@@ -1069,8 +1069,8 @@ void reset()
 {
     uint16_t a = 0x1233;
     uint16_t b = 0x1234;
-    *OUTB = a >= b;
-    *STOP = 0;
+    OUTB = a >= b;
+    STOP = 0;
 }
 
 @out 0
@@ -1078,8 +1078,8 @@ void reset()
 {
     uint16_t a = 0x1135;
     uint16_t b = 0x1234;
-    *OUTB = a >= b;
-    *STOP = 0;
+    OUTB = a >= b;
+    STOP = 0;
 }
 
 @out 1
@@ -1087,8 +1087,8 @@ void reset()
 {
     uint16_t a = 0x1234;
     uint16_t b = 0x1234;
-    *OUTB = a >= b;
-    *STOP = 0;
+    OUTB = a >= b;
+    STOP = 0;
 }
 
 @out 1
@@ -1096,8 +1096,8 @@ void reset()
 {
     uint16_t a = 0x1235;
     uint16_t b = 0x1234;
-    *OUTB = a >= b;
-    *STOP = 0;
+    OUTB = a >= b;
+    STOP = 0;
 }
 
 @out 1
@@ -1105,8 +1105,8 @@ void reset()
 {
     uint16_t a = 0x1333;
     uint16_t b = 0x1234;
-    *OUTB = a >= b;
-    *STOP = 0;
+    OUTB = a >= b;
+    STOP = 0;
 }
 
 @ bitwise operators
@@ -1115,8 +1115,8 @@ void reset()
 {
     uint8_t a = 0xAB;
     uint8_t b = 0xF0;
-    *OUTB = a & b;
-    *STOP = 0;
+    OUTB = a & b;
+    STOP = 0;
 }
 
 @out 0xA0C0
@@ -1124,8 +1124,8 @@ void reset()
 {
     uint16_t a = 0xABCD;
     uint16_t b = 0xF0F0;
-    *OUT = a & b;
-    *STOP = 0;
+    OUT = a & b;
+    STOP = 0;
 }
 
 @out 0xAB
@@ -1133,8 +1133,8 @@ void reset()
 {
     uint8_t a = 0xA0;
     uint8_t b = 0x0B;
-    *OUTB = a | b;
-    *STOP = 0;
+    OUTB = a | b;
+    STOP = 0;
 }
 
 @out 0xABCD
@@ -1142,8 +1142,8 @@ void reset()
 {
     uint16_t a = 0xA0C0;
     uint16_t b = 0x0B0D;
-    *OUT = a | b;
-    *STOP = 0;
+    OUT = a | b;
+    STOP = 0;
 }
 
 @out 0x5A
@@ -1151,8 +1151,8 @@ void reset()
 {
     uint8_t a = 0xA5;
     uint8_t b = 0xFF;
-    *OUTB = a ^ b;
-    *STOP = 0;
+    OUTB = a ^ b;
+    STOP = 0;
 }
 
 @out 0xAA55
@@ -1160,33 +1160,33 @@ void reset()
 {
     uint16_t a = 0xA5A5;
     uint16_t b = 0x0FF0;
-    *OUT = a ^ b;
-    *STOP = 0;
+    OUT = a ^ b;
+    STOP = 0;
 }
 
 @out 0x3C
 void reset()
 {
     uint8_t a = 0xC3;
-    *OUTB = ~a;
-    *STOP = 0;
+    OUTB = ~a;
+    STOP = 0;
 }
 
 @out 0x3C5A
 void reset()
 {
     uint16_t a = 0xC3A5;
-    *OUT = ~a;
-    *STOP = 0;
+    OUT = ~a;
+    STOP = 0;
 }
 
 @ Associativity
 @out 8 4
 void reset()
 {
-    *OUT = 9 - 3 + 2;
-    *OUT = 9 - (3 + 2);
-    *STOP = 0;
+    OUT = 9 - 3 + 2;
+    OUT = 9 - (3 + 2);
+    STOP = 0;
 }
 
 @ arithmetic
@@ -1194,12 +1194,12 @@ void reset()
 void reset()
 {
     uint8_t n = 20;
-    *OUTB = n + 3;
-    *OUTB = n - 3;
-    *OUTB = n * 3;
-    *OUTB = n / 3;
-    *OUTB = n % 3;
-    *STOP = 0;
+    OUTB = n + 3;
+    OUTB = n - 3;
+    OUTB = n * 3;
+    OUTB = n / 3;
+    OUTB = n % 3;
+    STOP = 0;
 }
 
 @ arithmetic that overflows
@@ -1207,10 +1207,10 @@ void reset()
 void reset()
 {
     uint8_t n = 197;
-    *OUTB = n + 123;
-    *OUTB = n - 240;
-    *OUTB = n * 123;
-    *STOP = 0;
+    OUTB = n + 123;
+    OUTB = n - 240;
+    OUTB = n * 123;
+    STOP = 0;
 }
 
 @ arithmetic
@@ -1218,14 +1218,14 @@ void reset()
 void reset()
 {
     uint16_t n = 400;
-    *OUT = n + 3;
-    *OUT = n - 3;
-    *OUT = n * 3;
-    *OUT = n / 3;
-    *OUT = n % 3;
-    *OUT = n / 300;
-    *OUT = n % 300;
-    *STOP = 0;
+    OUT = n + 3;
+    OUT = n - 3;
+    OUT = n * 3;
+    OUT = n / 3;
+    OUT = n % 3;
+    OUT = n / 300;
+    OUT = n % 300;
+    STOP = 0;
 }
 
 @ arithmetic that overflows
@@ -1233,10 +1233,10 @@ void reset()
 void reset()
 {
     uint16_t n = 40273;
-    *OUT = n + 31762;
-    *OUT = n - 61927;
-    *OUT = n * 58219;
-    *STOP = 0;
+    OUT = n + 31762;
+    OUT = n - 61927;
+    OUT = n * 58219;
+    STOP = 0;
 }
 
 @ increment / decrement
@@ -1244,32 +1244,32 @@ void reset()
 void reset()
 {
     uint8_t n = 42;
-    *OUTB = n;
-    *OUTB = ++n;
-    *OUTB = n;
-    *OUTB = n++;
-    *OUTB = n;
-    *OUTB = --n;
-    *OUTB = n;
-    *OUTB = n--;
-    *OUTB = n;
-    *STOP = 0;
+    OUTB = n;
+    OUTB = ++n;
+    OUTB = n;
+    OUTB = n++;
+    OUTB = n;
+    OUTB = --n;
+    OUTB = n;
+    OUTB = n--;
+    OUTB = n;
+    STOP = 0;
 }
 
 @out 0xFF 0 0 0xFF 0xFF 0xFF 0 0 0xFF
 void reset()
 {
     uint8_t n = 0xFF;
-    *OUTB = n;
-    *OUTB = ++n;
-    *OUTB = n;
-    *OUTB = --n;
-    *OUTB = n;
-    *OUTB = n++;
-    *OUTB = n;
-    *OUTB = n--;
-    *OUTB = n;
-    *STOP = 0;
+    OUTB = n;
+    OUTB = ++n;
+    OUTB = n;
+    OUTB = --n;
+    OUTB = n;
+    OUTB = n++;
+    OUTB = n;
+    OUTB = n--;
+    OUTB = n;
+    STOP = 0;
 }
 
 @ increment / decrement
@@ -1277,32 +1277,32 @@ void reset()
 void reset()
 {
     uint16_t n = 42732;
-    *OUT = n;
-    *OUT = ++n;
-    *OUT = n;
-    *OUT = n++;
-    *OUT = n;
-    *OUT = --n;
-    *OUT = n;
-    *OUT = n--;
-    *OUT = n;
-    *STOP = 0;
+    OUT = n;
+    OUT = ++n;
+    OUT = n;
+    OUT = n++;
+    OUT = n;
+    OUT = --n;
+    OUT = n;
+    OUT = n--;
+    OUT = n;
+    STOP = 0;
 }
 
 @out 0xFFFF 0 0 0xFFFF 0xFFFF 0xFFFF 0 0 0xFFFF
 void reset()
 {
     uint16_t n = 0xFFFF;
-    *OUT = n;
-    *OUT = ++n;
-    *OUT = n;
-    *OUT = --n;
-    *OUT = n;
-    *OUT = n++;
-    *OUT = n;
-    *OUT = n--;
-    *OUT = n;
-    *STOP = 0;
+    OUT = n;
+    OUT = ++n;
+    OUT = n;
+    OUT = --n;
+    OUT = n;
+    OUT = n++;
+    OUT = n;
+    OUT = n--;
+    OUT = n;
+    STOP = 0;
 }
 
 @ simulator timeout
@@ -1324,16 +1324,16 @@ void e() { d(); }
 void reset()
 {
     e();
-    *STOP = 0;
+    STOP = 0;
 }
 
 @ binary detection
 @out 42 0x1234
 void reset()
 {
-    *OUTB = 0b00101010;
-    *OUT = 0b1001000110100;
-    *STOP = 0;
+    OUTB = 0b00101010;
+    OUT = 0b1001000110100;
+    STOP = 0;
 }
 
 @ shift left
@@ -1342,12 +1342,12 @@ void reset()
 {
     uint8_t a = 11;
     uint8_t b = 3;
-    *OUTB = a << b;
+    OUTB = a << b;
     b = 15;
-    *OUTB = a << b;
+    OUTB = a << b;
     b = 0;
-    *OUTB = a << b;
-    *STOP = 0;
+    OUTB = a << b;
+    STOP = 0;
 }
 
 @out 88 45056 0 0 0x1234
@@ -1355,17 +1355,17 @@ void reset()
 {
     uint16_t a = 11;
     uint16_t b = 3;
-    *OUT = a << b;
+    OUT = a << b;
     b = 12;
-    *OUT = a << b;
+    OUT = a << b;
     b = 40;
-    *OUT = a << b;
+    OUT = a << b;
     b = 256;
-    *OUT = a << b;
+    OUT = a << b;
     a = 0x1234;
     b = 0;
-    *OUT = a << b;
-    *STOP = 0;
+    OUT = a << b;
+    STOP = 0;
 }
 
 @ shift right
@@ -1374,12 +1374,12 @@ void reset()
 {
     uint8_t a = 88;
     uint8_t b = 3;
-    *OUTB = a >> b;
+    OUTB = a >> b;
     b = 15;
-    *OUTB = a >> b;
+    OUTB = a >> b;
     b = 0;
-    *OUTB = a >> b;
-    *STOP = 0;
+    OUTB = a >> b;
+    STOP = 0;
 }
 
 @out 11 11 0 0 0x1234
@@ -1387,18 +1387,18 @@ void reset()
 {
     uint16_t a = 88;
     uint16_t b = 3;
-    *OUT = a >> b;
+    OUT = a >> b;
     a = 45056;
     b = 12;
-    *OUT = a >> b;
+    OUT = a >> b;
     b = 40;
-    *OUT = a >> b;
+    OUT = a >> b;
     b = 256;
-    *OUT = a >> b;
+    OUT = a >> b;
     a = 0x1234;
     b = 0;
-    *OUT = a >> b;
-    *STOP = 0;
+    OUT = a >> b;
+    STOP = 0;
 }
 
 @ Long branch instructions
@@ -1409,16 +1409,16 @@ void reset()
     {
         if (i % 3 == 0)
         {
-            if (i % 5 == 0) *OUT = 0xFFBB;
-            else *OUT = 0xFFFF;
+            if (i % 5 == 0) OUT = 0xFFBB;
+            else OUT = 0xFFFF;
         }
-        else if (i % 5 == 0) *OUT = 0xBBBB;
+        else if (i % 5 == 0) OUT = 0xBBBB;
         else
         {
-            *OUT = i;
+            OUT = i;
         }
     }
-    *STOP = 0;
+    STOP = 0;
 }
 
 @out 0 2 2 2 0 0 0 5 5 5 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
@@ -1428,20 +1428,20 @@ void reset()
     {
         if (i == 5)
         {
-            *OUTB = 5;
-            *OUTB = 5;
-            *OUTB = 5;
+            OUTB = 5;
+            OUTB = 5;
+            OUTB = 5;
         }
         else if (i == 2)
         {
-            *OUTB = 2;
-            *OUTB = 2;
-            *OUTB = 2;
+            OUTB = 2;
+            OUTB = 2;
+            OUTB = 2;
         }
 
-        *OUTB = 0;
+        OUTB = 0;
     }
-    *STOP = 0;
+    STOP = 0;
 }
 
 @ Conditional expressions
@@ -1450,9 +1450,9 @@ void reset()
 {
     for (uint16_t i = 1; i <= 20; i++)
     {
-        *OUT = i % 3 == 0 ? (i % 5 == 0 ? 0xFFBB : 0xFFFF) : (i % 5 == 0 ? 0xBBBB : i);
+        OUT = i % 3 == 0 ? (i % 5 == 0 ? 0xFFBB : 0xFFFF) : (i % 5 == 0 ? 0xBBBB : i);
     }
-    *STOP = 0;
+    STOP = 0;
 }
 
 @ Invalid conditional expressions
@@ -1461,8 +1461,8 @@ void reset()
 {
     uint8_t a = 0;
     uint16_t b = 0;
-    *OUTB = (a == 4) ? a : b;
-    *STOP = 0;
+    OUTB = (a == 4) ? a : b;
+    STOP = 0;
 }
 
 @ Logical operators
@@ -1473,39 +1473,39 @@ void reset()
 
 uint8_t yes(uint16_t explode)
 {
-    if (explode) *OUT = 8;
+    if (explode) OUT = 8;
     return 1;
 }
 
 uint8_t no(uint16_t explode)
 {
-    if (explode) *OUT = 8;
+    if (explode) OUT = 8;
     return 0;
 }
 
 void reset()
 {
-    *OUTB = no(0);
-    *OUTB = !no(0);
-    *OUTB = yes(0);
-    *OUTB = !yes(0);
+    OUTB = no(0);
+    OUTB = !no(0);
+    OUTB = yes(0);
+    OUTB = !yes(0);
 
-    *OUTB = no(0) && no(1);
-    *OUTB = no(0) && yes(1);
-    *OUTB = yes(0) && no(0);
-    *OUTB = yes(0) && yes(0);
+    OUTB = no(0) && no(1);
+    OUTB = no(0) && yes(1);
+    OUTB = yes(0) && no(0);
+    OUTB = yes(0) && yes(0);
 
-    *OUTB = no(0) || no(0);
-    *OUTB = no(0) || yes(0);
-    *OUTB = yes(0) || no(1);
-    *OUTB = yes(0) || yes(1);
+    OUTB = no(0) || no(0);
+    OUTB = no(0) || yes(0);
+    OUTB = yes(0) || no(1);
+    OUTB = yes(0) || yes(1);
 
     // Test associativity:
-    *OUTB = yes(0) || no(1) || no(1);
-    *OUTB = no(0) && yes(1) && yes(1);
+    OUTB = yes(0) || no(1) || no(1);
+    OUTB = no(0) && yes(1) && yes(1);
 
-    *OUT = 222;
-    *STOP = 0;
+    OUT = 222;
+    STOP = 0;
 }
 
 @ Assignment operators
@@ -1513,62 +1513,62 @@ void reset()
 void reset()
 {
     uint8_t a = 5;
-    *OUTB = a;
+    OUTB = a;
     a += 10;
-    *OUTB = a;
+    OUTB = a;
     a += a;
-    *OUTB = a;
-    *OUTB = a += a;
-    *OUTB = a;
-    *STOP = 0;
+    OUTB = a;
+    OUTB = a += a;
+    OUTB = a;
+    STOP = 0;
 }
 
 @out 500 1500 3000 6000 6000
 void reset()
 {
     uint16_t a = 500;
-    *OUTB = a;
+    OUTB = a;
     a += 1000;
-    *OUTB = a;
+    OUTB = a;
     a += a;
-    *OUTB = a;
-    *OUTB = a += a;
-    *OUTB = a;
-    *STOP = 0;
+    OUTB = a;
+    OUTB = a += a;
+    OUTB = a;
+    STOP = 0;
 }
 
 @out 15 10 50 6 2 16 8 15 7 36
 void reset()
 {
     uint8_t a = 5;
-    *OUTB = a += 10;
-    *OUTB = a -= 5;
-    *OUTB = a *= 5;
-    *OUTB = a /= 8;
-    *OUTB = a %= 4;
-    *OUTB = a << 3;
-    *OUTB = a >> 1;
-    *OUTB = a |= 7;
-    *OUTB = a &= 55;
-    *OUTB = a ^= 35;
-    *STOP = 0;
+    OUTB = a += 10;
+    OUTB = a -= 5;
+    OUTB = a *= 5;
+    OUTB = a /= 8;
+    OUTB = a %= 4;
+    OUTB = a << 3;
+    OUTB = a >> 1;
+    OUTB = a |= 7;
+    OUTB = a &= 55;
+    OUTB = a ^= 35;
+    STOP = 0;
 }
 
 @out 1500 1000 5000 625 1 4096 1024 2000 960 466
 void reset()
 {
     uint16_t a = 500;
-    *OUTB = a += 1000;
-    *OUTB = a -= 500;
-    *OUTB = a *= 5;
-    *OUTB = a /= 8;
-    *OUTB = a %= 4;
-    *OUTB = a << 12;
-    *OUTB = a >> 2;
-    *OUTB = a |= 2000;
-    *OUTB = a &= 999;
-    *OUTB = a ^= 530;
-    *STOP = 0;
+    OUTB = a += 1000;
+    OUTB = a -= 500;
+    OUTB = a *= 5;
+    OUTB = a /= 8;
+    OUTB = a %= 4;
+    OUTB = a << 12;
+    OUTB = a >> 2;
+    OUTB = a |= 2000;
+    OUTB = a &= 999;
+    OUTB = a ^= 530;
+    STOP = 0;
 }
 
 @ Pointers
@@ -1577,12 +1577,12 @@ void reset()
 {
     uint8_t a = 3;
     uint8_t *b = &a;
-    *OUTB = a;
-    *OUTB = *b;
+    OUTB = a;
+    OUTB = *b;
     *b = 7;
-    *OUTB = a;
-    *OUTB = *b;
-    *STOP = 0;
+    OUTB = a;
+    OUTB = *b;
+    STOP = 0;
 }
 
 @out 3 3 3 7 3 5 7 5 1 0 7
@@ -1593,21 +1593,21 @@ void reset()
     uint8_t *c = &a;
     uint8_t *d = &b;
     uint8_t **e = &c;
-    *OUTB = a;
-    *OUTB = *c;
-    *OUTB = **e;
+    OUTB = a;
+    OUTB = *c;
+    OUTB = **e;
     e = &d;
-    *OUTB = **e;
+    OUTB = **e;
     *e = &a;
-    *OUTB = **e;
+    OUTB = **e;
     **e = 5;
-    *OUTB = a;
-    *OUTB = b;
-    *OUTB = **e;
-    *OUTB = (&**e == &a);
-    *OUTB = (&**e == &b);
-    *OUTB = *&*&*&**&*&*&*e;
-    *STOP = 0;
+    OUTB = a;
+    OUTB = b;
+    OUTB = **e;
+    OUTB = (&**e == &a);
+    OUTB = (&**e == &b);
+    OUTB = *&*&*&**&*&*&*e;
+    STOP = 0;
 }
 
 @ Switch statements
@@ -1619,30 +1619,30 @@ void reset()
         switch (i)
         {
             // This should not execute:
-            *OUTB = 0xEE;
+            OUTB = 0xEE;
 
             case 2:
             case 4:
             case 6:
             case 8:
-                *OUTB = 22;
+                OUTB = 22;
                 break;
 
             default:
-                *OUTB = i;
+                OUTB = i;
                 break;
 
             case 3:
             {
-                *OUTB = 33;
+                OUTB = 33;
             }
             case 5:
-                *OUTB = 55;
+                OUTB = 55;
             case 7:
             {
-                *OUTB = 77;
+                OUTB = 77;
             }
         }
     }
-    *STOP = 0;
+    STOP = 0;
 }

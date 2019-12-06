@@ -361,8 +361,25 @@ class LoopScope
     public string BreakLabel;
 }
 
-enum MemoryRegion
+struct MemoryRegion
+{
+    public readonly MemoryRegionTag Tag;
+    public readonly int FixedAddress;
+
+    MemoryRegion(MemoryRegionTag tag, int address)
+    {
+        Tag = tag;
+        FixedAddress = address;
+    }
+
+    public static readonly MemoryRegion ZeroPage = new MemoryRegion(MemoryRegionTag.ZeroPage, 0);
+    public static readonly MemoryRegion Ram = new MemoryRegion(MemoryRegionTag.Ram, 0);
+    public static MemoryRegion Fixed(int address) => new MemoryRegion(MemoryRegionTag.Fixed, address);
+}
+
+enum MemoryRegionTag
 {
     ZeroPage,
     Ram,
+    Fixed,
 }

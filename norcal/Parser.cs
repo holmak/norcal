@@ -50,6 +50,13 @@ partial class Parser
         }
         else
         {
+            MemoryRegion region;
+            if (TryParseMemoryRegionQualifier(out region))
+            {
+                // TODO: If there is a memory region qualifier here, and this is not a global variable
+                // declaration, it is an error.
+            }
+
             CType type = ExpectType();
 
             if (type.IsStruct && TryParse(TokenType.LBRACE))
@@ -58,7 +65,7 @@ partial class Parser
                 while (!TryParse(TokenType.RBRACE))
                 {
                     // Individual fields can't be assigned to a region of memory.
-                    MemoryRegion region = MemoryRegion.Ram;
+                    region = MemoryRegion.Ram;
                     CType fieldType = ExpectType();
                     string fieldName = ExpectAnyName();
                     fields.Add(new FieldInfo(region, fieldType, fieldName));
@@ -84,7 +91,7 @@ partial class Parser
                     {
                         while (true)
                         {
-                            MemoryRegion region = ParseMemoryRegionQualifier();
+                            region = ParseMemoryRegionQualifier();
                             CType fieldType = ExpectType();
                             string fieldName = ExpectAnyName();
                             fields.Add(new FieldInfo(region, fieldType, fieldName));
@@ -104,7 +111,6 @@ partial class Parser
                 }
                 else
                 {
-                    MemoryRegion region = ParseMemoryRegionQualifier();
                     ParseArrayDeclaration(ref type);
                     if (TryParse(TokenType.EQUAL)) ParserError("global variables cannot be initialized");
                     Expect(TokenType.SEMICOLON);
@@ -119,6 +125,14 @@ partial class Parser
         if (TryParseName("__zeropage"))
         {
             region = MemoryRegion.ZeroPage;
+            return true;
+        }
+        else if (TryParseName("__location"))
+        {
+            Expect(TokenType.LPAREN);
+            int location = ExpectInt();
+            Expect(TokenType.RPAREN);
+            region = MemoryRegion.Fixed(location);
             return true;
         }
         else

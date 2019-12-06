@@ -34,11 +34,6 @@ class Expr
         return MakeAsm(mnemonic, new AsmOperand(0), Tag.Implicit);
     }
 
-    public static Expr MakeAsm(string mnemonic, AsmOperand operand)
-    {
-        return MakeAsm(mnemonic, operand, Tag.Absolute);
-    }
-
     public static Expr MakeAsm(string mnemonic, AsmOperand operand, string mode)
     {
         return Make(Tag.Asm, mnemonic, operand, mode);

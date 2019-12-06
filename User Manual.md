@@ -13,11 +13,10 @@ Differences from C (by design)
 - Labels and "ordinary" identifiers share the same namespace. Labels still have function scope, not lexical scope.
 
 
-Extension: Register declarations
---------------------------------
+Extension: Variable location specifiers
+---------------------------------------
 ~~~
-// Which syntax should I use?
-uint8_t PPU_CTRL __location(0x2000);
+__zeropage uint8_t vital_counter;
 __location(0x2000) uint8_t PPU_CTRL;
 ~~~
 

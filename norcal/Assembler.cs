@@ -281,17 +281,22 @@ class Assembler
     int AllocateGlobal(MemoryRegion region, int size)
     {
         int address;
-        if (region == MemoryRegion.ZeroPage)
+        if (region.Tag == MemoryRegionTag.ZeroPage)
         {
             if (ZeroPageNext + size > ZeroPageEnd) Program.Error("Not enough zero page RAM to allocate global.");
             address = ZeroPageNext;
             ZeroPageNext += size;
         }
-        else if (region == MemoryRegion.Ram)
+        else if (region.Tag == MemoryRegionTag.Ram)
         {
             if (RamNext + size > RamEnd) Program.Error("Not enough RAM to allocate global.");
             address = RamNext;
             RamNext += size;
+        }
+        else if (region.Tag == MemoryRegionTag.Fixed)
+        {
+            if (region.FixedAddress < 0 || region.FixedAddress > ushort.MaxValue) Program.Error("Invalid address.");
+            address = region.FixedAddress;
         }
         else
         {
