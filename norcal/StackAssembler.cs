@@ -12,6 +12,11 @@ class StackAssembler
     Dictionary<string, CStructInfo> Structs = new Dictionary<string, CStructInfo>();
     Dictionary<string, Symbol> Symbols = new Dictionary<string, Symbol>();
     List<Operand> Stack = new List<Operand>();
+    string NameOfCurrentFunction = null;
+    int NextTemporary = 0;
+
+    // TODO: Replace all uses of this type with real typechecking logic.
+    static CType AssumedType => CType.UInt16;
 
     /// <summary>
     /// Convert stack machine code to 6502 assembly code.
@@ -37,6 +42,7 @@ class StackAssembler
                 if (Functions.ContainsKey(functionName)) Program.Error("function is already defined: " + functionName);
 
                 Emit(Tag.Function, functionName);
+                NameOfCurrentFunction = functionName;
 
                 // Allocate a global variable for each parameter:
                 foreach (FieldInfo field in fields)
@@ -92,7 +98,7 @@ class StackAssembler
             }
             else if (op.Match(Tag.PushVariable, out name))
             {
-                PushVariable(name);
+                PushVariable(name, AssumedType);
             }
             else if (op.Match(Tag.Jump, out target))
             {
@@ -100,27 +106,31 @@ class StackAssembler
             }
             else if (op.Match(Tag.JumpIfTrue, out target))
             {
+                SpillAll();
                 Operand cond = Pop();
                 EmitAsm("LDA", cond);
                 Emit(Expr.MakeAsm("BNE", new AsmOperand(target), Tag.Absolute));
             }
             else if (op.Match(Tag.JumpIfFalse, out target))
             {
+                SpillAll();
                 Operand cond = Pop();
                 EmitAsm("LDA", cond);
                 Emit(Expr.MakeAsm("BEQ", new AsmOperand(target), Tag.Absolute));
             }
             else if (op.Match(Tag.AddressOf))
             {
+                SpillAll();
                 Operand r = Pop();
                 if (r.Tag == OperandTag.Variable)
                 {
-                    PushVariableAddress(r.Name);
+                    PushVariableAddress(r.Name, r.Type);
                 }
             }
             else if (op.Match(Tag.StoreGeneric))
             {
                 Operand value = Pop();
+                SpillAll();
                 Operand dest = Pop();
                 EmitLoadAccumulator(value);
                 EmitAsm("STA", dest);
@@ -128,12 +138,13 @@ class StackAssembler
             }
             else if (op.Match(Tag.LoadGeneric))
             {
+                SpillAll();
                 Operand address = Pop();
                 if (address.Tag == OperandTag.Variable)
                 {
                     EmitAsm("LDA", address);
                     EmitAsm("LDX", address, 1);
-                    PushAccumulator();
+                    PushAccumulator(AssumedType);
                 }
                 else
                 {
@@ -142,24 +153,27 @@ class StackAssembler
             }
             else if (op.Match(Tag.AddGeneric))
             {
+                SpillAll();
                 Operand right = Pop();
                 Operand left = Pop();
                 EmitAsm("CLC");
                 EmitAsm("LDA", left);
                 EmitAsm("ADC", right);
-                PushAccumulator();
+                PushAccumulator(AssumedType);
             }
             else if (op.Match(Tag.SubtractGeneric))
             {
-                Operand right = Pop();
+                Operand right = Spill(Pop());
                 Operand left = Pop();
+                SpillAll();
                 EmitAsm("SEC");
                 EmitAsm("LDA", left);
                 EmitAsm("SBC", right);
-                PushAccumulator();
+                PushAccumulator(AssumedType);
             }
             else if (op.Match(Tag.Return))
             {
+                SpillAll();
                 // TODO: "Return" must load top-of-stack into the accumulator, then RTS.
                 Operand result = Pop();
                 Emit(Expr.MakeAsm("RTS"));
@@ -243,11 +257,59 @@ class StackAssembler
         return 1;
     }
 
-    void PushAccumulator()
+    void SpillAll()
     {
+        Stack = Stack.Select(Spill).ToList();
+    }
+
+    /// <summary>
+    /// Returns the corresponding new operand.
+    /// </summary>
+    Operand Spill(Operand r)
+    {
+        if (r.Tag == OperandTag.Accumulator)
+        {
+            string temp = DeclareTemporary(r.Type);
+            Emit(Expr.MakeAsm("STA", new AsmOperand(temp), Tag.Absolute));
+            Emit(Expr.MakeAsm("STX", new AsmOperand(temp, 1), Tag.Absolute));
+            return new Operand
+            {
+                Tag = OperandTag.Variable,
+                Name = temp,
+                Type = r.Type,
+            };
+        }
+        else if (r.IsFlag())
+        {
+            Program.NYI();
+            return null;
+        }
+        else
+        {
+            return r;
+        }
+    }
+
+    string DeclareTemporary(CType type)
+    {
+        string name = NameOfCurrentFunction + ":$" + NextTemporary;
+        NextTemporary += 1;
+        DeclareSymbol(SymbolTag.Variable, name, type, 0);
+        Emit(Expr.Make(Tag.Variable, MemoryRegion.Ram, SizeOf(type), name));
+        return name;
+    }
+
+    void PushAccumulator(CType type)
+    {
+        if (Stack.Any(x => x.Tag == OperandTag.Accumulator || x.IsFlag()))
+        {
+            Program.Panic("An accumulator or flag operand was overwritten; it should have been saved.");
+        }
+
         Stack.Add(new Operand
         {
             Tag = OperandTag.Accumulator,
+            Type = type,
         });
     }
 
@@ -260,7 +322,7 @@ class StackAssembler
         });
     }
 
-    void PushVariable(string name)
+    void PushVariable(string name, CType type)
     {
         Symbol sym;
         if (!Symbols.TryGetValue(name, out sym)) Program.Error("variable not defined: {0}", name);
@@ -269,10 +331,11 @@ class StackAssembler
         {
             Tag = OperandTag.Variable,
             Name = name,
+            Type = type,
         });
     }
 
-    void PushVariableAddress(string name)
+    void PushVariableAddress(string name, CType type)
     {
         Symbol sym;
         if (!Symbols.TryGetValue(name, out sym)) Program.Error("variable not defined: {0}", name);
@@ -281,6 +344,7 @@ class StackAssembler
         {
             Tag = OperandTag.VariableAddress,
             Name = name,
+            Type = CType.MakePointer(type),
         });
     }
 
@@ -383,6 +447,7 @@ class Operand
     public OperandTag Tag;
     public int Value;
     public string Name;
+    public CType Type;
 
     public string Show()
     {
@@ -393,8 +458,14 @@ class Operand
         else if (Tag == OperandTag.FlagZero) return "ZF";
         else if (Tag == OperandTag.FlagNotZero) return "!ZF";
         else if (Tag == OperandTag.FlagCarry) return "CF";
-        else if (Tag == OperandTag.FlatNotCarry) return "!CF";
+        else if (Tag == OperandTag.FlagNotCarry) return "!CF";
         else return "???";
+    }
+
+    public bool IsFlag()
+    {
+        return Tag == OperandTag.FlagZero || Tag == OperandTag.FlagNotZero ||
+            Tag == OperandTag.FlagCarry || Tag == OperandTag.FlagNotCarry;
     }
 }
 
@@ -407,5 +478,5 @@ enum OperandTag
     FlagZero,
     FlagNotZero,
     FlagCarry,
-    FlatNotCarry,
+    FlagNotCarry,
 }
