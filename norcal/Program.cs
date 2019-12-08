@@ -256,7 +256,6 @@ static class Tag
     public static readonly string ModulusGeneric = "$mod";
     public static readonly string LoadGeneric = "$load";
     public static readonly string StoreGeneric = "$store";
-    public static readonly string BoolFromGeneric = "$bool_from";
     public static readonly string PredecrementGeneric = "$predec";
     public static readonly string PostdecrementGeneric = "$postdec";
     public static readonly string PreincrementGeneric = "$preinc";
@@ -282,7 +281,6 @@ static class Tag
     public static readonly string PushVariable = "$pushv";
     public static readonly string PushAddressOfVariable = "$pushav";
     public static readonly string PushFieldName = "$pushfn";
-    public static readonly string Call = "$call";
 
     // Assembly directives:
     public static readonly string Comment = "$comment";

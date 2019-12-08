@@ -187,7 +187,7 @@ partial class Parser
 
             // Parse the test:
             Expect(TokenType.LPAREN);
-            expr.Add(Expr.Make(Tag.BoolFromGeneric, ParseExpr()));
+            expr.Add(ParseExpr());
             Expect(TokenType.RPAREN);
 
             // Parse the body:
@@ -200,7 +200,7 @@ partial class Parser
                 {
                     // Parse the test:
                     Expect(TokenType.LPAREN);
-                    expr.Add(ConvertToBool(ParseExpr()));
+                    expr.Add(ParseExpr());
                     Expect(TokenType.RPAREN);
 
                     // Parse the body:
@@ -320,11 +320,6 @@ partial class Parser
         return stmt;
     }
 
-    Expr ConvertToBool(Expr e)
-    {
-        return Expr.Make(Tag.BoolFromGeneric, e);
-    }
-
     Expr ParseRestOfLocalDeclaration(MemoryRegion region, CType type)
     {
         Expr stmt;
@@ -429,11 +424,10 @@ partial class Parser
         Expr e = ParseLogicalOrExpr();
         if (TryParse(TokenType.QUESTION_MARK))
         {
-            Expr test = Expr.Make(Tag.BoolFromGeneric, e);
             Expr ifTrue = ParseExpr();
             Expect(TokenType.COLON);
             Expr ifFalse = ParseConditionalExpr();
-            e = Expr.Make(Tag.Switch, test, ifTrue, Expr.Make(Tag.Int, 1), ifFalse);
+            e = Expr.Make(Tag.Switch, e, ifTrue, Expr.Make(Tag.Int, 1), ifFalse);
         }
 
         return e;
@@ -449,8 +443,8 @@ partial class Parser
             {
                 Expr right = ParseLogicalAndExpr();
                 e = Expr.Make(Tag.Switch,
-                    ConvertToBool(e), Expr.Make(Tag.Int, 1),
-                    Expr.Make(Tag.Int, 1), ConvertToBool(right));
+                    e, Expr.Make(Tag.Int, 1),
+                    Expr.Make(Tag.Int, 1), right);
             }
             else
             {
@@ -469,8 +463,8 @@ partial class Parser
             {
                 Expr right = ParseBitwiseOrExpr();
                 e = Expr.Make(Tag.Switch,
-                    Expr.Make(Tag.LogicalNotGeneric, ConvertToBool(e)), Expr.Make(Tag.Int, 0),
-                    Expr.Make(Tag.Int, 1), ConvertToBool(right));
+                    Expr.Make(Tag.LogicalNotGeneric, e), Expr.Make(Tag.Int, 0),
+                    Expr.Make(Tag.Int, 1), right);
             }
             else
             {
@@ -670,7 +664,7 @@ partial class Parser
         }
         else if (TryParse(TokenType.LOGICAL_NOT))
         {
-            return Expr.Make(Tag.LogicalNotGeneric, ConvertToBool(ParseUnaryPrefixExpr()));
+            return Expr.Make(Tag.LogicalNotGeneric, ParseUnaryPrefixExpr());
         }
         else if (TryParse(TokenType.INCREMENT))
         {
