@@ -48,8 +48,10 @@ class Assembler
         List<byte> prg = new List<byte>();
         foreach (Expr e in assembly)
         {
-            string label;
-            int skipTarget;
+            string label, name, mnemonic, mode;
+            int skipTarget, size;
+            MemoryRegion region;
+            AsmOperand operand;
 
             if (e.MatchTag(Tag.Comment))
             {
@@ -83,86 +85,74 @@ class Assembler
                 prg.Add(LowByte(address));
                 prg.Add(HighByte(address));
             }
-            else
+            else if (e.Match(Tag.Variable, out region, out size, out name))
             {
-                MemoryRegion region;
-                int size, number;
-                string name, mnemonic, mode;
-                AsmOperand operand;
+                DefineSymbol(name, AllocateGlobal(region, size));
+            }
+            else if (e.Match(Tag.Asm, out mnemonic, out operand, out mode))
+            {
+                bool isRelativeBranchToAbsoluteTarget = AsmInfo.ShortJumpInstructions.Contains(mnemonic) && mode == Tag.Absolute;
 
-                if (e.Match(Tag.Constant, out name, out number))
+                if (isRelativeBranchToAbsoluteTarget)
                 {
-                    DefineSymbol(name, number);
+                    mode = Tag.Relative;
                 }
-                else if (e.Match(Tag.Variable, out region, out size, out name))
+
+                // Search for a matching instruction:
+                int formalSize;
+                List<byte> candidates = new List<byte>();
                 {
-                    DefineSymbol(name, AllocateGlobal(region, size));
-                }
-                else if (e.Match(Tag.Asm, out mnemonic, out operand, out mode))
-                {
-                    bool isRelativeBranchToAbsoluteTarget = AsmInfo.ShortJumpInstructions.Contains(mnemonic) && mode == Tag.Absolute;
+                    int operandFormat = ParseAddressMode(mode);
+                    formalSize = AsmInfo.OperandSizes[operandFormat];
 
-                    if (isRelativeBranchToAbsoluteTarget)
+                    for (int opcode = 0; opcode < 256; opcode++)
                     {
-                        mode = Tag.Relative;
-                    }
-
-                    // Search for a matching instruction:
-                    int formalSize;
-                    List<byte> candidates = new List<byte>();
-                    {
-                        int operandFormat = ParseAddressMode(mode);
-                        formalSize = AsmInfo.OperandSizes[operandFormat];
-
-                        for (int opcode = 0; opcode < 256; opcode++)
+                        if (mnemonic == AsmInfo.Mnemonics[opcode] && operandFormat == AsmInfo.OperandFormats[opcode])
                         {
-                            if (mnemonic == AsmInfo.Mnemonics[opcode] && operandFormat == AsmInfo.OperandFormats[opcode])
-                            {
-                                candidates.Add((byte)opcode);
-                            }
+                            candidates.Add((byte)opcode);
                         }
                     }
+                }
 
-                    if (candidates.Count == 1)
-                    {
-                        prg.Add(candidates[0]);
-                    }
-                    else if (candidates.Count == 0)
-                    {
-                        Program.Panic("invalid combination of instruction and mode: {0}", e.Show());
-                    }
-                    else
-                    {
-                        Program.Panic("ambiguous instruction and mode: {0}", e.Show());
-                    }
-
-                    int operandValue;
-                    if (!TryGetOperandValue(operand, mode, prg.Count, isRelativeBranchToAbsoluteTarget, out operandValue))
-                    {
-                        Fixups.Add(new Fixup
-                        {
-                            Operand = operand,
-                            Location = prg.Count,
-                            Mode = mode,
-                            IsRelativeBranchToAbsoluteTarget = isRelativeBranchToAbsoluteTarget,
-                        });
-                        operandValue = 0;
-                    }
-
-                    if (formalSize == 1)
-                    {
-                        prg.Add(LowByte(operandValue));
-                    }
-                    else if (formalSize == 2)
-                    {
-                        prg.Add(LowByte(operandValue));
-                        prg.Add(HighByte(operandValue));
-                    }
+                if (candidates.Count == 1)
+                {
+                    prg.Add(candidates[0]);
+                }
+                else if (candidates.Count == 0)
+                {
+                    Program.Panic("invalid combination of instruction and mode: {0}", e.Show());
                 }
                 else
                 {
-                    Program.Panic("invalid instruction format: {0}", e.Show());
+                    Program.Panic("ambiguous instruction and mode: {0}", e.Show());
                 }
+
+                int operandValue;
+                if (!TryGetOperandValue(operand, mode, prg.Count, isRelativeBranchToAbsoluteTarget, out operandValue))
+                {
+                    Fixups.Add(new Fixup
+                    {
+                        Operand = operand,
+                        Location = prg.Count,
+                        Mode = mode,
+                        IsRelativeBranchToAbsoluteTarget = isRelativeBranchToAbsoluteTarget,
+                    });
+                    operandValue = 0;
+                }
+
+                if (formalSize == 1)
+                {
+                    prg.Add(LowByte(operandValue));
+                }
+                else if (formalSize == 2)
+                {
+                    prg.Add(LowByte(operandValue));
+                    prg.Add(HighByte(operandValue));
+                }
+            }
+            else
+            {
+                Program.Panic("invalid instruction format: {0}", e.Show());
             }
         }
 
