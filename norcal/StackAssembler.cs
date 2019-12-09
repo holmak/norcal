@@ -143,7 +143,7 @@ class StackAssembler
                     PushVariableAddress(r.Name, r.Type);
                 }
             }
-            else if (op.Match(Tag.StoreGeneric))
+            else if (op.Match(Tag.Store))
             {
                 Operand value = Pop();
                 SpillAll();
@@ -160,7 +160,7 @@ class StackAssembler
                     Program.NYI();
                 }
             }
-            else if (op.Match(Tag.LoadGeneric))
+            else if (op.Match(Tag.Load))
             {
                 SpillAll();
                 Operand address = Pop();
@@ -175,7 +175,7 @@ class StackAssembler
                     Program.NYI();
                 }
             }
-            else if (op.Match(Tag.AddGeneric))
+            else if (op.Match(Tag.Add))
             {
                 SpillAll();
                 Operand right = Pop();
@@ -192,7 +192,7 @@ class StackAssembler
                     Program.NYI();
                 }
             }
-            else if (op.Match(Tag.SubtractGeneric))
+            else if (op.Match(Tag.Subtract))
             {
                 SpillAll();
                 Operand right = Pop();

@@ -248,31 +248,31 @@ static class Tag
     public static readonly string Break = "$break";
     public static readonly string Asm = "$asm";
 
-    // Type-generic pseudo-functions:
-    public static readonly string AddGeneric = "$add";
-    public static readonly string SubtractGeneric = "$sub";
-    public static readonly string MultiplyGeneric = "$mul";
-    public static readonly string DivideGeneric = "$div";
-    public static readonly string ModulusGeneric = "$mod";
-    public static readonly string LoadGeneric = "$load";
-    public static readonly string StoreGeneric = "$store";
-    public static readonly string PredecrementGeneric = "$predec";
-    public static readonly string PostdecrementGeneric = "$postdec";
-    public static readonly string PreincrementGeneric = "$preinc";
-    public static readonly string PostincrementGeneric = "$postinc";
-    public static readonly string EqualGeneric = "$equal";
-    public static readonly string NotEqualGeneric = "$not_equal";
-    public static readonly string LessThanGeneric = "$less_than";
-    public static readonly string LessThanOrEqualGeneric = "$less_than_or_equal";
-    public static readonly string GreaterThanGeneric = "$greater_than";
-    public static readonly string GreaterThanOrEqualGeneric = "$greater_than_or_equal";
-    public static readonly string BitwiseAndGeneric = "$bitwise_and";
-    public static readonly string BitwiseOrGeneric = "$bitwise_or";
-    public static readonly string BitwiseXorGeneric = "$bitwise_xor";
-    public static readonly string BitwiseNotGeneric = "$bitwise_not";
-    public static readonly string ShiftLeftGeneric = "$shift_left";
-    public static readonly string ShiftRightGeneric = "$shift_right";
-    public static readonly string LogicalNotGeneric = "$logical_not";
+    // Intrinsic functions:
+    public static readonly string Add = "$add";
+    public static readonly string Subtract = "$sub";
+    public static readonly string Multiply = "$mul";
+    public static readonly string Divide = "$div";
+    public static readonly string Modulus = "$mod";
+    public static readonly string Load = "$load";
+    public static readonly string Store = "$store";
+    public static readonly string Predecrement = "$predec";
+    public static readonly string Postdecrement = "$postdec";
+    public static readonly string Preincrement = "$preinc";
+    public static readonly string Postincrement = "$postinc";
+    public static readonly string Equal = "$equal";
+    public static readonly string NotEqual = "$not_equal";
+    public static readonly string LessThan = "$less_than";
+    public static readonly string LessThanOrEqual = "$less_than_or_equal";
+    public static readonly string GreaterThan = "$greater_than";
+    public static readonly string GreaterThanOrEqual = "$greater_than_or_equal";
+    public static readonly string BitwiseAnd = "$bitwise_and";
+    public static readonly string BitwiseOr = "$bitwise_or";
+    public static readonly string BitwiseXor = "$bitwise_xor";
+    public static readonly string BitwiseNot = "$bitwise_not";
+    public static readonly string ShiftLeft = "$shift_left";
+    public static readonly string ShiftRight = "$shift_right";
+    public static readonly string LogicalNot = "$logical_not";
 
     // Virtual stack machine instructions:
     public static readonly string BeginScope = "$begin_scope";

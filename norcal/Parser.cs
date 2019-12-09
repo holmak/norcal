@@ -463,7 +463,7 @@ partial class Parser
             {
                 Expr right = ParseBitwiseOrExpr();
                 e = Expr.Make(Tag.Switch,
-                    Expr.Make(Tag.LogicalNotGeneric, e), Expr.Make(Tag.Int, 0),
+                    Expr.Make(Tag.LogicalNot, e), Expr.Make(Tag.Int, 0),
                     Expr.Make(Tag.Int, 1), right);
             }
             else
@@ -481,7 +481,7 @@ partial class Parser
         {
             if (TryParse(TokenType.PIPE))
             {
-                e = Expr.Make(Tag.BitwiseOrGeneric, e, ParseBitwiseXorExpr());
+                e = Expr.Make(Tag.BitwiseOr, e, ParseBitwiseXorExpr());
             }
             else
             {
@@ -498,7 +498,7 @@ partial class Parser
         {
             if (TryParse(TokenType.CARET))
             {
-                e = Expr.Make(Tag.BitwiseXorGeneric, e, ParseBitwiseAndExpr());
+                e = Expr.Make(Tag.BitwiseXor, e, ParseBitwiseAndExpr());
             }
             else
             {
@@ -515,7 +515,7 @@ partial class Parser
         {
             if (TryParse(TokenType.AMPERSAND))
             {
-                e = Expr.Make(Tag.BitwiseAndGeneric, e, ParseEqualityExpr());
+                e = Expr.Make(Tag.BitwiseAnd, e, ParseEqualityExpr());
             }
             else
             {
@@ -532,11 +532,11 @@ partial class Parser
         {
             if (TryParse(TokenType.DOUBLE_EQUAL))
             {
-                e = Expr.Make(Tag.EqualGeneric, e, ParseCompareExpr());
+                e = Expr.Make(Tag.Equal, e, ParseCompareExpr());
             }
             else if (TryParse(TokenType.NOT_EQUAL))
             {
-                e = Expr.Make(Tag.NotEqualGeneric, e, ParseCompareExpr());
+                e = Expr.Make(Tag.NotEqual, e, ParseCompareExpr());
             }
             else
             {
@@ -553,19 +553,19 @@ partial class Parser
         {
             if (TryParse(TokenType.LESS_THAN))
             {
-                e = Expr.Make(Tag.LessThanGeneric, e, ParseShiftExpr());
+                e = Expr.Make(Tag.LessThan, e, ParseShiftExpr());
             }
             else if (TryParse(TokenType.LESS_THAN_OR_EQUAL))
             {
-                e = Expr.Make(Tag.LessThanOrEqualGeneric, e, ParseShiftExpr());
+                e = Expr.Make(Tag.LessThanOrEqual, e, ParseShiftExpr());
             }
             else if (TryParse(TokenType.GREATER_THAN))
             {
-                e = Expr.Make(Tag.GreaterThanGeneric, e, ParseShiftExpr());
+                e = Expr.Make(Tag.GreaterThan, e, ParseShiftExpr());
             }
             else if (TryParse(TokenType.GREATER_THAN_OR_EQUAL))
             {
-                e = Expr.Make(Tag.GreaterThanOrEqualGeneric, e, ParseShiftExpr());
+                e = Expr.Make(Tag.GreaterThanOrEqual, e, ParseShiftExpr());
             }
             else
             {
@@ -582,11 +582,11 @@ partial class Parser
         {
             if (TryParse(TokenType.SHIFT_LEFT))
             {
-                e = Expr.Make(Tag.ShiftLeftGeneric, e, ParseAddExpr());
+                e = Expr.Make(Tag.ShiftLeft, e, ParseAddExpr());
             }
             else if (TryParse(TokenType.SHIFT_RIGHT))
             {
-                e = Expr.Make(Tag.ShiftRightGeneric, e, ParseAddExpr());
+                e = Expr.Make(Tag.ShiftRight, e, ParseAddExpr());
             }
             else
             {
@@ -603,11 +603,11 @@ partial class Parser
         {
             if (TryParse(TokenType.PLUS))
             {
-                e = Expr.Make(Tag.AddGeneric, e, ParseMultiplyExpr());
+                e = Expr.Make(Tag.Add, e, ParseMultiplyExpr());
             }
             else if (TryParse(TokenType.MINUS))
             {
-                e = Expr.Make(Tag.SubtractGeneric, e, ParseMultiplyExpr());
+                e = Expr.Make(Tag.Subtract, e, ParseMultiplyExpr());
             }
             else
             {
@@ -624,15 +624,15 @@ partial class Parser
         {
             if (TryParse(TokenType.STAR))
             {
-                e = Expr.Make(Tag.MultiplyGeneric, e, ParseCastExpr());
+                e = Expr.Make(Tag.Multiply, e, ParseCastExpr());
             }
             else if (TryParse(TokenType.SLASH))
             {
-                e = Expr.Make(Tag.DivideGeneric, e, ParseCastExpr());
+                e = Expr.Make(Tag.Divide, e, ParseCastExpr());
             }
             else if (TryParse(TokenType.PERCENT))
             {
-                e = Expr.Make(Tag.ModulusGeneric, e, ParseCastExpr());
+                e = Expr.Make(Tag.Modulus, e, ParseCastExpr());
             }
             else
             {
@@ -652,7 +652,7 @@ partial class Parser
     {
         if (TryParse(TokenType.STAR))
         {
-            return Expr.Make(Tag.LoadGeneric, ParseUnaryPrefixExpr());
+            return Expr.Make(Tag.Load, ParseUnaryPrefixExpr());
         }
         else if (TryParse(TokenType.AMPERSAND))
         {
@@ -660,19 +660,19 @@ partial class Parser
         }
         else if (TryParse(TokenType.TILDE))
         {
-            return Expr.Make(Tag.BitwiseNotGeneric, ParseUnaryPrefixExpr());
+            return Expr.Make(Tag.BitwiseNot, ParseUnaryPrefixExpr());
         }
         else if (TryParse(TokenType.LOGICAL_NOT))
         {
-            return Expr.Make(Tag.LogicalNotGeneric, ParseUnaryPrefixExpr());
+            return Expr.Make(Tag.LogicalNot, ParseUnaryPrefixExpr());
         }
         else if (TryParse(TokenType.INCREMENT))
         {
-            return Expr.Make(Tag.PreincrementGeneric, AddressOf(ParseUnaryPrefixExpr()));
+            return Expr.Make(Tag.Preincrement, AddressOf(ParseUnaryPrefixExpr()));
         }
         else if (TryParse(TokenType.DECREMENT))
         {
-            return Expr.Make(Tag.PredecrementGeneric, AddressOf(ParseUnaryPrefixExpr()));
+            return Expr.Make(Tag.Predecrement, AddressOf(ParseUnaryPrefixExpr()));
         }
         else
         {
@@ -713,26 +713,26 @@ partial class Parser
             {
                 string fieldName;
                 fieldName = ExpectAnyName();
-                e = Expr.Make(Tag.LoadGeneric, Expr.Make(Tag.Field, e, fieldName));
+                e = Expr.Make(Tag.Load, Expr.Make(Tag.Field, e, fieldName));
             }
             else if (TryParse(TokenType.ARROW))
             {
                 string fieldName;
                 fieldName = ExpectAnyName();
-                e = Expr.Make(Tag.LoadGeneric, Expr.Make(Tag.Field, Expr.Make(Tag.LoadGeneric, e), fieldName));
+                e = Expr.Make(Tag.Load, Expr.Make(Tag.Field, Expr.Make(Tag.Load, e), fieldName));
             }
             else if (TryParse(TokenType.INCREMENT))
             {
-                e = Expr.Make(Tag.PostincrementGeneric, AddressOf(e));
+                e = Expr.Make(Tag.Postincrement, AddressOf(e));
             }
             else if (TryParse(TokenType.DECREMENT))
             {
-                e = Expr.Make(Tag.PostdecrementGeneric, AddressOf(e));
+                e = Expr.Make(Tag.Postdecrement, AddressOf(e));
             }
             else if (TryParse(TokenType.LBRACKET))
             {
                 Expr index = ParseExpr();
-                e = Expr.Make(Tag.LoadGeneric, Expr.Make(Tag.Index, e, index));
+                e = Expr.Make(Tag.Load, Expr.Make(Tag.Index, e, index));
                 Expect(TokenType.RBRACKET);
             }
             else
@@ -773,7 +773,7 @@ partial class Parser
     Expr AddressOf(Expr e)
     {
         Expr inner;
-        if (e.Match(Tag.LoadGeneric, out inner))
+        if (e.Match(Tag.Load, out inner))
         {
             return inner;
         }
@@ -785,7 +785,7 @@ partial class Parser
 
     Expr MakeAssignExpr(Expr dst, Expr src)
     {
-        return Expr.Make(Tag.StoreGeneric, dst, src);
+        return Expr.Make(Tag.Store, dst, src);
     }
 
     Token PeekToken()
