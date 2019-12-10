@@ -142,6 +142,10 @@ class StackAssembler
                 {
                     PushVariableAddress(r.Name, r.Type);
                 }
+                else
+                {
+                    Program.NYI();
+                }
             }
             else if (op.Match(Tag.Store))
             {
