@@ -288,24 +288,24 @@ partial class Parser
                     }
                     else if (TryParse(TokenType.NUMBER_SIGN))
                     {
-                        AsmOperand operand = ParseAssemblyOperand();
+                        AsmOperand operand = ParseAssemblyOperand(AddressMode.Immediate);
                         Expect(TokenType.NEWLINE);
-                        args.Add(Expr.MakeAsm(symbol, operand, Tag.Immediate));
+                        args.Add(Expr.MakeAsm(symbol, operand));
                     }
                     else if (TryParse(TokenType.LPAREN))
                     {
-                        AsmOperand operand = ParseAssemblyOperand();
+                        AsmOperand operand = ParseAssemblyOperand(AddressMode.IndirectY);
                         Expect(TokenType.RPAREN);
                         Expect(TokenType.COMMA);
                         ExpectKeyword("Y");
                         Expect(TokenType.NEWLINE);
-                        args.Add(Expr.MakeAsm(symbol, operand, Tag.IndirectY));
+                        args.Add(Expr.MakeAsm(symbol, operand));
                     }
                     else
                     {
-                        AsmOperand operand = ParseAssemblyOperand();
+                        AsmOperand operand = ParseAssemblyOperand(AddressMode.Absolute);
                         Expect(TokenType.NEWLINE);
-                        args.Add(Expr.MakeAsm(symbol, operand, Tag.Absolute));
+                        args.Add(Expr.MakeAsm(symbol, operand));
                     }
                 }
             }
@@ -342,13 +342,13 @@ partial class Parser
         return stmt;
     }
 
-    AsmOperand ParseAssemblyOperand()
+    AsmOperand ParseAssemblyOperand(AddressMode mode)
     {
         string name;
         int number;
         if (TryParseInt(out number))
         {
-            return new AsmOperand(number);
+            return new AsmOperand(number, mode);
         }
         else if (TryParseAnyName(out name))
         {
@@ -357,7 +357,7 @@ partial class Parser
             {
                 number = ExpectInt();
             }
-            return new AsmOperand(name, number);
+            return new AsmOperand(name, number, mode);
         }
         else
         {

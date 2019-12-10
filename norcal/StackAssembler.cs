@@ -100,7 +100,7 @@ class StackAssembler
             }
             else if (op.Match(Tag.Jump, out target))
             {
-                Emit(Expr.MakeAsm("JMP", new AsmOperand(target), Tag.Absolute));
+                Emit(Expr.MakeAsm("JMP", new AsmOperand(target, AddressMode.Absolute)));
             }
             else if (op.Match(Tag.JumpIfTrue, out target))
             {
@@ -109,9 +109,9 @@ class StackAssembler
 
                 if (cond.Tag == OperandTag.Variable)
                 {
-                    Emit(Expr.MakeAsm("LDA", new AsmOperand(cond.Name), Tag.Absolute));
-                    Emit(Expr.MakeAsm("ORA", new AsmOperand(cond.Name, 1), Tag.Absolute));
-                    Emit(Expr.MakeAsm("BNE", new AsmOperand(target), Tag.Absolute));
+                    Emit(Expr.MakeAsm("LDA", new AsmOperand(cond.Name, AddressMode.Absolute)));
+                    Emit(Expr.MakeAsm("ORA", new AsmOperand(cond.Name, 1, AddressMode.Absolute)));
+                    Emit(Expr.MakeAsm("BNE", new AsmOperand(target, AddressMode.Absolute)));
                 }
                 else
                 {
@@ -125,9 +125,9 @@ class StackAssembler
 
                 if (cond.Tag == OperandTag.Variable)
                 {
-                    Emit(Expr.MakeAsm("LDA", new AsmOperand(cond.Name), Tag.Absolute));
-                    Emit(Expr.MakeAsm("ORA", new AsmOperand(cond.Name, 1), Tag.Absolute));
-                    Emit(Expr.MakeAsm("BEQ", new AsmOperand(target), Tag.Absolute));
+                    Emit(Expr.MakeAsm("LDA", new AsmOperand(cond.Name, AddressMode.Absolute)));
+                    Emit(Expr.MakeAsm("ORA", new AsmOperand(cond.Name, 1, AddressMode.Absolute)));
+                    Emit(Expr.MakeAsm("BEQ", new AsmOperand(target, AddressMode.Absolute)));
                 }
                 else
                 {
@@ -152,8 +152,8 @@ class StackAssembler
 
                 if (dest.Tag == OperandTag.Variable)
                 {
-                    Emit(Expr.MakeAsm("STA", new AsmOperand(dest.Name), Tag.Absolute));
-                    Emit(Expr.MakeAsm("STX", new AsmOperand(dest.Name, 1), Tag.Absolute));
+                    Emit(Expr.MakeAsm("STA", new AsmOperand(dest.Name, AddressMode.Absolute)));
+                    Emit(Expr.MakeAsm("STX", new AsmOperand(dest.Name, 1, AddressMode.Absolute)));
                 }
                 else
                 {
@@ -166,8 +166,8 @@ class StackAssembler
                 Operand address = Pop();
                 if (address.Tag == OperandTag.Variable)
                 {
-                    Emit(Expr.MakeAsm("LDA", new AsmOperand(address.Name), Tag.Absolute));
-                    Emit(Expr.MakeAsm("LDX", new AsmOperand(address.Name, 1), Tag.Absolute));
+                    Emit(Expr.MakeAsm("LDA", new AsmOperand(address.Name, AddressMode.Absolute)));
+                    Emit(Expr.MakeAsm("LDX", new AsmOperand(address.Name, 1, AddressMode.Absolute)));
                     PushAccumulator(AssumedType);
                 }
                 else
@@ -184,7 +184,7 @@ class StackAssembler
                 if (right.Tag == OperandTag.Variable)
                 {
                     Emit(Expr.MakeAsm("CLC"));
-                    Emit(Expr.MakeAsm("ADC", new AsmOperand(right.Name), Tag.Absolute));
+                    Emit(Expr.MakeAsm("ADC", new AsmOperand(right.Name, AddressMode.Absolute)));
                     PushAccumulator(AssumedType);
                 }
                 else
@@ -201,13 +201,13 @@ class StackAssembler
                 if (right.Tag == OperandTag.Immediate)
                 {
                     Emit(Expr.MakeAsm("SEC"));
-                    Emit(Expr.MakeAsm("SBC", new AsmOperand(right.Value), Tag.Absolute));
+                    Emit(Expr.MakeAsm("SBC", new AsmOperand(right.Value, AddressMode.Absolute)));
                     PushAccumulator(AssumedType);
                 }
                 else if (right.Tag == OperandTag.Variable)
                 {
                     Emit(Expr.MakeAsm("SEC"));
-                    Emit(Expr.MakeAsm("SBC", new AsmOperand(right.Name), Tag.Absolute));
+                    Emit(Expr.MakeAsm("SBC", new AsmOperand(right.Name, AddressMode.Absolute)));
                     PushAccumulator(AssumedType);
                 }
                 else
@@ -226,7 +226,7 @@ class StackAssembler
             {
                 // This is a general-purpose call.
                 // TODO: Copy the arguments into the function's call frame.
-                Emit(Expr.MakeAsm("JSR", new AsmOperand(functionName), Tag.Absolute));
+                Emit(Expr.MakeAsm("JSR", new AsmOperand(functionName, AddressMode.Absolute)));
             }
             else
             {
@@ -314,8 +314,8 @@ class StackAssembler
         if (r.Tag == OperandTag.Accumulator)
         {
             string temp = DeclareTemporary(r.Type);
-            Emit(Expr.MakeAsm("STA", new AsmOperand(temp), Tag.Absolute));
-            Emit(Expr.MakeAsm("STX", new AsmOperand(temp, 1), Tag.Absolute));
+            Emit(Expr.MakeAsm("STA", new AsmOperand(temp, AddressMode.Absolute)));
+            Emit(Expr.MakeAsm("STX", new AsmOperand(temp, 1, AddressMode.Absolute)));
             return new Operand
             {
                 Tag = OperandTag.Variable,
@@ -409,13 +409,13 @@ class StackAssembler
         }
         else if (r.Tag == OperandTag.Immediate)
         {
-            Emit(Expr.MakeAsm("LDA", new AsmOperand(LowByte(r.Value)), Tag.Immediate));
-            Emit(Expr.MakeAsm("LDX", new AsmOperand(HighByte(r.Value)), Tag.Immediate));
+            Emit(Expr.MakeAsm("LDA", new AsmOperand(LowByte(r.Value), AddressMode.Immediate)));
+            Emit(Expr.MakeAsm("LDX", new AsmOperand(HighByte(r.Value), AddressMode.Immediate)));
         }
         else if (r.Tag == OperandTag.Variable)
         {
-            Emit(Expr.MakeAsm("LDA", new AsmOperand(r.Name), Tag.Absolute));
-            Emit(Expr.MakeAsm("LDX", new AsmOperand(r.Name, 1), Tag.Absolute));
+            Emit(Expr.MakeAsm("LDA", new AsmOperand(r.Name, AddressMode.Absolute)));
+            Emit(Expr.MakeAsm("LDX", new AsmOperand(r.Name, 1, AddressMode.Absolute)));
         }
         else
         {

@@ -29,14 +29,11 @@ class Expr
 
     public static Expr Make(params object[] args) => new Expr(args);
 
-    public static Expr MakeAsm(string mnemonic)
-    {
-        return MakeAsm(mnemonic, new AsmOperand(0), Tag.Implicit);
-    }
+    public static Expr MakeAsm(string mnemonic) => MakeAsm(mnemonic, AsmOperand.Implicit);
 
-    public static Expr MakeAsm(string mnemonic, AsmOperand operand, string mode)
+    public static Expr MakeAsm(string mnemonic, AsmOperand operand)
     {
-        return Make(Tag.Asm, mnemonic, operand, mode);
+        return Make(Tag.Asm, mnemonic, operand);
     }
 
     public IEnumerable<object> GetArgs() => Args;

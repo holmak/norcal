@@ -48,7 +48,7 @@ class Assembler
         List<byte> prg = new List<byte>();
         foreach (Expr e in assembly)
         {
-            string label, name, mnemonic, mode;
+            string label, name, mnemonic;
             int skipTarget, size;
             MemoryRegion region;
             AsmOperand operand;
@@ -89,20 +89,21 @@ class Assembler
             {
                 DefineSymbol(name, AllocateGlobal(region, size));
             }
-            else if (e.Match(Tag.Asm, out mnemonic, out operand, out mode))
+            else if (e.Match(Tag.Asm, out mnemonic, out operand))
             {
-                bool isRelativeBranchToAbsoluteTarget = AsmInfo.ShortJumpInstructions.Contains(mnemonic) && mode == Tag.Absolute;
+                bool isRelativeBranchToAbsoluteTarget = AsmInfo.ShortJumpInstructions.Contains(mnemonic) && operand.Mode == AddressMode.Absolute;
+                AddressMode actualMode = operand.Mode;
 
                 if (isRelativeBranchToAbsoluteTarget)
                 {
-                    mode = Tag.Relative;
+                    actualMode = AddressMode.Relative;
                 }
 
                 // Search for a matching instruction:
                 int formalSize;
                 List<byte> candidates = new List<byte>();
                 {
-                    int operandFormat = ParseAddressMode(mode);
+                    int operandFormat = ParseAddressMode(actualMode);
                     formalSize = AsmInfo.OperandSizes[operandFormat];
 
                     for (int opcode = 0; opcode < 256; opcode++)
@@ -128,13 +129,13 @@ class Assembler
                 }
 
                 int operandValue;
-                if (!TryGetOperandValue(operand, mode, prg.Count, isRelativeBranchToAbsoluteTarget, out operandValue))
+                if (!TryGetOperandValue(operand, actualMode, prg.Count, isRelativeBranchToAbsoluteTarget, out operandValue))
                 {
                     Fixups.Add(new Fixup
                     {
                         Operand = operand,
                         Location = prg.Count,
-                        Mode = mode,
+                        Mode = actualMode,
                         IsRelativeBranchToAbsoluteTarget = isRelativeBranchToAbsoluteTarget,
                     });
                     operandValue = 0;
@@ -193,7 +194,7 @@ class Assembler
         Symbols.Add(symbol, address);
     }
 
-    bool TryGetOperandValue(AsmOperand operand, string mode, int location, bool isRelativeBranchToAbsoluteTarget, out int value)
+    bool TryGetOperandValue(AsmOperand operand, AddressMode mode, int location, bool isRelativeBranchToAbsoluteTarget, out int value)
     {
         value = 0;
 
@@ -218,14 +219,14 @@ class Assembler
             value -= (PrgRomBase + location + 1);
         }
 
-        if (mode == Tag.Relative && (value < sbyte.MinValue || value > sbyte.MaxValue))
+        if (mode == AddressMode.Relative && (value < sbyte.MinValue || value > sbyte.MaxValue))
         {
             Program.Panic("relative branch offset is too large: {0}", operand.Show());
         }
         else
         {
             int actualSize;
-            if (mode == Tag.Implicit) actualSize = 0;
+            if (mode == AddressMode.Implicit) actualSize = 0;
             else if (value >= sbyte.MinValue && value <= byte.MaxValue) actualSize = 1;
             else if (value >= short.MinValue && value <= ushort.MaxValue) actualSize = 2;
             else actualSize = 99;
@@ -239,13 +240,13 @@ class Assembler
         return true;
     }
 
-    static int ParseAddressMode(string mode)
+    static int ParseAddressMode(AddressMode mode)
     {
-        if (mode == Tag.Implicit) return AsmInfo.IMP;
-        else if (mode == Tag.Absolute) return AsmInfo.ABS;
-        else if (mode == Tag.Immediate) return AsmInfo.IMM;
-        else if (mode == Tag.IndirectY) return AsmInfo.ZYI;
-        else if (mode == Tag.Relative) return AsmInfo.REL;
+        if (mode == AddressMode.Implicit) return AsmInfo.IMP;
+        else if (mode == AddressMode.Absolute) return AsmInfo.ABS;
+        else if (mode == AddressMode.Immediate) return AsmInfo.IMM;
+        else if (mode == AddressMode.IndirectY) return AsmInfo.ZYI;
+        else if (mode == AddressMode.Relative) return AsmInfo.REL;
         else
         {
             Program.Panic("unknown assembly modifier: {0}", mode);
@@ -253,7 +254,7 @@ class Assembler
         }
     }
 
-    static int GetFormalOperandSize(string mode)
+    static int GetFormalOperandSize(AddressMode mode)
     {
         return AsmInfo.OperandSizes[ParseAddressMode(mode)];
     }
@@ -302,7 +303,7 @@ class Fixup
 {
     public AsmOperand Operand;
     public int Location;
-    public string Mode;
+    public AddressMode Mode;
     public bool IsRelativeBranchToAbsoluteTarget;
 }
 
@@ -311,15 +312,19 @@ class AsmOperand
 {
     public readonly Maybe<string> Base = Maybe.Nothing;
     public readonly int Offset = 0;
+    public readonly AddressMode Mode;
 
-    public AsmOperand(string actualBase) : this(actualBase, 0) { }
+    public static readonly AsmOperand Implicit = new AsmOperand(0, AddressMode.Implicit);
 
-    public AsmOperand(int value) : this(Maybe.Nothing, value) { }
+    public AsmOperand(string actualBase, AddressMode mode) : this(actualBase, 0, mode) { }
 
-    public AsmOperand(Maybe<string> optionalBase, int offset)
+    public AsmOperand(int value, AddressMode mode) : this(Maybe.Nothing, value, mode) { }
+
+    public AsmOperand(Maybe<string> optionalBase, int offset, AddressMode mode)
     {
         Base = optionalBase;
         Offset = offset;
+        Mode = mode;
     }
 
     public string Show()
@@ -337,4 +342,14 @@ class AsmOperand
             return string.Format("{0}+{1}", Base.Value, Program.FormatAssemblyInteger(Offset));
         }
     }
+}
+
+enum AddressMode
+{
+    Implicit,
+    Immediate,
+    ZeroPage,
+    Absolute,
+    IndirectY,
+    Relative,
 }

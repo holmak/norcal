@@ -88,7 +88,7 @@ class Compiler
     void CompileExpression(Expr e)
     {
         int value;
-        string name, functionName, target, fieldName, mnemonic, mode;
+        string name, functionName, target, fieldName, mnemonic;
         MemoryRegion region;
         CType type;
         Expr[] args;
@@ -201,14 +201,14 @@ class Compiler
         {
             Emit(e);
         }
-        else if (e.Match(Tag.Asm, out mnemonic, out operand, out mode))
+        else if (e.Match(Tag.Asm, out mnemonic, out operand))
         {
             // Replace any identifiers in assembly instructions with the fully qualified equivalent.
             if (operand.Base.HasValue)
             {
-                operand = new AsmOperand(FindQualifiedName(operand.Base.Value), operand.Offset);
+                operand = new AsmOperand(FindQualifiedName(operand.Base.Value), operand.Offset, operand.Mode);
             }
-            Emit(Expr.MakeAsm(mnemonic, operand, mode));
+            Emit(Expr.MakeAsm(mnemonic, operand));
         }
         else if (e.MatchAny(out functionName, out args))
         {

@@ -120,7 +120,7 @@ static class Program
         foreach (Expr e in assembly)
         {
             string line = "";
-            string mnemonic, text, mode;
+            string mnemonic, text;
             AsmOperand operand;
 
             // Put a blank line before top-level constructs.
@@ -133,7 +133,7 @@ static class Program
             else if (e.Match(Tag.Label, out text)) line += text + ":";
             else if (e.Match(Tag.Function, out text)) line += string.Format("function {0}:", text);
             else if (e.MatchTag(Tag.Function)) line += e.Show();
-            else if (e.Match(Tag.Asm, out mnemonic, out operand, out mode)) line += FormatAssembly(mnemonic, operand, mode);
+            else if (e.Match(Tag.Asm, out mnemonic, out operand)) line += FormatAssembly(mnemonic, operand);
             else line += e.Show();
 
             sb.AppendLine(line);
@@ -141,14 +141,14 @@ static class Program
         return sb.ToString();
     }
 
-    static string FormatAssembly(string mnemonic, AsmOperand operand, string mode)
+    static string FormatAssembly(string mnemonic, AsmOperand operand)
     {
         string format;
-        if (mode == Tag.Implicit) format = "{0}";
-        else if (mode == Tag.Absolute) format = "{0} {1}";
-        else if (mode == Tag.Relative) format = "{0} +{1}";
-        else if (mode == Tag.Immediate) format = "{0} #{1}";
-        else if (mode == Tag.IndirectY) format = "{0} ({1}),Y";
+        if (operand.Mode == AddressMode.Implicit) format = "{0}";
+        else if (operand.Mode == AddressMode.Absolute) format = "{0} {1}";
+        else if (operand.Mode == AddressMode.Relative) format = "{0} +{1}";
+        else if (operand.Mode == AddressMode.Immediate) format = "{0} #{1}";
+        else if (operand.Mode == AddressMode.IndirectY) format = "{0} ({1}),Y";
         else format = "{0} {1} ???";
         return string.Format(format, mnemonic, operand.Show());
     }
@@ -286,11 +286,4 @@ static class Tag
     public static readonly string Comment = "$comment";
     public static readonly string SkipTo = "$skip_to";
     public static readonly string Word = "$word";
-
-    // 6502 address modes:
-    public static readonly string Implicit = "$implicit";
-    public static readonly string Absolute = "$absolute";
-    public static readonly string Immediate = "$immediate";
-    public static readonly string IndirectY = "$indirect_y";
-    public static readonly string Relative = "$relative";
 }
