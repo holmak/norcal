@@ -190,7 +190,10 @@ static class Program
             Debugger.Launch();
         }
 
-        Debugger.Break();
+        if (Debugger.IsAttached)
+        {
+            Debugger.Break();
+        }
 
         Environment.Exit(code);
     }
