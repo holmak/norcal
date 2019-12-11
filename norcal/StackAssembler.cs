@@ -15,9 +15,6 @@ class StackAssembler
     string NameOfCurrentFunction = null;
     int NextTemporary = 0;
 
-    // TODO: Replace all uses of this type with real typechecking logic.
-    static CType AssumedType => CType.UInt16;
-
     /// <summary>
     /// Convert stack machine code to 6502 assembly code.
     /// </summary>
@@ -96,7 +93,7 @@ class StackAssembler
             }
             else if (op.Match(Tag.PushVariable, out name))
             {
-                PushVariable(name, AssumedType);
+                PushVariable(name, Symbols[name].Type);
             }
             else if (op.Match(Tag.Jump, out target))
             {
@@ -149,15 +146,26 @@ class StackAssembler
             }
             else if (op.Match(Tag.Store))
             {
+                // Get operands:
                 Operand value = Pop();
-                SpillAll();
                 Operand dest = Pop();
+
+                // Check types:
+                if (!TryToMakeTypesEqual(ref dest, ref value)) Program.Error("types in assignment don't match");
+                int size = SizeOf(value.Type);
+
+                // Rearrange stack:
+                SpillAll();
+                dest = Spill(dest);
                 EmitLoadAccumulator(value);
 
+                // Generate code:
                 if (dest.Tag == OperandTag.Variable)
                 {
-                    Emit(Expr.MakeAsm("STA", new AsmOperand(dest.Name, AddressMode.Absolute)));
-                    Emit(Expr.MakeAsm("STX", new AsmOperand(dest.Name, 1, AddressMode.Absolute)));
+                    if (size >= 1) Emit(Expr.MakeAsm("STA", new AsmOperand(dest.Name, AddressMode.Absolute)));
+                    if (size >= 2) Emit(Expr.MakeAsm("STX", new AsmOperand(dest.Name, 1, AddressMode.Absolute)));
+                    if (size > 2) Program.Panic("value is too large");
+                    PushAccumulator(value.Type);
                 }
                 else
                 {
@@ -364,6 +372,29 @@ class StackAssembler
             Type = type,
             Value = value,
         });
+    }
+
+    /// <summary>
+    /// Return true if the types match, and produce the type that they share.
+    /// This function is necessary because the type of immediates has some flexibility.
+    /// </summary>
+    static bool TryToMakeTypesEqual(ref Operand left, ref Operand right)
+    {
+        if (left.Type == right.Type)
+        {
+            return true;
+        }
+        else if (left.Tag == OperandTag.Immediate || right.Tag == OperandTag.Immediate)
+        {
+            // Try promoting the immediate values to a larger type:
+            if (left.Tag == OperandTag.Immediate && left.Type == CType.UInt8) left.Type = CType.UInt16;
+            if (right.Tag == OperandTag.Immediate && right.Type == CType.UInt8) right.Type = CType.UInt16;
+            return left.Type == right.Type;
+        }
+        else
+        {
+            return false;
+        }
     }
 
     CType DereferencePointerType(CType pointer)
