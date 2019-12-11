@@ -333,7 +333,7 @@ partial class Parser
             stmt = Expr.Make(
                 Tag.Sequence,
                 Expr.Make(Tag.Variable, region, type, localname),
-                MakeAssignExpr(Expr.Make(Tag.Name, localname), value));
+                Expr.Make(Tag.Drop, MakeAssignExpr(Expr.Make(Tag.Name, localname), value)));
         }
         else
         {
