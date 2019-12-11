@@ -30,11 +30,7 @@ class CType : IEquatable<CType>
     public CType Subtype;
     public int Dimension;
 
-    /// <summary>
-    /// This means that the typechecker hasn't assigned a type to this node yet.
-    /// </summary>
     public static readonly CType Implied = MakeSimple(CSimpleType.Implied);
-
     public static readonly CType Void = MakeSimple(CSimpleType.Void);
     public static readonly CType UInt8 = MakeSimple(CSimpleType.UInt8);
     public static readonly CType UInt8Ptr = MakePointer(UInt8);
