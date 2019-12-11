@@ -45,6 +45,7 @@ class StackAssembler
                 foreach (FieldInfo field in fields)
                 {
                     string qualifiedName = string.Format("{0}{1}{2}", functionName, Compiler.NamespaceSeparator, field.Name);
+                    DeclareSymbol(SymbolTag.Variable, qualifiedName, field.Type, 0);
                     Emit(Tag.Variable, field.Region, SizeOf(field.Type), qualifiedName);
                 }
 
