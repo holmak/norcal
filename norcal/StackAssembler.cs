@@ -321,6 +321,11 @@ class StackAssembler
                     Program.NYI();
                 }
             }
+            else if (op.Match(Tag.Drop))
+            {
+                if (Stack.Count != 1) Program.Panic("the virtual stack should contain exactly one operand");
+                Stack.Clear();
+            }
             else if (op.Match(Tag.Return))
             {
                 SpillAll();

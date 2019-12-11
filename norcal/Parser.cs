@@ -314,7 +314,8 @@ partial class Parser
         else
         {
             // An expression-statement:
-            stmt = ParseExpr();
+            // (Indicate that the resulting value must be discarded.)
+            stmt = Expr.Make(Tag.Drop, ParseExpr());
             Expect(TokenType.SEMICOLON);
         }
         return stmt;

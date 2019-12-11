@@ -284,6 +284,7 @@ static class Tag
     public static readonly string PushVariable = "$pushv";
     public static readonly string PushAddressOfVariable = "$pushav";
     public static readonly string PushFieldName = "$pushfn";
+    public static readonly string Drop = "$drop";
 
     // Assembly directives:
     public static readonly string Comment = "$comment";
