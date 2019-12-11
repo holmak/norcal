@@ -147,8 +147,8 @@ void reset()
 @out 1 9
 void reset()
 {
-    OUT = 10 - 5 - 4;
-    OUT = 10 - (5 - 4);
+    OUTB = 10 - 5 - 4;
+    OUTB = 10 - (5 - 4);
     STOP = 0;
 }
 
