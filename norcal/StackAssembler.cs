@@ -200,9 +200,8 @@ class StackAssembler
                 Operand left = Pop();
 
                 // Check types:
-                if (left.Type != right.Type) Program.Error("types in binary expression must match");
-                CType commonType = left.Type;
-                int size = SizeOf(commonType);
+                if (!TryToMakeTypesEqual(ref left, ref right)) Program.Error("types don't match");
+                int size = SizeOf(left.Type);
 
                 // Rearrange the stack:
                 SpillAll();
@@ -229,7 +228,7 @@ class StackAssembler
 
                     if (size > 2) Program.Panic("value is too large");
 
-                    PushAccumulator(commonType);
+                    PushAccumulator(left.Type);
                 }
                 else if (right.Tag == OperandTag.Variable)
                 {
@@ -250,7 +249,7 @@ class StackAssembler
 
                     if (size > 2) Program.Panic("value is too large");
 
-                    PushAccumulator(commonType);
+                    PushAccumulator(left.Type);
                 }
                 else
                 {
@@ -264,9 +263,8 @@ class StackAssembler
                 Operand left = Pop();
 
                 // Check types:
-                if (left.Type != right.Type) Program.Error("types in binary expression must match");
-                CType commonType = left.Type;
-                int size = SizeOf(commonType);
+                if (!TryToMakeTypesEqual(ref left, ref right)) Program.Error("types don't match");
+                int size = SizeOf(left.Type);
 
                 // Rearrange the stack:
                 SpillAll();
@@ -293,7 +291,7 @@ class StackAssembler
 
                     if (size > 2) Program.Panic("value is too large");
 
-                    PushAccumulator(commonType);
+                    PushAccumulator(left.Type);
                 }
                 else if (right.Tag == OperandTag.Variable)
                 {
@@ -314,7 +312,7 @@ class StackAssembler
 
                     if (size > 2) Program.Panic("value is too large");
 
-                    PushAccumulator(commonType);
+                    PushAccumulator(left.Type);
                 }
                 else
                 {
