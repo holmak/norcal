@@ -347,13 +347,9 @@ class StackAssembler
                         Program.Error("in call to function '{0}', argument '{1}' has the wrong type", functionName, param.Name);
                     }
 
-                    Operand paramOperand = new Operand
-                    {
-                        Tag = OperandTag.Variable,
-                        Name = functionName + Compiler.NamespaceSeparator + param.Name,
-                        Type = param.Type,
-                    };
-
+                    Operand paramOperand = Operand.MakeVariable(
+                        functionName + Compiler.NamespaceSeparator + param.Name,
+                        param.Type);
                     EmitLoadAccumulator(arg);
                     EmitStoreAccumulator(paramOperand);
                 }
@@ -417,8 +413,8 @@ class StackAssembler
         else if (left.Tag == OperandTag.Immediate || right.Tag == OperandTag.Immediate)
         {
             // Try promoting the immediate values to a larger type:
-            if (left.Tag == OperandTag.Immediate && left.Type == CType.UInt8) left.Type = CType.UInt16;
-            if (right.Tag == OperandTag.Immediate && right.Type == CType.UInt8) right.Type = CType.UInt16;
+            if (left.Tag == OperandTag.Immediate && left.Type == CType.UInt8) left = left.WithType(CType.UInt16);
+            if (right.Tag == OperandTag.Immediate && right.Type == CType.UInt8) right = right.WithType(CType.UInt16);
             return left.Type == right.Type;
         }
         else
@@ -440,7 +436,7 @@ class StackAssembler
         else if (right.Tag == OperandTag.Immediate)
         {
             // Try promoting the immediate value to a larger type:
-            if (right.Type == CType.UInt8) right.Type = CType.UInt16;
+            if (right.Type == CType.UInt8) right = right.WithType(CType.UInt16);
             return leftType == right.Type;
         }
         else
@@ -508,12 +504,7 @@ class StackAssembler
             string temp = DeclareTemporary(r.Type);
             Emit(Expr.MakeAsm("STA", new AsmOperand(temp, AddressMode.Absolute)));
             Emit(Expr.MakeAsm("STX", new AsmOperand(temp, 1, AddressMode.Absolute)));
-            return new Operand
-            {
-                Tag = OperandTag.Variable,
-                Name = temp,
-                Type = r.Type,
-            };
+            return Operand.MakeVariable(temp, r.Type);
         }
         else if (r.IsFlag())
         {
@@ -542,21 +533,12 @@ class StackAssembler
             Program.Panic("An accumulator or flag operand was overwritten; it should have been saved.");
         }
 
-        Stack.Add(new Operand
-        {
-            Tag = OperandTag.Accumulator,
-            Type = type,
-        });
+        Stack.Add(Operand.MakeRegister(OperandTag.Accumulator, type));
     }
 
     void PushImmediate(int n)
     {
-        Stack.Add(new Operand
-        {
-            Tag = OperandTag.Immediate,
-            Value = n,
-            Type = (n <= byte.MaxValue) ? CType.UInt8 : CType.UInt16,
-        });
+        Stack.Add(Operand.MakeImmediate(n, (n <= byte.MaxValue) ? CType.UInt8 : CType.UInt16));
     }
 
     void PushVariable(string name, CType type)
@@ -564,12 +546,7 @@ class StackAssembler
         Symbol sym;
         if (!Symbols.TryGetValue(name, out sym)) Program.Error("variable not defined: {0}", name);
 
-        Stack.Add(new Operand
-        {
-            Tag = OperandTag.Variable,
-            Name = name,
-            Type = type,
-        });
+        Stack.Add(Operand.MakeVariable(name, type));
     }
 
     void PushVariableAddress(string name, CType type)
@@ -577,12 +554,7 @@ class StackAssembler
         Symbol sym;
         if (!Symbols.TryGetValue(name, out sym)) Program.Error("variable not defined: {0}", name);
 
-        Stack.Add(new Operand
-        {
-            Tag = OperandTag.VariableAddress,
-            Name = name,
-            Type = CType.MakePointer(type),
-        });
+        Stack.Add(Operand.MakeVariableAddress(name, CType.MakePointer(type)));
     }
 
     Operand Pop()
@@ -673,10 +645,25 @@ class StackAssembler
 [DebuggerDisplay("{Show(),nq}")]
 class Operand
 {
-    public OperandTag Tag;
-    public int Value;
-    public string Name;
-    public CType Type;
+    public readonly OperandTag Tag;
+    public readonly int Value;
+    public readonly string Name;
+    public readonly CType Type;
+
+    public Operand(OperandTag tag, int value, string name, CType type)
+    {
+        Tag = tag;
+        Value = value;
+        Name = name;
+        Type = type;
+    }
+
+    public static Operand MakeImmediate(int value, CType type) => new Operand(OperandTag.Immediate, value, null, type);
+    public static Operand MakeVariable(string name, CType type) => new Operand(OperandTag.Variable, 0, name, type);
+    public static Operand MakeVariableAddress(string name, CType type) => new Operand(OperandTag.VariableAddress, 0, name, type);
+    public static Operand MakeRegister(OperandTag register, CType type) => new Operand(register, 0, null, type);
+
+    public Operand WithType(CType newType) => new Operand(Tag, Value, Name, newType);
 
     public string Show()
     {
