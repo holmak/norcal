@@ -320,9 +320,9 @@ class CField
 }
 
 [DebuggerDisplay("{Show(),nq}")]
-partial class CFunctionInfo
+class CFunctionInfo
 {
-    public CType[] ParameterTypes;
+    public CParameter[] Parameters;
     public CType ReturnType;
 
     public override bool Equals(object obj)
@@ -337,8 +337,20 @@ partial class CFunctionInfo
 
     public string Show()
     {
-        var paramTypes = ParameterTypes.Select(x => x.Show());
+        var paramTypes = Parameters.Select(x => string.Format("{0} {1}", x.Type.Show(), x.Name));
         return string.Format("function({0}) {1}", string.Join(", ", paramTypes), ReturnType.Show());
+    }
+}
+
+class CParameter
+{
+    public readonly CType Type;
+    public readonly string Name;
+
+    public CParameter(CType type, string name)
+    {
+        Type = type;
+        Name = name;
     }
 }
 

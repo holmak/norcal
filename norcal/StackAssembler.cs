@@ -51,7 +51,7 @@ class StackAssembler
 
                 CFunctionInfo function = new CFunctionInfo
                 {
-                    ParameterTypes = fields.Select(x => x.Type).ToArray(),
+                    Parameters = fields.Select(x => new CParameter(x.Type, x.Name)).ToArray(),
                     ReturnType = returnType,
                 };
                 Functions.Add(functionName, function);
@@ -152,34 +152,32 @@ class StackAssembler
                 Operand dest = Pop();
 
                 // Check types:
-                if (!TryToMakeTypesEqual(ref dest, ref value)) Program.Error("types in assignment don't match");
-                int size = SizeOf(value.Type);
+                if (!TryToMatchLeftType(dest.Type, ref value)) Program.Error("types in assignment don't match");
 
                 // Rearrange stack:
                 SpillAll();
                 dest = Spill(dest);
-                EmitLoadAccumulator(value);
 
                 // Generate code:
-                if (dest.Tag == OperandTag.Variable)
-                {
-                    if (size >= 1) Emit(Expr.MakeAsm("STA", new AsmOperand(dest.Name, AddressMode.Absolute)));
-                    if (size >= 2) Emit(Expr.MakeAsm("STX", new AsmOperand(dest.Name, 1, AddressMode.Absolute)));
-                    if (size > 2) Program.Panic("value is too large");
-                    PushAccumulator(value.Type);
-                }
-                else
-                {
-                    Program.NYI();
-                }
+                EmitLoadAccumulator(value);
+                EmitStoreAccumulator(dest);
+                PushAccumulator(value.Type);
             }
             else if (op.Match(Tag.Load))
             {
-                SpillAll();
+                // TODO: I need to rethink how this operation works.
+                Program.NYI();
+
+                // Get operands:
                 Operand address = Pop();
 
+                // Check types:
                 CType loadedType = DereferencePointerType(address.Type);
                 int size = SizeOf(loadedType);
+
+                // Rearrange stack:
+                SpillAll();
+                address = Spill(address);
 
                 if (address.Tag == OperandTag.Variable)
                 {
@@ -200,7 +198,7 @@ class StackAssembler
                 Operand left = Pop();
 
                 // Check types:
-                if (!TryToMakeTypesEqual(ref left, ref right)) Program.Error("types don't match");
+                if (!TryToMatchTypes(ref left, ref right)) Program.Error("types don't match");
                 int size = SizeOf(left.Type);
 
                 // Rearrange the stack:
@@ -263,7 +261,7 @@ class StackAssembler
                 Operand left = Pop();
 
                 // Check types:
-                if (!TryToMakeTypesEqual(ref left, ref right)) Program.Error("types don't match");
+                if (!TryToMatchTypes(ref left, ref right)) Program.Error("types don't match");
                 int size = SizeOf(left.Type);
 
                 // Rearrange the stack:
@@ -334,8 +332,36 @@ class StackAssembler
             else if (op.Match(out functionName))
             {
                 // This is a general-purpose call.
-                // TODO: Copy the arguments into the function's call frame.
+                
+                // Copy the arguments into the function's call frame:
+                SpillAll();
+                CFunctionInfo function = Functions[functionName];
+                for (int i = function.Parameters.Length - 1; i >= 0; i--)
+                {
+                    Operand arg = Pop();
+
+                    // Check types:
+                    CParameter param = function.Parameters[i];
+                    if (!TryToMatchLeftType(param.Type, ref arg))
+                    {
+                        Program.Error("in call to function '{0}', argument '{1}' has the wrong type", functionName, param.Name);
+                    }
+
+                    Operand paramOperand = new Operand
+                    {
+                        Tag = OperandTag.Variable,
+                        Name = functionName + Compiler.NamespaceSeparator + param.Name,
+                        Type = param.Type,
+                    };
+
+                    EmitLoadAccumulator(arg);
+                    EmitStoreAccumulator(paramOperand);
+                }
+
                 Emit(Expr.MakeAsm("JSR", new AsmOperand(functionName, AddressMode.Absolute)));
+
+                // Use the return value:
+                PushAccumulator(function.ReturnType);
             }
             else
             {
@@ -379,10 +405,10 @@ class StackAssembler
     }
 
     /// <summary>
-    /// Return true if the types match, and produce the type that they share.
+    /// Return true if the operand types match.
     /// This function is necessary because the type of immediates has some flexibility.
     /// </summary>
-    static bool TryToMakeTypesEqual(ref Operand left, ref Operand right)
+    static bool TryToMatchTypes(ref Operand left, ref Operand right)
     {
         if (left.Type == right.Type)
         {
@@ -394,6 +420,28 @@ class StackAssembler
             if (left.Tag == OperandTag.Immediate && left.Type == CType.UInt8) left.Type = CType.UInt16;
             if (right.Tag == OperandTag.Immediate && right.Type == CType.UInt8) right.Type = CType.UInt16;
             return left.Type == right.Type;
+        }
+        else
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Return true if the operand types match.
+    /// This function is necessary because the type of immediates has some flexibility.
+    /// </summary>
+    static bool TryToMatchLeftType(CType leftType, ref Operand right)
+    {
+        if (leftType == right.Type)
+        {
+            return true;
+        }
+        else if (right.Tag == OperandTag.Immediate)
+        {
+            // Try promoting the immediate value to a larger type:
+            if (right.Type == CType.UInt8) right.Type = CType.UInt16;
+            return leftType == right.Type;
         }
         else
         {
@@ -562,6 +610,32 @@ class StackAssembler
         {
             if (size >= 1) Emit(Expr.MakeAsm("LDA", new AsmOperand(r.Name, AddressMode.Absolute)));
             if (size >= 2) Emit(Expr.MakeAsm("LDX", new AsmOperand(r.Name, 1, AddressMode.Absolute)));
+            if (size > 2) Program.Panic("value is too large");
+        }
+        else
+        {
+            Program.NYI();
+        }
+    }
+
+    void EmitStoreAccumulator(Operand r)
+    {
+        int size = SizeOf(r.Type);
+
+        if (r.Tag == OperandTag.Accumulator)
+        {
+            // NOP
+        }
+        else if (r.Tag == OperandTag.Immediate)
+        {
+            if (size >= 1) Emit(Expr.MakeAsm("STA", new AsmOperand(LowByte(r.Value), AddressMode.Immediate)));
+            if (size >= 2) Emit(Expr.MakeAsm("STX", new AsmOperand(HighByte(r.Value), AddressMode.Immediate)));
+            if (size > 2) Program.Panic("value is too large");
+        }
+        else if (r.Tag == OperandTag.Variable)
+        {
+            if (size >= 1) Emit(Expr.MakeAsm("STA", new AsmOperand(r.Name, AddressMode.Absolute)));
+            if (size >= 2) Emit(Expr.MakeAsm("STX", new AsmOperand(r.Name, 1, AddressMode.Absolute)));
             if (size > 2) Program.Panic("value is too large");
         }
         else
