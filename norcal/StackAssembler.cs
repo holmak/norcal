@@ -335,7 +335,12 @@ class StackAssembler
                 
                 // Copy the arguments into the function's call frame:
                 SpillAll();
-                CFunctionInfo function = Functions[functionName];
+                CFunctionInfo function;
+                if (!Functions.TryGetValue(functionName, out function))
+                {
+                    Program.Panic("function not implemented: {0}", functionName);
+                }
+
                 for (int i = function.Parameters.Length - 1; i >= 0; i--)
                 {
                     Operand arg = Pop();
