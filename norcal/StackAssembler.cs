@@ -499,17 +499,20 @@ class StackAssembler
     /// </summary>
     Operand Spill(Operand r)
     {
-        if (r.Tag == OperandTag.Accumulator)
+        if (r.Tag == OperandTag.Register)
         {
-            string temp = DeclareTemporary(r.Type);
-            Emit(Expr.MakeAsm("STA", new AsmOperand(temp, AddressMode.Absolute)));
-            Emit(Expr.MakeAsm("STX", new AsmOperand(temp, 1, AddressMode.Absolute)));
-            return Operand.MakeVariable(temp, r.Type);
-        }
-        else if (r.IsFlag())
-        {
-            Program.NYI();
-            return null;
+            if (r.Register == OperandRegister.Accumulator)
+            {
+                string temp = DeclareTemporary(r.Type);
+                Emit(Expr.MakeAsm("STA", new AsmOperand(temp, AddressMode.Absolute)));
+                Emit(Expr.MakeAsm("STX", new AsmOperand(temp, 1, AddressMode.Absolute)));
+                return Operand.MakeVariable(temp, r.Type);
+            }
+            else
+            {
+                Program.NYI();
+                return null;
+            }
         }
         else
         {
@@ -528,12 +531,12 @@ class StackAssembler
 
     void PushAccumulator(CType type)
     {
-        if (Stack.Any(x => x.Tag == OperandTag.Accumulator || x.IsFlag()))
+        if (Stack.Any(x => x.Tag == OperandTag.Register))
         {
             Program.Panic("An accumulator or flag operand was overwritten; it should have been saved.");
         }
 
-        Stack.Add(Operand.MakeRegister(OperandTag.Accumulator, type));
+        Stack.Add(Operand.MakeRegister(OperandRegister.Accumulator, type));
     }
 
     void PushImmediate(int n)
@@ -568,7 +571,7 @@ class StackAssembler
     {
         int size = SizeOf(r.Type);
 
-        if (r.Tag == OperandTag.Accumulator)
+        if (r.Tag == OperandTag.Register && r.Register == OperandRegister.Accumulator)
         {
             // NOP
         }
@@ -594,7 +597,7 @@ class StackAssembler
     {
         int size = SizeOf(r.Type);
 
-        if (r.Tag == OperandTag.Accumulator)
+        if (r.Tag == OperandTag.Register && r.Register == OperandRegister.Accumulator)
         {
             // NOP
         }
@@ -648,49 +651,56 @@ class Operand
     public readonly OperandTag Tag;
     public readonly int Value;
     public readonly string Name;
+    public readonly OperandRegister Register;
     public readonly CType Type;
 
-    public Operand(OperandTag tag, int value, string name, CType type)
+    public Operand(OperandTag tag, int value, string name, OperandRegister register, CType type)
     {
         Tag = tag;
         Value = value;
         Name = name;
+        Register = register;
         Type = type;
     }
 
-    public static Operand MakeImmediate(int value, CType type) => new Operand(OperandTag.Immediate, value, null, type);
-    public static Operand MakeVariable(string name, CType type) => new Operand(OperandTag.Variable, 0, name, type);
-    public static Operand MakeVariableAddress(string name, CType type) => new Operand(OperandTag.VariableAddress, 0, name, type);
-    public static Operand MakeRegister(OperandTag register, CType type) => new Operand(register, 0, null, type);
+    public static Operand MakeImmediate(int value, CType type) => new Operand(OperandTag.Immediate, value, null, OperandRegister.Invalid, type);
+    public static Operand MakeVariable(string name, CType type) => new Operand(OperandTag.Variable, 0, name, OperandRegister.Invalid, type);
+    public static Operand MakeVariableAddress(string name, CType type) => new Operand(OperandTag.VariableAddress, 0, name, OperandRegister.Invalid, type);
+    public static Operand MakeRegister(OperandRegister register, CType type) => new Operand(OperandTag.Register, 0, null, register, type);
 
-    public Operand WithType(CType newType) => new Operand(Tag, Value, Name, newType);
+    public Operand WithType(CType newType) => new Operand(Tag, Value, Name, Register, newType);
 
     public string Show()
     {
-        if (Tag == OperandTag.Accumulator) return "A";
-        else if (Tag == OperandTag.Immediate) return "#" + Value;
+        if (Tag == OperandTag.Immediate) return "#" + Value;
         else if (Tag == OperandTag.Variable) return Name;
         else if (Tag == OperandTag.VariableAddress) return "&" + Name;
-        else if (Tag == OperandTag.FlagZero) return "ZF";
-        else if (Tag == OperandTag.FlagNotZero) return "!ZF";
-        else if (Tag == OperandTag.FlagCarry) return "CF";
-        else if (Tag == OperandTag.FlagNotCarry) return "!CF";
-        else return "???";
-    }
+        else if (Tag == OperandTag.Register)
+        {
+            if (Register == OperandRegister.Accumulator) return "A";
+            else if (Register == OperandRegister.FlagZero) return "ZF";
+            else if (Register == OperandRegister.FlagNotZero) return "!ZF";
+            else if (Register == OperandRegister.FlagCarry) return "CF";
+            else if (Register == OperandRegister.FlagNotCarry) return "!CF";
+        }
 
-    public bool IsFlag()
-    {
-        return Tag == OperandTag.FlagZero || Tag == OperandTag.FlagNotZero ||
-            Tag == OperandTag.FlagCarry || Tag == OperandTag.FlagNotCarry;
+        Program.NYI();
+        return null;
     }
 }
 
 enum OperandTag
 {
-    Accumulator,
     Immediate,
     Variable,
     VariableAddress,
+    Register,
+}
+
+enum OperandRegister
+{
+    Invalid = 0,
+    Accumulator,
     FlagZero,
     FlagNotZero,
     FlagCarry,
