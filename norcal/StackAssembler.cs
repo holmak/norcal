@@ -534,13 +534,17 @@ class StackAssembler
         return name;
     }
 
-    void PushAccumulator(CType type)
+    void AssertRegistersFree()
     {
         if (Stack.Any(x => x.Tag == OperandTag.Register))
         {
             Program.Panic("An accumulator or flag operand was overwritten; it should have been saved.");
         }
+    }
 
+    void PushAccumulator(CType type)
+    {
+        AssertRegistersFree();
         Stack.Add(Operand.MakeRegister(OperandRegister.Accumulator, type));
     }
 
@@ -574,6 +578,8 @@ class StackAssembler
 
     void EmitLoadAccumulator(Operand r)
     {
+        AssertRegistersFree();
+
         int size = SizeOf(r.Type);
 
         if (r.Tag == OperandTag.Register && r.Register == OperandRegister.Accumulator)
