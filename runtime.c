@@ -14,6 +14,7 @@ uint8_t _rt_mul_u8(uint8_t a, uint8_t b)
         skip:
         DEY         // Decrement the counter
         BNE loop    // Loop a total of 8 times
+        RTS
     }
 }
 
@@ -45,6 +46,7 @@ uint16_t _rt_mul_u16(uint16_t a, uint16_t b)
         LDA r+1     // Copy r to AX
         TAX
         LDA r
+        RTS
     }
 }
 
@@ -72,6 +74,7 @@ uint8_t _rt_div_u8(uint8_t a, uint8_t b)
         DEX
         BNE loop
         LDA a
+        RTS
     }
 }
 
@@ -106,6 +109,7 @@ uint16_t _rt_div_u16(uint16_t a, uint16_t b)
         BNE loop
         LDA a           // Return the quotient
         LDX a+1                
+        RTS
     }
 }
 
@@ -133,6 +137,7 @@ uint8_t _rt_mod_u8(uint8_t a, uint8_t b)
         DEX
         BNE loop
         LDA r
+        RTS
     }
 }
 
@@ -168,6 +173,7 @@ uint16_t _rt_mod_u16(uint16_t a, uint16_t b)
         BNE loop
         LDA r
         LDX r+1
+        RTS
     }
 }
 
@@ -181,6 +187,7 @@ uint8_t _rt_eq_u8(uint8_t a, uint8_t b)
         BNE skip
         LDA #1
         skip:
+        RTS
     }
 }
 
@@ -197,6 +204,7 @@ uint8_t _rt_eq_u16(uint16_t a, uint16_t b)
         BNE skip
         LDA #1
         skip:
+        RTS
     }
 }
 
@@ -213,6 +221,7 @@ uint8_t _rt_ne_u8(uint8_t a, uint8_t b)
         BNE skip
         LDA #0
         skip:
+        RTS
     }
 }
 
@@ -232,6 +241,7 @@ uint8_t _rt_ne_u16(uint16_t a, uint16_t b)
         BNE skip
         LDA #0
         skip:
+        RTS
     }
 }
 
@@ -246,6 +256,7 @@ uint8_t _rt_lt_u8(uint8_t a, uint8_t b)
         BCS skip
         LDA #1
         skip:
+        RTS
     }
 }
 
@@ -274,6 +285,7 @@ uint8_t _rt_lt_u16(uint16_t a, uint16_t b)
         BCS skip
         LDA #1
         skip:
+        RTS
     }
 }
 
@@ -290,6 +302,7 @@ uint8_t _rt_gt_u8(uint8_t a, uint8_t b)
         BCS skip
         LDA #1
         skip:
+        RTS
     }
 }
 
@@ -313,6 +326,7 @@ uint8_t _rt_gt_u16(uint16_t a, uint16_t b)
         BCS skip
         LDA #1
         skip:
+        RTS
     }
 }
 
@@ -329,6 +343,7 @@ uint8_t _rt_ge_u8(uint8_t a, uint8_t b)
         BCS skip
         LDA #0
         skip:
+        RTS
     }
 }
 
@@ -352,6 +367,7 @@ uint8_t _rt_ge_u16(uint16_t a, uint16_t b)
         BCS skip
         LDA #0
         skip:
+        RTS
     }
 }
 
@@ -368,6 +384,7 @@ uint8_t _rt_le_u8(uint8_t a, uint8_t b)
         BCS skip
         LDA #0
         skip:
+        RTS
     }
 }
 
@@ -391,6 +408,7 @@ uint8_t _rt_le_u16(uint16_t a, uint16_t b)
         BCS skip
         LDA #0
         skip:
+        RTS
     }
 }
 
@@ -400,6 +418,7 @@ uint8_t _rt_bitwise_and_u8(uint8_t a, uint8_t b)
     {
         LDA a
         AND b
+        RTS
     }
 }
 
@@ -412,6 +431,7 @@ uint16_t _rt_bitwise_and_u16(uint16_t a, uint16_t b)
         TAX
         LDA a
         AND b
+        RTS
     }
 }
 
@@ -421,6 +441,7 @@ uint8_t _rt_bitwise_or_u8(uint8_t a, uint8_t b)
     {
         LDA a
         ORA b
+        RTS
     }
 }
 
@@ -433,6 +454,7 @@ uint16_t _rt_bitwise_or_u16(uint16_t a, uint16_t b)
         TAX
         LDA a
         ORA b
+        RTS
     }
 }
 
@@ -442,6 +464,7 @@ uint8_t _rt_bitwise_xor_u8(uint8_t a, uint8_t b)
     {
         LDA a
         EOR b
+        RTS
     }
 }
 
@@ -454,6 +477,7 @@ uint16_t _rt_bitwise_xor_u16(uint16_t a, uint16_t b)
         TAX
         LDA a
         EOR b
+        RTS
     }
 }
 
@@ -463,6 +487,7 @@ uint8_t _rt_bitwise_not_u8(uint8_t a)
     {
         LDA a
         EOR #$FF
+        RTS
     }
 }
 
@@ -475,6 +500,7 @@ uint16_t _rt_bitwise_not_u16(uint16_t a)
         TAX
         LDA a
         EOR #$FF
+        RTS
     }
 }
 
@@ -487,6 +513,7 @@ uint8_t _rt_logical_not_u8(uint8_t a)
         BEQ skip
         LDA #0
         skip:
+        RTS
     }
 }
 
@@ -499,6 +526,7 @@ uint8_t _rt_predec_u8(__zeropage uint8_t *p)
         SEC
         SBC #1
         STA (p),Y
+        RTS
     }
 }
 
@@ -522,6 +550,7 @@ uint16_t _rt_predec_u16(__zeropage uint16_t *p)
         STA (p),Y
         TAX
         LDA r
+        RTS
     }
 }
 
@@ -536,6 +565,7 @@ uint8_t _rt_postdec_u8(__zeropage uint8_t *p)
         SBC #1
         STA (p),Y
         TXA
+        RTS
     }
 }
 
@@ -561,6 +591,7 @@ uint16_t _rt_postdec_u16(__zeropage uint16_t *p)
         LDA r+1
         TAX
         LDA r
+        RTS
     }
 }
 
@@ -573,6 +604,7 @@ uint8_t _rt_preinc_u8(__zeropage uint8_t *p)
         CLC
         ADC #1
         STA (p),Y
+        RTS
     }
 }
 
@@ -596,6 +628,7 @@ uint16_t _rt_preinc_u16(__zeropage uint16_t *p)
         STA (p),Y
         TAX             // Return the new value
         LDA r
+        RTS
     }
 }
 
@@ -610,6 +643,7 @@ uint8_t _rt_postinc_u8(__zeropage uint8_t *p)
         ADC #1
         STA (p),Y
         TXA
+        RTS
     }
 }
 
@@ -635,6 +669,7 @@ uint16_t _rt_postinc_u16(__zeropage uint16_t *p)
         LDA r+1         // Return the old value
         TAX
         LDA r
+        RTS
     }
 }
 
@@ -650,6 +685,7 @@ uint8_t _rt_shift_left_u8(uint8_t a, uint8_t b)
         DEX             // Decrement the counter
         BNE loop
         done:
+        RTS
     }
 }
 
@@ -673,6 +709,7 @@ uint16_t _rt_shift_left_u16(uint16_t a, uint16_t b)
         BNE loop
         done:
         LDX a+1         // a is already in A, but a+1 needs to go to X
+        RTS
     }
 }
 
@@ -691,6 +728,7 @@ uint8_t _rt_shift_right_u8(uint8_t a, uint8_t b)
         DEX
         BNE loop
         done:
+        RTS
     }
 }
 
@@ -717,5 +755,6 @@ uint16_t _rt_shift_right_u16(uint16_t a, uint16_t b)
         BNE loop
         done:
         LDX a+1
+        RTS
     }
 }
