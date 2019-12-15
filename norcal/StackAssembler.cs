@@ -98,22 +98,22 @@ class StackAssembler
             }
             else if (op.Match(Tag.Jump, out target))
             {
-                Emit(Expr.MakeAsm("JMP", new AsmOperand(target, AddressMode.Absolute)));
+                EmitAsm("JMP", new AsmOperand(target, AddressMode.Absolute));
             }
             else if (op.Match(Tag.JumpIfTrue, out target))
             {
                 SpillAll();
                 Operand cond = Pop();
 
-                if (cond.Tag == OperandTag.Variable)
+                if (cond.Tag == OperandTag.Register)
                 {
-                    Emit(Expr.MakeAsm("LDA", new AsmOperand(cond.Name, AddressMode.Absolute)));
-                    Emit(Expr.MakeAsm("ORA", new AsmOperand(cond.Name, 1, AddressMode.Absolute)));
-                    Emit(Expr.MakeAsm("BNE", new AsmOperand(target, AddressMode.Absolute)));
+                    Program.NYI();
                 }
                 else
                 {
-                    Program.NYI();
+                    EmitAsm("LDA", cond.LowByte());
+                    EmitAsm("ORA", cond.HighByte());
+                    EmitAsm("BNE", new AsmOperand(target, AddressMode.Absolute));
                 }
             }
             else if (op.Match(Tag.JumpIfFalse, out target))
@@ -123,9 +123,9 @@ class StackAssembler
 
                 if (cond.Tag == OperandTag.Variable)
                 {
-                    Emit(Expr.MakeAsm("LDA", new AsmOperand(cond.Name, AddressMode.Absolute)));
-                    Emit(Expr.MakeAsm("ORA", new AsmOperand(cond.Name, 1, AddressMode.Absolute)));
-                    Emit(Expr.MakeAsm("BEQ", new AsmOperand(target, AddressMode.Absolute)));
+                    EmitAsm("LDA", new AsmOperand(cond.Name, AddressMode.Absolute));
+                    EmitAsm("ORA", new AsmOperand(cond.Name, 1, AddressMode.Absolute));
+                    EmitAsm("BEQ", new AsmOperand(target, AddressMode.Absolute));
                 }
                 else
                 {
@@ -181,8 +181,8 @@ class StackAssembler
 
                 if (address.Tag == OperandTag.Variable)
                 {
-                    if (size >= 1) Emit(Expr.MakeAsm("LDA", new AsmOperand(address.Name, AddressMode.Absolute)));
-                    if (size >= 2) Emit(Expr.MakeAsm("LDX", new AsmOperand(address.Name, 1, AddressMode.Absolute)));
+                    if (size >= 1) EmitAsm("LDA", address.LowByte());
+                    if (size >= 2) EmitAsm("LDX", address.HighByte());
                     if (size > 2) Program.Panic("values larger than two bytes cannot be loaded");
                     PushAccumulator(loadedType);
                 }
@@ -207,52 +207,24 @@ class StackAssembler
                 EmitLoadAccumulator(left);
 
                 // Generate code:
-                if (right.Tag == OperandTag.Immediate)
+                if (size >= 1)
                 {
-                    if (size >= 1)
-                    {
-                        Emit(Expr.MakeAsm("CLC"));
-                        Emit(Expr.MakeAsm("ADC", new AsmOperand(LowByte(right.Value), AddressMode.Immediate)));
-                    }
-
-                    if (size >= 2)
-                    {
-                        Emit(Expr.MakeAsm("TAY"));
-                        Emit(Expr.MakeAsm("TXA"));
-                        Emit(Expr.MakeAsm("ADC", new AsmOperand(HighByte(right.Value), AddressMode.Immediate)));
-                        Emit(Expr.MakeAsm("TAX"));
-                        Emit(Expr.MakeAsm("TYA"));
-                    }
-
-                    if (size > 2) Program.Panic("value is too large");
-
-                    PushAccumulator(left.Type);
+                    EmitAsm("CLC");
+                    EmitAsm("ADC", right.LowByte());
                 }
-                else if (right.Tag == OperandTag.Variable)
+
+                if (size >= 2)
                 {
-                    if (size >= 1)
-                    {
-                        Emit(Expr.MakeAsm("CLC"));
-                        Emit(Expr.MakeAsm("ADC", new AsmOperand(right.Name, AddressMode.Absolute)));
-                    }
-
-                    if (size >= 2)
-                    {
-                        Emit(Expr.MakeAsm("TAY"));
-                        Emit(Expr.MakeAsm("TXA"));
-                        Emit(Expr.MakeAsm("ADC", new AsmOperand(right.Name, 1, AddressMode.Absolute)));
-                        Emit(Expr.MakeAsm("TAX"));
-                        Emit(Expr.MakeAsm("TYA"));
-                    }
-
-                    if (size > 2) Program.Panic("value is too large");
-
-                    PushAccumulator(left.Type);
+                    EmitAsm("TAY");
+                    EmitAsm("TXA");
+                    EmitAsm("ADC", right.HighByte());
+                    EmitAsm("TAX");
+                    EmitAsm("TYA");
                 }
-                else
-                {
-                    Program.NYI();
-                }
+
+                if (size > 2) Program.Panic("value is too large");
+
+                PushAccumulator(left.Type);
             }
             else if (op.Match(Tag.Subtract))
             {
@@ -270,52 +242,24 @@ class StackAssembler
                 EmitLoadAccumulator(left);
 
                 // Generate code:
-                if (right.Tag == OperandTag.Immediate)
+                if (size >= 1)
                 {
-                    if (size >= 1)
-                    {
-                        Emit(Expr.MakeAsm("SEC"));
-                        Emit(Expr.MakeAsm("SBC", new AsmOperand(LowByte(right.Value), AddressMode.Immediate)));
-                    }
-
-                    if (size >= 2)
-                    {
-                        Emit(Expr.MakeAsm("TAY"));
-                        Emit(Expr.MakeAsm("TXA"));
-                        Emit(Expr.MakeAsm("SBC", new AsmOperand(HighByte(right.Value), AddressMode.Immediate)));
-                        Emit(Expr.MakeAsm("TAX"));
-                        Emit(Expr.MakeAsm("TYA"));
-                    }
-
-                    if (size > 2) Program.Panic("value is too large");
-
-                    PushAccumulator(left.Type);
+                    EmitAsm("SEC");
+                    EmitAsm("SBC", right.LowByte());
                 }
-                else if (right.Tag == OperandTag.Variable)
+
+                if (size >= 2)
                 {
-                    if (size >= 1)
-                    {
-                        Emit(Expr.MakeAsm("SEC"));
-                        Emit(Expr.MakeAsm("SBC", new AsmOperand(right.Name, AddressMode.Absolute)));
-                    }
-
-                    if (size >= 2)
-                    {
-                        Emit(Expr.MakeAsm("TAY"));
-                        Emit(Expr.MakeAsm("TXA"));
-                        Emit(Expr.MakeAsm("SBC", new AsmOperand(right.Name, 1, AddressMode.Absolute)));
-                        Emit(Expr.MakeAsm("TAX"));
-                        Emit(Expr.MakeAsm("TYA"));
-                    }
-
-                    if (size > 2) Program.Panic("value is too large");
-
-                    PushAccumulator(left.Type);
+                    EmitAsm("TAY");
+                    EmitAsm("TXA");
+                    EmitAsm("SBC", right.HighByte());
+                    EmitAsm("TAX");
+                    EmitAsm("TYA");
                 }
-                else
-                {
-                    Program.NYI();
-                }
+
+                if (size > 2) Program.Panic("value is too large");
+
+                PushAccumulator(left.Type);
             }
             else if (op.Match(Tag.Drop))
             {
@@ -327,7 +271,7 @@ class StackAssembler
                 SpillAll();
                 Operand result = Pop();
                 EmitLoadAccumulator(result);
-                Emit(Expr.MakeAsm("RTS"));
+                EmitAsm("RTS");
             }
             else if (op.Match(out functionName))
             {
@@ -359,7 +303,7 @@ class StackAssembler
                     EmitStoreAccumulator(paramOperand);
                 }
 
-                Emit(Expr.MakeAsm("JSR", new AsmOperand(functionName, AddressMode.Absolute)));
+                EmitAsm("JSR", new AsmOperand(functionName, AddressMode.Absolute));
 
                 // Use the return value:
                 PushAccumulator(function.ReturnType);
@@ -387,6 +331,10 @@ class StackAssembler
     {
         Output.Add(e);
     }
+
+    void EmitAsm(string mnemonic) => Emit(Expr.MakeAsm(mnemonic));
+
+    void EmitAsm(string mnemonic, AsmOperand operand) => Emit(Expr.MakeAsm(mnemonic, operand));
 
     void DeclareSymbol(SymbolTag tag, string name, CType type, int value)
     {
@@ -509,8 +457,8 @@ class StackAssembler
             if (r.Register == OperandRegister.Accumulator)
             {
                 string temp = DeclareTemporary(r.Type);
-                Emit(Expr.MakeAsm("STA", new AsmOperand(temp, AddressMode.Absolute)));
-                Emit(Expr.MakeAsm("STX", new AsmOperand(temp, 1, AddressMode.Absolute)));
+                EmitAsm("STA", new AsmOperand(temp, AddressMode.Absolute));
+                EmitAsm("STX", new AsmOperand(temp, 1, AddressMode.Absolute));
                 return Operand.MakeVariable(temp, r.Type);
             }
             else
@@ -582,62 +530,31 @@ class StackAssembler
 
         int size = SizeOf(r.Type);
 
-        if (r.Tag == OperandTag.Register && r.Register == OperandRegister.Accumulator)
+        if (r.Tag == OperandTag.Register)
         {
-            // NOP
-        }
-        else if (r.Tag == OperandTag.Immediate)
-        {
-            if (size >= 1) Emit(Expr.MakeAsm("LDA", new AsmOperand(LowByte(r.Value), AddressMode.Immediate)));
-            if (size >= 2) Emit(Expr.MakeAsm("LDX", new AsmOperand(HighByte(r.Value), AddressMode.Immediate)));
-            if (size > 2) Program.Panic("value is too large");
-        }
-        else if (r.Tag == OperandTag.Variable)
-        {
-            if (size >= 1) Emit(Expr.MakeAsm("LDA", new AsmOperand(r.Name, AddressMode.Absolute)));
-            if (size >= 2) Emit(Expr.MakeAsm("LDX", new AsmOperand(r.Name, 1, AddressMode.Absolute)));
-            if (size > 2) Program.Panic("value is too large");
+            if (r.Register == OperandRegister.Accumulator)
+            {
+                // NOP
+            }
+            else
+            {
+                Program.NYI();
+            }
         }
         else
         {
-            Program.NYI();
+            if (size >= 1) EmitAsm("LDA", r.LowByte());
+            if (size >= 2) EmitAsm("LDX", r.HighByte());
+            if (size > 2) Program.Panic("value is too large");
         }
     }
 
     void EmitStoreAccumulator(Operand r)
     {
         int size = SizeOf(r.Type);
-
-        if (r.Tag == OperandTag.Register && r.Register == OperandRegister.Accumulator)
-        {
-            // NOP
-        }
-        else if (r.Tag == OperandTag.Immediate)
-        {
-            if (size >= 1) Emit(Expr.MakeAsm("STA", new AsmOperand(LowByte(r.Value), AddressMode.Immediate)));
-            if (size >= 2) Emit(Expr.MakeAsm("STX", new AsmOperand(HighByte(r.Value), AddressMode.Immediate)));
-            if (size > 2) Program.Panic("value is too large");
-        }
-        else if (r.Tag == OperandTag.Variable)
-        {
-            if (size >= 1) Emit(Expr.MakeAsm("STA", new AsmOperand(r.Name, AddressMode.Absolute)));
-            if (size >= 2) Emit(Expr.MakeAsm("STX", new AsmOperand(r.Name, 1, AddressMode.Absolute)));
-            if (size > 2) Program.Panic("value is too large");
-        }
-        else
-        {
-            Program.NYI();
-        }
-    }
-
-    static int LowByte(int n)
-    {
-        return n & 0xFF;
-    }
-
-    static int HighByte(int n)
-    {
-        return (n >> 8) & 0xFF;
+        if (size >= 1) EmitAsm("STA", r.LowByte());
+        if (size >= 2) EmitAsm("STX", r.HighByte());
+        if (size > 2) Program.Panic("value is too large");
     }
 
     [DebuggerDisplay("{Tag} {Name} = 0x{Value,h} ({Type.Show(),nq})")]
@@ -680,6 +597,30 @@ class Operand
     public static Operand MakeRegister(OperandRegister register, CType type) => new Operand(OperandTag.Register, 0, null, register, type);
 
     public Operand WithType(CType newType) => new Operand(Tag, Value, Name, Register, newType);
+
+    public AsmOperand LowByte()
+    {
+        if (Tag == OperandTag.Immediate) return new AsmOperand(Value & 0xFF, AddressMode.Immediate);
+        else if (Tag == OperandTag.Variable) return new AsmOperand(Name, AddressMode.Absolute);
+        else if (Tag == OperandTag.VariableAddress) return new AsmOperand(Name, ImmediateModifier.LowByte);
+        else
+        {
+            Program.Panic("not possible with register operands");
+            return null;
+        }
+    }
+
+    public AsmOperand HighByte()
+    {
+        if (Tag == OperandTag.Immediate) return new AsmOperand((Value >> 8) & 0xFF, AddressMode.Immediate);
+        else if (Tag == OperandTag.Variable) return new AsmOperand(Name, 1, AddressMode.Absolute);
+        else if (Tag == OperandTag.VariableAddress) return new AsmOperand(Name, ImmediateModifier.HighByte);
+        else
+        {
+            Program.Panic("not possible with register operands");
+            return null;
+        }
+    }
 
     public string Show()
     {

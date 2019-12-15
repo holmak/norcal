@@ -219,6 +219,15 @@ class Assembler
             value -= (PrgRomBase + location + 1);
         }
 
+        if (operand.Modifier == ImmediateModifier.LowByte)
+        {
+            value = value & 0xFF;
+        }
+        else if (operand.Modifier == ImmediateModifier.HighByte)
+        {
+            value = (value >> 8) & 0xFF;
+        }
+
         if (mode == AddressMode.Relative && (value < sbyte.MinValue || value > sbyte.MaxValue))
         {
             Program.Panic("relative branch offset is too large: {0}", operand.Show());
@@ -313,18 +322,31 @@ class AsmOperand
     public readonly Maybe<string> Base = Maybe.Nothing;
     public readonly int Offset = 0;
     public readonly AddressMode Mode;
+    public readonly ImmediateModifier Modifier;
 
     public static readonly AsmOperand Implicit = new AsmOperand(0, AddressMode.Implicit);
 
-    public AsmOperand(string actualBase, AddressMode mode) : this(actualBase, 0, mode) { }
+    public AsmOperand(string actualBase, AddressMode mode) : this(actualBase, 0, mode, ImmediateModifier.None) { }
 
-    public AsmOperand(int value, AddressMode mode) : this(Maybe.Nothing, value, mode) { }
+    public AsmOperand(string actualBase, ImmediateModifier modifier) : this(actualBase, 0, AddressMode.Immediate, modifier) { }
 
-    public AsmOperand(Maybe<string> optionalBase, int offset, AddressMode mode)
+    public AsmOperand(int value, AddressMode mode) : this(Maybe.Nothing, value, mode, ImmediateModifier.None) { }
+
+    public AsmOperand(int value, ImmediateModifier modifier) : this(Maybe.Nothing, value, AddressMode.Immediate, modifier) { }
+
+    public AsmOperand(Maybe<string> optionalBase, int offset, AddressMode mode) : this(optionalBase, offset, mode, ImmediateModifier.None) { }
+
+    private AsmOperand(Maybe<string> optionalBase, int offset, AddressMode mode, ImmediateModifier modifier)
     {
         Base = optionalBase;
         Offset = offset;
         Mode = mode;
+        Modifier = modifier;
+
+        if (Mode != AddressMode.Immediate && modifier != ImmediateModifier.None)
+        {
+            Program.Panic("non-immediate operands cannot be modified");
+        }
     }
 
     public string Show()
@@ -352,4 +374,11 @@ enum AddressMode
     Absolute,
     IndirectY,
     Relative,
+}
+
+enum ImmediateModifier
+{
+    None,
+    LowByte,
+    HighByte,
 }
