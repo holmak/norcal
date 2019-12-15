@@ -78,6 +78,7 @@ class CType : IEquatable<CType>
     public bool IsPointer => Tag == CTypeTag.Pointer;
     public bool IsStruct => Tag == CTypeTag.Struct;
     public bool IsArray => Tag == CTypeTag.Array;
+    public bool IsInteger => IsSimple && (SimpleType == CSimpleType.UInt8 || SimpleType == CSimpleType.UInt16);
 
     public override bool Equals(object obj)
     {

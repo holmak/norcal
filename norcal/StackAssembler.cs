@@ -261,6 +261,21 @@ class StackAssembler
 
                 PushAccumulator(left.Type);
             }
+            else if (op.Match(Tag.Modulus))
+            {
+                // Get operands:
+                Operand right = Peek(0);
+                Operand left = Peek(1);
+
+                // Check types:
+                if (!left.Type.IsInteger || !right.Type.IsInteger) Program.Error("arithmetic requires integers");
+                if (!TryToMatchTypes(ref left, ref right)) Program.Error("types don't match");
+
+                // Generate code:
+                if (left.Type == CType.UInt8) EmitCall("_rt_mod_u8");
+                else if (left.Type == CType.UInt16) EmitCall("_rt_mod_u16");
+                else Program.NYI();
+            }
             else if (op.Match(Tag.Drop))
             {
                 if (Stack.Count != 1) Program.Panic("the virtual stack should contain exactly one operand");
@@ -276,37 +291,7 @@ class StackAssembler
             else if (op.Match(out functionName))
             {
                 // This is a general-purpose call.
-                
-                // Copy the arguments into the function's call frame:
-                SpillAll();
-                CFunctionInfo function;
-                if (!Functions.TryGetValue(functionName, out function))
-                {
-                    Program.Panic("function not implemented: {0}", functionName);
-                }
-
-                for (int i = function.Parameters.Length - 1; i >= 0; i--)
-                {
-                    Operand arg = Pop();
-
-                    // Check types:
-                    CParameter param = function.Parameters[i];
-                    if (!TryToMatchLeftType(param.Type, ref arg))
-                    {
-                        Program.Error("in call to function '{0}', argument '{1}' has the wrong type", functionName, param.Name);
-                    }
-
-                    Operand paramOperand = Operand.MakeVariable(
-                        functionName + Compiler.NamespaceSeparator + param.Name,
-                        param.Type);
-                    EmitLoadAccumulator(arg);
-                    EmitStoreAccumulator(paramOperand);
-                }
-
-                EmitAsm("JSR", new AsmOperand(functionName, AddressMode.Absolute));
-
-                // Use the return value:
-                PushAccumulator(function.ReturnType);
+                EmitCall(functionName);
             }
             else
             {
@@ -524,6 +509,11 @@ class StackAssembler
         return r;
     }
 
+    Operand Peek(int offset)
+    {
+        return Stack[Stack.Count - 1 - offset];
+    }
+
     void EmitLoadAccumulator(Operand r)
     {
         AssertRegistersFree();
@@ -555,6 +545,40 @@ class StackAssembler
         if (size >= 1) EmitAsm("STA", r.LowByte());
         if (size >= 2) EmitAsm("STX", r.HighByte());
         if (size > 2) Program.Panic("value is too large");
+    }
+
+    void EmitCall(string functionName)
+    {
+        // Copy the arguments into the function's call frame:
+        SpillAll();
+        CFunctionInfo function;
+        if (!Functions.TryGetValue(functionName, out function))
+        {
+            Program.Panic("function not implemented: {0}", functionName);
+        }
+
+        for (int i = function.Parameters.Length - 1; i >= 0; i--)
+        {
+            Operand arg = Pop();
+
+            // Check types:
+            CParameter param = function.Parameters[i];
+            if (!TryToMatchLeftType(param.Type, ref arg))
+            {
+                Program.Error("in call to function '{0}', argument '{1}' has the wrong type", functionName, param.Name);
+            }
+
+            Operand paramOperand = Operand.MakeVariable(
+                functionName + Compiler.NamespaceSeparator + param.Name,
+                param.Type);
+            EmitLoadAccumulator(arg);
+            EmitStoreAccumulator(paramOperand);
+        }
+
+        EmitAsm("JSR", new AsmOperand(functionName, AddressMode.Absolute));
+
+        // Use the return value:
+        PushAccumulator(function.ReturnType);
     }
 
     [DebuggerDisplay("{Tag} {Name} = 0x{Value,h} ({Type.Show(),nq})")]
