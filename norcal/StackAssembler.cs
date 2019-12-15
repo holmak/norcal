@@ -261,7 +261,7 @@ class StackAssembler
 
                 PushAccumulator(left.Type);
             }
-            else if (op.Match(Tag.Modulus))
+            else if (op.Match(out name) && BinaryRuntimeOperators.TryGetValue(name, out functionName))
             {
                 // Get operands:
                 Operand right = Peek(0);
@@ -272,9 +272,7 @@ class StackAssembler
                 if (!TryToMatchTypes(ref left, ref right)) Program.Error("types don't match");
 
                 // Generate code:
-                if (left.Type == CType.UInt8) EmitCall("_rt_mod_u8");
-                else if (left.Type == CType.UInt16) EmitCall("_rt_mod_u16");
-                else Program.NYI();
+                EmitCall(GetRuntimeFunctionName(functionName, left.Type));
             }
             else if (op.Match(Tag.Drop))
             {
@@ -579,6 +577,37 @@ class StackAssembler
 
         // Use the return value:
         PushAccumulator(function.ReturnType);
+    }
+
+    static readonly Dictionary<string, string> BinaryRuntimeOperators = new Dictionary<string, string>
+    {
+        { Tag.Multiply, "mul" },
+        { Tag.Divide, "div" },
+        { Tag.Modulus, "mod" },
+        { Tag.Equal, "eq" },
+        { Tag.NotEqual, "ne" },
+        { Tag.LessThan, "lt" },
+        { Tag.GreaterThan, "gt" },
+        { Tag.LessThanOrEqual, "le" },
+        { Tag.GreaterThanOrEqual, "ge" },
+        { Tag.BitwiseAnd, "bitwise_and" },
+        { Tag.BitwiseOr, "bitwise_or" },
+        { Tag.BitwiseXor, "bitwise_xor" },
+        { Tag.BitwiseNot, "bitwise_not" },
+        { Tag.LogicalNot, "logical_not" },
+        { Tag.ShiftLeft, "shift_left" },
+        { Tag.ShiftRight, "shift_right" },
+    };
+
+    static string GetRuntimeFunctionName(string operation, CType type)
+    {
+        string typeSuffix = null;
+
+        if (type == CType.UInt8) typeSuffix = "u8";
+        else if (type == CType.UInt16) typeSuffix = "u16";
+        else Program.Panic("invalid combination of operator and type: {0}, {1}", operation, type.Show());
+
+        return "_rt_" + operation + "_" + typeSuffix;
     }
 
     [DebuggerDisplay("{Tag} {Name} = 0x{Value,h} ({Type.Show(),nq})")]
