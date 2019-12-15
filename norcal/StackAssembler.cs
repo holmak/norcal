@@ -111,6 +111,7 @@ class StackAssembler
                 }
                 else
                 {
+                    // TODO: Emit code appropriate for the size of the value.
                     EmitAsm("LDA", cond.LowByte());
                     EmitAsm("ORA", cond.HighByte());
                     EmitAsm("BNE", new AsmOperand(target, AddressMode.Absolute));
@@ -121,15 +122,16 @@ class StackAssembler
                 SpillAll();
                 Operand cond = Pop();
 
-                if (cond.Tag == OperandTag.Variable)
+                if (cond.Tag == OperandTag.Register)
                 {
-                    EmitAsm("LDA", new AsmOperand(cond.Name, AddressMode.Absolute));
-                    EmitAsm("ORA", new AsmOperand(cond.Name, 1, AddressMode.Absolute));
-                    EmitAsm("BEQ", new AsmOperand(target, AddressMode.Absolute));
+                    Program.NYI();
                 }
                 else
                 {
-                    Program.NYI();
+                    // TODO: Emit code appropriate for the size of the value.
+                    EmitAsm("LDA", cond.LowByte());
+                    EmitAsm("ORA", cond.HighByte());
+                    EmitAsm("BEQ", new AsmOperand(target, AddressMode.Absolute));
                 }
             }
             else if (op.Match(Tag.AddressOf))
