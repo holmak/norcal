@@ -161,6 +161,8 @@ class Flattener
             Emit(Tag.Jump, Loop.ContinueLabel);
             Emit(Tag.Label, Loop.BreakLabel);
             EndScope();
+
+            Loop = Loop.Outer;
         }
         else if (e.Match(Tag.Return, out subexpr))
         {
