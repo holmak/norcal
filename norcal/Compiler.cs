@@ -104,7 +104,9 @@ class Compiler
         }
         else if (e.Match(Tag.Empty))
         {
-            // NOP
+            // This value will be dropped immediately afterward, but it is necessary to keep
+            // the virtual stack balanced.
+            Emit(Tag.PushImmediate, 0);
         }
         else if (e.MatchAny(Tag.Sequence, out args))
         {
@@ -157,6 +159,7 @@ class Compiler
             Emit(Tag.JumpIfFalse, Loop.BreakLabel);
             CompileExpression(body);
             CompileExpression(induction);
+            Emit(Tag.Drop);
             Emit(Tag.Jump, Loop.ContinueLabel);
             Emit(Tag.Label, Loop.BreakLabel);
             EndScope();
