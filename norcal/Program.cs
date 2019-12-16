@@ -14,6 +14,7 @@ static class Program
     private static int NextPassNumber = 0;
 
     public static readonly string DebugOutputPath = "debug_output";
+    public static readonly string NamespaceSeparator = ":";
 
     static void Main(string[] argsArray)
     {
@@ -70,7 +71,7 @@ static class Program
         }
         WritePassOutputToFile("parse", program);
 
-        List<Expr> stackCode = Compiler.Compile(program);
+        List<Expr> stackCode = Flattener.Compile(program);
         if (EnableDebugOutput) WritePassOutputToFile("stack-code", ShowAssembly(stackCode));
         List<Expr> assembly = StackAssembler.Convert(stackCode);
         if (EnableDebugOutput) WritePassOutputToFile("assembly", ShowAssembly(assembly));

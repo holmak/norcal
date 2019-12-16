@@ -44,7 +44,7 @@ class StackAssembler
                 // Allocate a global variable for each parameter:
                 foreach (FieldInfo field in fields)
                 {
-                    string qualifiedName = string.Format("{0}{1}{2}", functionName, Compiler.NamespaceSeparator, field.Name);
+                    string qualifiedName = string.Format("{0}{1}{2}", functionName, Program.NamespaceSeparator, field.Name);
                     DeclareSymbol(SymbolTag.Variable, qualifiedName, field.Type, 0);
                     Emit(Tag.Variable, field.Region, SizeOf(field.Type), qualifiedName);
                 }
@@ -569,7 +569,7 @@ class StackAssembler
             }
 
             Operand paramOperand = Operand.MakeVariable(
-                functionName + Compiler.NamespaceSeparator + param.Name,
+                functionName + Program.NamespaceSeparator + param.Name,
                 param.Type);
             EmitLoadAccumulator(arg);
             EmitStoreAccumulator(paramOperand);
