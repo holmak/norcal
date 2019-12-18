@@ -34,13 +34,13 @@ class Assembler
         0x00, 0x00,
     };
 
-    public static void Assemble(List<Expr> assembly, string outputFilename)
+    public static void Assemble(IReadOnlyList<Expr> assembly, string outputFilename)
     {
         Assembler assembler = new Assembler();
         assembler.Run(assembly, outputFilename);
     }
 
-    void Run(List<Expr> assembly, string outputFilename)
+    void Run(IReadOnlyList<Expr> assembly, string outputFilename)
     {
         // TODO: Use a specified CHR ROM input file.
         byte[] chr = new byte[ChrRomSize];

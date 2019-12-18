@@ -41,7 +41,7 @@ class Tokenizer
             // Handle characters in order of ASCII value:
 
             // (Unprintable characters shouldn't be in the file, and whitespace was already skipped.)
-            if (TryRead('\0')) tag = TokenType.EOF;
+            if (TryRead('\0')) return tokens;
             else if (TryRead("\n")) tag = TokenType.NEWLINE;
             else if (GetNextChar() <= ' ') tag = TokenType.INVALID;
             else if (TryRead('!'))
@@ -206,11 +206,6 @@ class Tokenizer
                 Position = pos,
             });
 
-            if (tag == TokenType.EOF)
-            {
-                break;
-            }
-
             if (!InAssembly && tag == TokenType.NAME && tokenName == "__asm")
             {
                 InAssembly = true;
@@ -221,8 +216,6 @@ class Tokenizer
                 InAssembly = false;
             }
         }
-
-        return tokens;
     }
 
     static bool IsNameChar(char c)

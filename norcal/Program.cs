@@ -64,16 +64,9 @@ static class Program
             Error("error: no source files provided");
         }
 
-        List<Expr> program = new List<Expr>();
-        foreach (string file in sourceFilenames)
-        {
-            program.AddRange(Parser.ParseFile(file));
-        }
-        WritePassOutputToFile("parse", program);
-
-        List<Expr> stackCode = Flattener.Compile(program);
+        IReadOnlyList<Expr> stackCode = Parser.ParseFiles(sourceFilenames);
         if (EnableDebugOutput) WritePassOutputToFile("stack-code", ShowAssembly(stackCode));
-        List<Expr> assembly = StackAssembler.Convert(stackCode);
+        IReadOnlyList<Expr> assembly = StackAssembler.Convert(stackCode);
         if (EnableDebugOutput) WritePassOutputToFile("assembly", ShowAssembly(assembly));
         Assembler.Assemble(assembly, outputFilename);
 
@@ -115,7 +108,7 @@ static class Program
         return sb.ToString();
     }
 
-    static string ShowAssembly(List<Expr> assembly)
+    static string ShowAssembly(IReadOnlyList<Expr> assembly)
     {
         StringBuilder sb = new StringBuilder();
         foreach (Expr e in assembly)
@@ -232,25 +225,13 @@ static class Tag
     public static readonly string Struct = "$struct";
 
     // Special nodes:
-    public static readonly string Empty = "$empty";
-    public static readonly string Int = "$int";
-    public static readonly string Name = "$name";
-    public static readonly string Scope = "$scope";
-    public static readonly string Sequence = "$sequence";
     public static readonly string AddressOf = "$address_of";
-    public static readonly string Switch = "$switch";
-    public static readonly string For = "$for";
     public static readonly string Return = "$return";
     public static readonly string Cast = "$cast";
     public static readonly string Field = "$field";
     public static readonly string Index = "$index";
-    public static readonly string Label = "$label";
-    public static readonly string Jump = "$jump";
-    public static readonly string JumpIfTrue = "$jump_if_true";
-    public static readonly string JumpIfFalse = "$jump_if_false";
     public static readonly string Continue = "$continue";
     public static readonly string Break = "$break";
-    public static readonly string Asm = "$asm";
 
     // Intrinsic functions:
     public static readonly string Add = "$add";
@@ -279,15 +260,18 @@ static class Tag
     public static readonly string LogicalNot = "$logical_not";
 
     // Virtual stack machine instructions:
-    public static readonly string BeginScope = "$begin_scope";
-    public static readonly string EndScope = "$end_scope";
     public static readonly string PushImmediate = "$push";
     public static readonly string PushVariable = "$pushv";
     public static readonly string PushAddressOfVariable = "$pushav";
-    public static readonly string PushFieldName = "$pushfn";
     public static readonly string Drop = "$drop";
+    public static readonly string Call = "$call";
 
     // Assembly directives:
+    public static readonly string Asm = "$asm";
+    public static readonly string Label = "$label";
+    public static readonly string Jump = "$jump";
+    public static readonly string JumpIfTrue = "$jump_if_true";
+    public static readonly string JumpIfFalse = "$jump_if_false";
     public static readonly string Comment = "$comment";
     public static readonly string SkipTo = "$skip_to";
     public static readonly string Word = "$word";

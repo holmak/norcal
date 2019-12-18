@@ -18,14 +18,14 @@ class StackAssembler
     /// <summary>
     /// Convert stack machine code to 6502 assembly code.
     /// </summary>
-    public static List<Expr> Convert(List<Expr> input)
+    public static List<Expr> Convert(IReadOnlyList<Expr> input)
     {
         StackAssembler converter = new StackAssembler();
         converter.Run(input);
         return converter.Output;
     }
 
-    void Run(List<Expr> input)
+    void Run(IReadOnlyList<Expr> input)
     {
         foreach (Expr op in input)
         {
