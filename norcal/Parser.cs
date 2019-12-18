@@ -128,7 +128,7 @@ partial class Parser
                         }
                     }
 
-                    Emit(Tag.Function, type, name, fields.ToArray());
+                    Emit(Tag.Function, type, DefineQualifiedVariableName(name), fields.ToArray());
 
                     BeginScope(name);
 
