@@ -684,6 +684,18 @@ partial class Parser
         {
             if (TryParse(TokenType.LPAREN))
             {
+                // We only support calling functions by name, so stack instruction immediately before
+                // a call is required to be a "push var <name>", from which we can extract the function name.
+                string functionName;
+                if (StackCode.Last().Match(Tag.PushVariable, out functionName))
+                {
+                    StackCode.RemoveAt(StackCode.Count - 1);
+                }
+                else
+                {
+                    ParserError("functions may only be called by name");
+                }
+
                 if (!TryParse(TokenType.RPAREN))
                 {
                     while (true)
@@ -693,7 +705,8 @@ partial class Parser
                         Expect(TokenType.COMMA);
                     }
                 }
-                Emit(Tag.Call);
+
+                Emit(functionName);
             }
             else if (TryParse(TokenType.PERIOD))
             {
