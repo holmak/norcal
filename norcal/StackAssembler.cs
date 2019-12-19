@@ -188,6 +188,14 @@ class StackAssembler
                     Program.NYI();
                 }
             }
+            else if (op.Match(Tag.Field, out name))
+            {
+                Program.NYI();
+            }
+            else if (op.Match(Tag.Index))
+            {
+                Program.NYI();
+            }
             else if (op.Match(Tag.Add))
             {
                 // Get operands:
@@ -308,10 +316,14 @@ class StackAssembler
                 // This is a general-purpose call.
                 EmitCall(functionName);
             }
+            else if (op.MatchTag(Tag.Asm) || op.MatchTag(Tag.Label))
+            {
+                // Pass certain instructions through unchanged.
+                Emit(op);
+            }
             else
             {
-                // Pass anything else through unchanged.
-                Emit(op);
+                Program.UnhandledCase();
             }
         }
 
