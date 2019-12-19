@@ -67,20 +67,50 @@ Stages
 ------
 
 - Tokenizer (source text -> token sequence)
-- Parser (tokens -> AST)
-- Flattener (AST -> VSM)
+- Parser and flattener (tokens -> VSM)
 - Code generator and typechecker (VSM -> assembly code)
 - Assembler (assembly code -> executable image)
 - Disassembler (executable image -> assembly code)
 
 
-Stage: Tokenizer and Parser
----------------------------
-
-The tokenizer and parser are unremarkable. The parser is implemented in the recursive descent style, and produces a standard Abstract Syntax Tree. The AST is represented as a tree of nested dynamically typed list-expressions.
-
-
-Stage: Flattener
+Stage: Tokenizer
 ----------------
 
-The flattening stage turns the AST into "Virtual Stack Machine" code. Unlike an AST, VSM code is non-nested; instead, it uses an operand stack and nested operations are represented with reverse polish notation. The flattener also applies namespace prefixes to all identifiers so that each symbol has a globally unique name. Together, these changes make VSM code much easier for the code generator and typechecker to analyze.
+The tokenizer is unremarkable.
+
+
+Stage: Parser and flattener
+---------------------------
+
+The parser is implemented in the recursive descent style. This stage emits "Virtual Stack Machine" code. Unlike an AST, VSM code is non-nested; instead, it uses an operand stack and nested operations are represented with reverse polish notation.
+
+In the process of emitting VSM code, the parser prefixes every identifier with its namespace, and checks for references to undefined identifiers. Using fully qualified identifiers means that later stages don't need to track lexical scope.
+
+
+Stage: Code generator and typechecker
+-------------------------------------
+
+Responsibilities:
+- Convert VSM code into 6502 assembly.
+- References variables and labels symbolically, but can perform constant folding on constant and immediate values.
+- Detect type errors and most other semantic errors.
+- Most optimizations happen here -- not as a special pass, but by intelligently interpreting the VSM code.
+
+...
+
+
+Stage: Assembler
+----------------
+
+Responsibilities:
+- Convert assembly instructions into 6502 machine code.
+- Allocate memory for global and local variables.
+- Convert symbols into real addresses, possibly after allocating space for the symbol.
+
+...
+
+
+Stage: Disassembler
+-------------------
+
+The disassembler has very limited functionality and is only used to debug the assembler stage.
