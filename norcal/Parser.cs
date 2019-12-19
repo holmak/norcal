@@ -8,16 +8,18 @@ using System.Threading.Tasks;
 partial class Parser
 {
     List<Token> Input;
-    List<Expr> StackCode = new List<Expr>();
+    List<List<Expr>> OutputStack = new List<List<Expr>>();
     List<LexicalScope> Scopes = new List<LexicalScope>();
     LoopScope Loop = null;
     List<string> UndefinedLabels = new List<string>();
+
+    List<Expr> Output => OutputStack.Last();
 
     public static IReadOnlyList<Expr> ParseFiles(IEnumerable<string> filenames)
     {
         Parser p = new Parser(filenames);
         p.ParseAll();
-        return p.StackCode;
+        return p.OutputStack[0];
     }
 
     Parser(IEnumerable<string> filenames)
@@ -33,6 +35,7 @@ partial class Parser
             Tag = TokenType.EOF,
         });
 
+        OutputStack.Add(new List<Expr>());
         Scopes.Add(new LexicalScope("<global>"));
     }
 
@@ -43,7 +46,24 @@ partial class Parser
 
     void Emit(Expr e)
     {
-        StackCode.Add(e);
+        Output.Add(e);
+    }
+
+    void EmitRange(IEnumerable<Expr> items)
+    {
+        Output.AddRange(items);
+    }
+
+    void BeginDivertingOutput()
+    {
+        OutputStack.Add(new List<Expr>());
+    }
+
+    List<Expr> EndDivertingOutput()
+    {
+        List<Expr> code = OutputStack.Last();
+        OutputStack.RemoveAt(OutputStack.Count - 1);
+        return code;
     }
 
     void ParseAll()
@@ -276,26 +296,36 @@ partial class Parser
             Loop = new LoopScope
             {
                 Outer = Loop,
-                ContinueLabel = MakeUniqueLabel("for_top"),
-                BreakLabel = MakeUniqueLabel("for_bottom"),
+                ContinueLabel = MakeUniqueLabel("for_continue"),
+                BreakLabel = MakeUniqueLabel("for_break"),
             };
+            string topLabel = MakeUniqueLabel("for_top");
 
             Expect(TokenType.LPAREN);
+            
             // Initialization:
             ParseStatement(false);
-            Emit(Tag.Label, Loop.ContinueLabel);
+            Emit(Tag.Label, topLabel);
+            
             // Test:
             ParseExpr();
             Emit(Tag.JumpIfFalse, Loop.BreakLabel);
             Expect(TokenType.SEMICOLON);
-            // Induction:
-            // TODO: The induction step must go after the body!
+
+            // Induction; this code actually must be inserted after the body:
+            BeginDivertingOutput();
             ParseExpr();
+            List<Expr> inductionCode = EndDivertingOutput();
+
             Expect(TokenType.RPAREN);
+
+            // Body:
             ParseStatementBlock();
-            // TODO: The induction code goes here.
+
+            Emit(Tag.Label, Loop.ContinueLabel);
+            EmitRange(inductionCode);
             Emit(Tag.Drop);
-            Emit(Tag.Jump, Loop.ContinueLabel);
+            Emit(Tag.Jump, topLabel);
             Emit(Tag.Label, Loop.BreakLabel);
 
             Loop = Loop.Outer;
@@ -309,8 +339,8 @@ partial class Parser
             Loop = new LoopScope
             {
                 Outer = Loop,
-                ContinueLabel = MakeUniqueLabel("while_top"),
-                BreakLabel = MakeUniqueLabel("while_bottom"),
+                ContinueLabel = MakeUniqueLabel("while_continue"),
+                BreakLabel = MakeUniqueLabel("while_break"),
             };
 
             Expect(TokenType.LPAREN);
@@ -687,9 +717,9 @@ partial class Parser
                 // We only support calling functions by name, so stack instruction immediately before
                 // a call is required to be a "push var <name>", from which we can extract the function name.
                 string functionName;
-                if (StackCode.Last().Match(Tag.PushVariable, out functionName))
+                if (Output.Last().Match(Tag.PushVariable, out functionName))
                 {
-                    StackCode.RemoveAt(StackCode.Count - 1);
+                    Output.RemoveAt(Output.Count - 1);
                 }
                 else
                 {
