@@ -177,7 +177,7 @@ class Assembler
             }
         }
 
-        // TODO: Make sure that the PRG ROM size limit isn't exceeded. It must not overwrite the vector table.
+        // Make sure that the PRG ROM size limit isn't exceeded. It must not overwrite the vector table.
         if (prg.Count != PrgRomSize) Program.Error("assembler: program has wrong length");
 
         using (BinaryWriter w = new BinaryWriter(new FileStream(outputFilename, FileMode.Create)))
