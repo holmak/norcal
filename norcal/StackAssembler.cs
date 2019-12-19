@@ -105,15 +105,17 @@ class StackAssembler
                 SpillAll();
                 Operand cond = Pop();
 
+                int size = SizeOf(cond.Type);
+
                 if (cond.Tag == OperandTag.Register)
                 {
                     Program.NYI();
                 }
                 else
                 {
-                    // TODO: Emit code appropriate for the size of the value.
-                    EmitAsm("LDA", cond.LowByte());
-                    EmitAsm("ORA", cond.HighByte());
+                    if (size >= 1) EmitAsm("LDA", cond.LowByte());
+                    if (size >= 2) EmitAsm("ORA", cond.HighByte());
+                    if (size > 2) Program.Panic("value is too large");
                     EmitAsm("BNE", new AsmOperand(target, AddressMode.Absolute));
                 }
             }
@@ -122,15 +124,17 @@ class StackAssembler
                 SpillAll();
                 Operand cond = Pop();
 
+                int size = SizeOf(cond.Type);
+
                 if (cond.Tag == OperandTag.Register)
                 {
                     Program.NYI();
                 }
                 else
                 {
-                    // TODO: Emit code appropriate for the size of the value.
-                    EmitAsm("LDA", cond.LowByte());
-                    EmitAsm("ORA", cond.HighByte());
+                    if (size >= 1) EmitAsm("LDA", cond.LowByte());
+                    if (size >= 2) EmitAsm("ORA", cond.HighByte());
+                    if (size > 2) Program.Panic("value is too large");
                     EmitAsm("BEQ", new AsmOperand(target, AddressMode.Absolute));
                 }
             }
@@ -453,8 +457,10 @@ class StackAssembler
             if (r.Register == OperandRegister.Accumulator)
             {
                 string temp = DeclareTemporary(r.Type);
-                EmitAsm("STA", new AsmOperand(temp, AddressMode.Absolute));
-                EmitAsm("STX", new AsmOperand(temp, 1, AddressMode.Absolute));
+                int size = SizeOf(r.Type);
+                if (size >= 1) EmitAsm("STA", new AsmOperand(temp, AddressMode.Absolute));
+                if (size >= 2) EmitAsm("STX", new AsmOperand(temp, 1, AddressMode.Absolute));
+                if (size > 2) Program.Panic("value is too large");
                 return Operand.MakeVariable(temp, r.Type);
             }
             else
