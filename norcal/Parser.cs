@@ -78,7 +78,7 @@ partial class Parser
     {
         while (TryParseName("static"))
         {
-            // TODO: Emit a warning.
+            Program.Warning("warning: all input is treated as a single translation unit, so 'static' has no effect");
         }
 
         if (TryParseName("define"))
