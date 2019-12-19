@@ -87,6 +87,12 @@ struct MemoryRegion
     public static readonly MemoryRegion ZeroPage = new MemoryRegion(MemoryRegionTag.ZeroPage, 0);
     public static readonly MemoryRegion Ram = new MemoryRegion(MemoryRegionTag.Ram, 0);
     public static MemoryRegion Fixed(int address) => new MemoryRegion(MemoryRegionTag.Fixed, address);
+
+    public override string ToString()
+    {
+        if (Tag == MemoryRegionTag.Fixed) return string.Format("{0}=${1:X4}", Tag, FixedAddress);
+        return Tag.ToString();
+    }
 }
 
 enum MemoryRegionTag
