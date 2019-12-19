@@ -697,6 +697,7 @@ partial class Parser
         string op;
         if (prefixes.TryGetValue(PeekToken().Tag, out op))
         {
+            ConsumeToken();
             ParseUnaryPrefixExpr();
             Emit(op);
         }
