@@ -136,16 +136,7 @@ class StackAssembler
             }
             else if (op.Match(Tag.AddressOf))
             {
-                SpillAll();
-                Operand r = Pop();
-                if (r.Tag == OperandTag.Variable)
-                {
-                    PushVariableAddress(r.Name, r.Type);
-                }
-                else
-                {
-                    Program.NYI();
-                }
+                Push(AddressOf(Pop()));
             }
             else if (op.Match(Tag.Store))
             {
@@ -262,6 +253,26 @@ class StackAssembler
                 if (size > 2) Program.Panic("value is too large");
 
                 PushAccumulator(left.Type);
+            }
+            else if (op.Match(out name) && UnaryRuntimeOperators.TryGetValue(name, out functionName))
+            {
+                // Get operand:
+                CType argType = Peek(0).Type;
+                Push(AddressOf(Pop()));
+
+                // Check types and generate code:
+                if (argType.IsInteger)
+                {
+                    EmitCall(GetRuntimeFunctionName(functionName, argType));
+                }
+                else if (argType.IsPointer)
+                {
+                    Program.NYI();
+                }
+                else
+                {
+                    Program.Error("unary operator cannot be used with type '{0}'", argType.Show());
+                }
             }
             else if (op.Match(out name) && BinaryRuntimeOperators.TryGetValue(name, out functionName))
             {
@@ -467,6 +478,19 @@ class StackAssembler
         return name;
     }
 
+    Operand AddressOf(Operand r)
+    {
+        if (r.Tag == OperandTag.Variable)
+        {
+            return Operand.MakeVariableAddress(r.Name, CType.MakePointer(r.Type));
+        }
+        else
+        {
+            Program.Error("cannot take address of expression");
+            return null;
+        }
+    }
+
     void AssertRegistersFree()
     {
         if (Stack.Any(x => x.Tag == OperandTag.Register))
@@ -478,12 +502,12 @@ class StackAssembler
     void PushAccumulator(CType type)
     {
         AssertRegistersFree();
-        Stack.Add(Operand.MakeRegister(OperandRegister.Accumulator, type));
+        Push(Operand.MakeRegister(OperandRegister.Accumulator, type));
     }
 
     void PushImmediate(int n)
     {
-        Stack.Add(Operand.MakeImmediate(n, (n <= byte.MaxValue) ? CType.UInt8 : CType.UInt16));
+        Push(Operand.MakeImmediate(n, (n <= byte.MaxValue) ? CType.UInt8 : CType.UInt16));
     }
 
     void PushVariable(string name, CType type)
@@ -491,15 +515,12 @@ class StackAssembler
         Symbol sym;
         if (!Symbols.TryGetValue(name, out sym)) Program.Error("variable not defined: {0}", name);
 
-        Stack.Add(Operand.MakeVariable(name, type));
+        Push(Operand.MakeVariable(name, type));
     }
 
-    void PushVariableAddress(string name, CType type)
+    void Push(Operand r)
     {
-        Symbol sym;
-        if (!Symbols.TryGetValue(name, out sym)) Program.Error("variable not defined: {0}", name);
-
-        Stack.Add(Operand.MakeVariableAddress(name, CType.MakePointer(type)));
+        Stack.Add(r);
     }
 
     Operand Pop()
@@ -580,6 +601,14 @@ class StackAssembler
         // Use the return value:
         PushAccumulator(function.ReturnType);
     }
+
+    static readonly Dictionary<string, string> UnaryRuntimeOperators = new Dictionary<string, string>
+    {
+        { Tag.Predecrement, "predec" },
+        { Tag.Preincrement, "preinc" },
+        { Tag.Postdecrement, "postdec" },
+        { Tag.Postincrement, "postinc" },
+    };
 
     static readonly Dictionary<string, string> BinaryRuntimeOperators = new Dictionary<string, string>
     {
