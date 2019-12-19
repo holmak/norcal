@@ -533,12 +533,12 @@ void reset()
 {
     for (uint8_t i = 10; i < 12; i++)
     {
-        OUT = i;
+        OUTB = i;
     }
 
     for (uint8_t j = 20; j < 22; j++)
     {
-        OUT = j;
+        OUTB = j;
     }
 
     STOP = 0;
