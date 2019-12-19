@@ -119,7 +119,7 @@ partial class Parser
                     Expect(TokenType.SEMICOLON);
                 }
 
-                Emit(Tag.Struct, type.Name, fields);
+                Emit(Tag.Struct, type.Name, fields.ToArray());
             }
             else
             {
