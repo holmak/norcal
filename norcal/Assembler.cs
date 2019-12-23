@@ -351,18 +351,36 @@ class AsmOperand
 
     public string Show()
     {
+        string s;
         if (!Base.HasValue)
         {
-            return Program.FormatAssemblyInteger(Offset);
+            s = Program.FormatAssemblyInteger(Offset);
         }
         else if (Offset == 0)
         {
-            return Base.Value;
+            s = Base.Value;
         }
         else
         {
-            return string.Format("{0}+{1}", Base.Value, Program.FormatAssemblyInteger(Offset));
+            s = string.Format("{0}+{1}", Base.Value, Program.FormatAssemblyInteger(Offset));
         }
+
+        // Show the immediate modifier effect:
+        if (Modifier == ImmediateModifier.LowByte) s = "<" + s;
+        else if (Modifier == ImmediateModifier.HighByte) s = ">" + s;
+
+        // Show the address mode:
+        string format = "???";
+        if (Mode == AddressMode.Implicit) format = "<implicit>";
+        else if (Mode == AddressMode.Immediate) format = "#{0}";
+        else if (Mode == AddressMode.ZeroPage) format = "{0}";
+        else if (Mode == AddressMode.Absolute) format = "{0}";
+        else if (Mode == AddressMode.IndirectY) format = "({0}),Y";
+        else if (Mode == AddressMode.Relative) format = "+{0}";
+
+        s = string.Format(format, s);
+
+        return s;
     }
 }
 

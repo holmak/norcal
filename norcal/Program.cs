@@ -137,13 +137,7 @@ static class Program
 
     static string FormatAssembly(string mnemonic, AsmOperand operand)
     {
-        string format;
-        if (operand.Mode == AddressMode.Implicit) format = "{0}";
-        else if (operand.Mode == AddressMode.Absolute) format = "{0} {1}";
-        else if (operand.Mode == AddressMode.Relative) format = "{0} +{1}";
-        else if (operand.Mode == AddressMode.Immediate) format = "{0} #{1}";
-        else if (operand.Mode == AddressMode.IndirectY) format = "{0} ({1}),Y";
-        else format = "{0} {1} ???";
+        string format = (operand.Mode == AddressMode.Implicit) ? "{0}" : "{0} {1}";
         return string.Format(format, mnemonic, operand.Show());
     }
 
