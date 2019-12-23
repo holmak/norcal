@@ -255,8 +255,7 @@ static class Tag
 
     // Virtual stack machine instructions:
     public static readonly string PushImmediate = "$push";
-    public static readonly string PushVariable = "$pushv";
-    public static readonly string PushAddressOfVariable = "$pushav";
+    public static readonly string PushVariableAddress = "$pushva";
     public static readonly string Drop = "$drop";
 
     // Assembly directives:

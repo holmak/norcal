@@ -15,6 +15,8 @@ class StackAssembler
     string NameOfCurrentFunction = null;
     int NextTemporary = 0;
 
+    static readonly Operand TempPointer = Operand.MakeVariable("$ptr", CType.UInt8Ptr);
+
     /// <summary>
     /// Convert stack machine code to 6502 assembly code.
     /// </summary>
@@ -27,6 +29,8 @@ class StackAssembler
 
     void Run(IReadOnlyList<Expr> input)
     {
+        DeclareVariable(MemoryRegion.ZeroPage, TempPointer.Type, TempPointer.Name);
+
         foreach (Expr op in input)
         {
             string name, functionName, target;
@@ -63,9 +67,7 @@ class StackAssembler
             }
             else if (op.Match(Tag.Variable, out region, out type, out name))
             {
-                DeclareSymbol(SymbolTag.Variable, name, type, 0);
-                // Replace the type information with just a size:
-                Emit(Tag.Variable, region, SizeOf(type), name);
+                DeclareVariable(region, type, name);
             }
             else if (op.Match(Tag.Struct, out name, out fields))
             {
@@ -90,11 +92,11 @@ class StackAssembler
             }
             else if (op.Match(Tag.PushImmediate, out number))
             {
-                PushImmediate(number);
+                Push(Operand.MakeImmediate(number, (number <= byte.MaxValue) ? CType.UInt8 : CType.UInt16));
             }
-            else if (op.Match(Tag.PushVariable, out name))
+            else if (op.Match(Tag.PushVariableAddress, out name))
             {
-                PushVariable(name, Symbols[name].Type);
+                Push(Operand.MakeVariableAddress(name, CType.MakePointer(Symbols[name].Type)));
             }
             else if (op.Match(Tag.Jump, out target))
             {
@@ -140,48 +142,117 @@ class StackAssembler
             }
             else if (op.Match(Tag.AddressOf))
             {
-                Push(AddressOf(Pop()));
+                Program.Panic("this should never be emitted by the parser; it should always cancel a 'load' operation");
             }
             else if (op.Match(Tag.Store))
             {
                 // Get operands:
                 Operand value = Pop();
-                Operand dest = Pop();
+                Operand address = Pop();
 
                 // Check types:
-                if (!TryToMatchLeftType(dest.Type, ref value)) Program.Error("types in assignment don't match");
+                if (!TryToMatchLeftType(DereferencePointerType(address.Type), ref value))
+                {
+                    Program.Error("types in assignment don't match");
+                }
+                int size = SizeOf(value.Type);
 
                 // Rearrange stack:
                 SpillAll();
-                dest = Spill(dest);
+                address = Spill(address);
 
                 // Generate code:
-                EmitLoadAccumulator(value);
-                EmitStoreAccumulator(dest);
+
+                // First, copy the address to zero page:
+                if (address.Tag == OperandTag.Immediate)
+                {
+                    EmitLoadAccumulator(value);
+                    if (size >= 1) Emit(Expr.MakeAsm("STA", new AsmOperand(address.Value, AddressMode.Absolute)));
+                    if (size >= 2) Emit(Expr.MakeAsm("STX", new AsmOperand(address.Value + 1, AddressMode.Absolute)));
+                    if (size > 2) Program.Panic("values larger than two bytes cannot be stored via accumulator");
+                }
+                else if (address.Tag == OperandTag.VariableAddress)
+                {
+                    EmitLoadAccumulator(value);
+                    if (size >= 1) Emit(Expr.MakeAsm("STA", new AsmOperand(address.Name, AddressMode.Absolute)));
+                    if (size >= 2) Emit(Expr.MakeAsm("STX", new AsmOperand(address.Name, 1, AddressMode.Absolute)));
+                    if (size > 2) Program.Panic("values larger than two bytes cannot be stored via accumulator");
+                }
+                else if (address.Tag == OperandTag.Variable)
+                {
+                    EmitLoadAccumulator(address);
+                    EmitStoreAccumulator(TempPointer);
+
+                    // Now copy the value:
+                    EmitLoadAccumulator(value);
+
+                    if (size >= 1)
+                    {
+                        Emit(Expr.MakeAsm("LDY", new AsmOperand(0, AddressMode.Immediate)));
+                        Emit(Expr.MakeAsm("STA", new AsmOperand(TempPointer.Name, AddressMode.IndirectY)));
+                    }
+
+                    if (size >= 2)
+                    {
+                        EmitAsm("INY");
+                        // The store operation must leave the stored value in the accumulator, so save and restore A:
+                        EmitAsm("PHA");
+                        EmitAsm("TXA");
+                        Emit(Expr.MakeAsm("STA", new AsmOperand(TempPointer.Name, AddressMode.IndirectY)));
+                        EmitAsm("PLA");
+                    }
+
+                    if (size > 2) Program.Panic("values larger than two bytes cannot be stored via accumulator");
+                }
+                else
+                {
+                    Program.UnhandledCase();
+                }
+
                 PushAccumulator(value.Type);
             }
             else if (op.Match(Tag.Load))
             {
-                // TODO: I need to rethink how this operation works.
-                Program.NYI();
-
                 // Get operands:
                 Operand address = Pop();
 
                 // Check types:
                 CType loadedType = DereferencePointerType(address.Type);
                 int size = SizeOf(loadedType);
-
-                // Rearrange stack:
-                SpillAll();
-                address = Spill(address);
-
-                if (address.Tag == OperandTag.Variable)
+                
+                if (address.Tag == OperandTag.Immediate)
                 {
-                    if (size >= 1) EmitAsm("LDA", address.LowByte());
-                    if (size >= 2) EmitAsm("LDX", address.HighByte());
-                    if (size > 2) Program.Panic("values larger than two bytes cannot be loaded");
+                    Program.Panic("the load operation should never be applied to an immediate");
+                }
+                else if (address.Tag == OperandTag.Variable)
+                {
+                    // Rearrange stack:
+                    SpillAll();
+                    address = Spill(address);
+
+                    // Copy the pointer to zero page so that it can be used:
+                    EmitLoadAccumulator(address);
+                    EmitStoreAccumulator(TempPointer);
+
+                    if (size >= 1)
+                    {
+                        Emit(Expr.MakeAsm("LDY", new AsmOperand(0, AddressMode.Immediate)));
+                        Emit(Expr.MakeAsm("LDA", new AsmOperand(TempPointer.Name, AddressMode.IndirectY)));
+                    }
+
+                    if (size >= 2)
+                    {
+                        EmitAsm("INY");
+                        Emit(Expr.MakeAsm("LDX", new AsmOperand(TempPointer.Name, AddressMode.IndirectY)));
+                    }
+
+                    if (size > 2) Program.Panic("values larger than two bytes cannot be loaded via accumulator");
+
                     PushAccumulator(loadedType);
+                }
+                else if (address.Tag == OperandTag.VariableAddress)
+                {
+                    Push(Operand.MakeVariable(address.Name, loadedType));
                 }
                 else
                 {
@@ -347,6 +418,13 @@ class StackAssembler
     void EmitAsm(string mnemonic) => Emit(Expr.MakeAsm(mnemonic));
 
     void EmitAsm(string mnemonic, AsmOperand operand) => Emit(Expr.MakeAsm(mnemonic, operand));
+
+    void DeclareVariable(MemoryRegion region, CType type, string name)
+    {
+        DeclareSymbol(SymbolTag.Variable, name, type, 0);
+        // Replace the type information with just a size:
+        Emit(Tag.Variable, region, SizeOf(type), name);
+    }
 
     void DeclareSymbol(SymbolTag tag, string name, CType type, int value)
     {
@@ -521,19 +599,6 @@ class StackAssembler
     {
         AssertRegistersFree();
         Push(Operand.MakeRegister(OperandRegister.Accumulator, type));
-    }
-
-    void PushImmediate(int n)
-    {
-        Push(Operand.MakeImmediate(n, (n <= byte.MaxValue) ? CType.UInt8 : CType.UInt16));
-    }
-
-    void PushVariable(string name, CType type)
-    {
-        Symbol sym;
-        if (!Symbols.TryGetValue(name, out sym)) Program.Error("variable not defined: {0}", name);
-
-        Push(Operand.MakeVariable(name, type));
     }
 
     void Push(Operand r)

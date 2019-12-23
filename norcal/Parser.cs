@@ -46,12 +46,31 @@ partial class Parser
 
     void Emit(Expr e)
     {
-        Output.Add(e);
+        if (e.Match(Tag.AddressOf))
+        {
+            RemoveLastLoadInstruction();
+        }
+        else
+        {
+            Output.Add(e);
+        }
     }
 
     void EmitRange(IEnumerable<Expr> items)
     {
         Output.AddRange(items);
+    }
+
+    void RemoveLastLoadInstruction()
+    {
+        if (Output.Last().Match(Tag.Load))
+        {
+            Output.RemoveAt(Output.Count - 1);
+        }
+        else
+        {
+            Program.Error("it is not possible to take the address of this expression");
+        }
     }
 
     void BeginDivertingOutput()
@@ -442,7 +461,7 @@ partial class Parser
         // Optionally, an initial value can be assigned:
         if (TryParse(TokenType.EQUAL))
         {
-            Emit(Tag.PushVariable, FindQualifiedName(name));
+            Emit(Tag.PushVariableAddress, FindQualifiedName(name));
             ParseExpr();
             Emit(Tag.Store);
             Emit(Tag.Drop);
@@ -513,6 +532,7 @@ partial class Parser
         ParseConditionalExpr();
         if (TryParse(TokenType.EQUAL))
         {
+            RemoveLastLoadInstruction();
             ParseAssignExpr();
             Emit(Tag.Store);
         }
@@ -717,10 +737,12 @@ partial class Parser
             {
                 // We only support calling functions by name, so stack instruction immediately before
                 // a call is required to be a "push var <name>", from which we can extract the function name.
-                string functionName;
-                if (Output.Last().Match(Tag.PushVariable, out functionName))
+                string functionName = null;
+                if (Output.Count >= 2 &&
+                    Output[Output.Count - 2].Match(Tag.PushVariableAddress, out functionName) &&
+                    Output[Output.Count - 1].Match(Tag.Load))
                 {
-                    Output.RemoveAt(Output.Count - 1);
+                    Output.RemoveRange(Output.Count - 2, 2);
                 }
                 else
                 {
@@ -781,7 +803,8 @@ partial class Parser
         }
         else if (TryParseAnyName(out name))
         {
-            Emit(Tag.PushVariable, FindQualifiedName(name));
+            Emit(Tag.PushVariableAddress, FindQualifiedName(name));
+            Emit(Tag.Load);
         }
         else if (TryParse(TokenType.LPAREN))
         {
