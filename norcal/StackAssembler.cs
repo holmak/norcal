@@ -98,6 +98,11 @@ class StackAssembler
             {
                 Push(Operand.MakeVariableAddress(name, CType.MakePointer(Symbols[name].Type)));
             }
+            else if (op.Match(Tag.Drop))
+            {
+                if (Stack.Count != 1) Program.Panic("the virtual stack should contain exactly one operand");
+                Stack.Clear();
+            }
             else if (op.Match(Tag.Jump, out target))
             {
                 EmitAsm("JMP", new AsmOperand(target, AddressMode.Absolute));
@@ -369,11 +374,6 @@ class StackAssembler
 
                 // Generate code:
                 EmitCall(GetRuntimeFunctionName(functionName, left.Type));
-            }
-            else if (op.Match(Tag.Drop))
-            {
-                if (Stack.Count != 1) Program.Panic("the virtual stack should contain exactly one operand");
-                Stack.Clear();
             }
             else if (op.Match(Tag.Return))
             {
