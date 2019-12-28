@@ -27,15 +27,19 @@ class StackAssembler
         return converter.Output;
     }
 
-    void Run(IReadOnlyList<Expr> input)
+    void Run(IReadOnlyList<Expr> originalInput)
     {
         DeclareVariable(MemoryRegion.ZeroPage, TempPointer.Type, TempPointer.Name);
 
-        foreach (Expr op in input)
+        List<Expr> input = new List<Expr>(originalInput);
+        while (input.Count > 0)
         {
+            Expr op = input[0];
+            input.RemoveAt(0);
+
             string name, functionName, target;
             MemoryRegion region;
-            CType type, returnType;
+            CType type, newType, returnType;
             FieldInfo[] fields;
             int number;
             if (op.Match(Tag.Function, out returnType, out functionName, out fields))
@@ -102,6 +106,17 @@ class StackAssembler
             {
                 if (Stack.Count != 1) Program.Panic("the virtual stack should contain exactly one operand");
                 Stack.Clear();
+                Emit(Expr.Make(Tag.Comment, "drop"));
+            }
+            else if (op.Match(Tag.Cast, out newType))
+            {
+                Operand r = Pop();
+                if (SizeOf(r.Type) != SizeOf(newType))
+                {
+                    // TODO: Perform any necessary type conversions.
+                    Program.Panic("a type conversion is required");
+                }
+                Push(r.WithType(newType));
             }
             else if (op.Match(Tag.Jump, out target))
             {
@@ -271,7 +286,31 @@ class StackAssembler
             }
             else if (op.Match(Tag.Field, out name))
             {
-                Program.NYI();
+                // Get operands:
+                Operand structAddress = Peek(0);
+
+                // Check types:
+                CType structType = DereferencePointerType(structAddress.Type);
+                if (!structType.IsStruct)
+                {
+                    Program.Error("expression must be a struct");
+                }
+                CStructInfo structInfo = GetStructInfo(structType.Name);
+
+                CField fieldInfo = structInfo.Fields.FirstOrDefault(x => x.Name == name);
+                if (fieldInfo == null)
+                {
+                    Program.Error("struct type '{0}' does not contain a field named '{1}'", structType.Name, name);
+                }
+
+                // Emit simplified stack code:
+                input.InsertRange(0, new[]
+                {
+                    Expr.Make(Tag.Cast, CType.UInt8Ptr),
+                    Expr.Make(Tag.PushImmediate, fieldInfo.Offset),
+                    Expr.Make(Tag.Add),
+                    Expr.Make(Tag.Cast, CType.MakePointer(fieldInfo.Type)),
+                });
             }
             else if (op.Match(Tag.Index))
             {
@@ -284,7 +323,21 @@ class StackAssembler
                 Operand left = Pop();
 
                 // Check types:
-                if (!TryToMatchTypes(ref left, ref right)) Program.Error("types don't match");
+                if (left.Type.IsPointer)
+                {
+                    if (!TryToMatchLeftType(CType.UInt16, ref right)) Program.Error("types don't match");
+
+                    int elementSize = SizeOf(DereferencePointerType(left.Type));
+                    if (elementSize != 1)
+                    {
+                        // TODO: Implement scaling for pointer arithmetic.
+                        Program.NYI();
+                    }
+                }
+                else
+                {
+                    if (!TryToMatchTypes(ref left, ref right)) Program.Error("types don't match");
+                }
                 int size = SizeOf(left.Type);
 
                 // Rearrange the stack:
@@ -768,6 +821,7 @@ class Operand
     public static Operand MakeVariableAddress(string name, CType type) => new Operand(OperandTag.VariableAddress, 0, name, OperandRegister.Invalid, type);
     public static Operand MakeRegister(OperandRegister register, CType type) => new Operand(OperandTag.Register, 0, null, register, type);
 
+    public bool IsAccumulator => Tag == OperandTag.Register && Register == OperandRegister.Accumulator;
     public Operand WithType(CType newType) => new Operand(Tag, Value, Name, Register, newType);
 
     public AsmOperand LowByte()

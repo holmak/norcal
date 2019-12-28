@@ -763,12 +763,18 @@ partial class Parser
             }
             else if (TryParse(TokenType.PERIOD))
             {
-                Emit(Tag.Field, ExpectAnyName());
+                RemoveLastLoadInstruction();
+                string fieldName = ExpectAnyName();
+                Emit(Tag.Field, fieldName);
+                Emit(Tag.Load);
             }
             else if (TryParse(TokenType.ARROW))
             {
+                RemoveLastLoadInstruction();
+                string fieldName = ExpectAnyName();
                 Emit(Tag.Load);
-                Emit(Tag.Field, ExpectAnyName());
+                Emit(Tag.Field, fieldName);
+                Emit(Tag.Load);
             }
             else if (TryParse(TokenType.INCREMENT))
             {
@@ -780,8 +786,10 @@ partial class Parser
             }
             else if (TryParse(TokenType.LBRACKET))
             {
+                RemoveLastLoadInstruction();
                 ParseExpr();
                 Emit(Tag.Index);
+                Emit(Tag.Load);
                 Expect(TokenType.RBRACKET);
             }
             else
