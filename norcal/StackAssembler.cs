@@ -185,6 +185,7 @@ class StackAssembler
                 }
                 else if (address.Tag == OperandTag.Variable)
                 {
+                    value = Spill(value);
                     EmitLoadAccumulator(address);
                     EmitStoreAccumulator(TempPointer);
 
