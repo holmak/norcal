@@ -185,42 +185,6 @@ class Expr
         return false;
     }
 
-    /// <summary>
-    /// Run an action on each node in this expression tree.
-    /// </summary>
-    public void ForEach(Action<Expr> p)
-    {
-        foreach (Expr subexpr in Args.OfType<Expr>())
-        {
-            p(subexpr);
-            subexpr.ForEach(p);
-        }
-    }
-
-    /// <summary>
-    /// Apply a function to this expression tree.
-    /// </summary>
-    public Expr Map(Func<Expr, Expr> f)
-    {
-        object[] results = new object[Args.Length];
-
-        for (int i = 0; i < Args.Length; i++)
-        {
-            Expr subexpr = Args[i] as Expr;
-            if (subexpr != null)
-            {
-                results[i] = f(subexpr);
-            }
-            else
-            {
-                // Return other elements unchanged:
-                results[i] = Args[i];
-            }
-        }
-
-        return Make(results);
-    }
-
     public string Show() => ShowWithOptions(false);
 
     public string ShowMultiline() => ShowWithOptions(true);
