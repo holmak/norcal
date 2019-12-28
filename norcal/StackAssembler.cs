@@ -225,34 +225,38 @@ class StackAssembler
                 // Check types:
                 CType loadedType = DereferencePointerType(address.Type);
                 int size = SizeOf(loadedType);
-                
+
                 if (address.Tag == OperandTag.Immediate)
                 {
                     Program.Panic("the load operation should never be applied to an immediate");
                 }
-                else if (address.Tag == OperandTag.Variable)
+                else if (address.Tag == OperandTag.Variable || address.IsAccumulator)
                 {
                     // Rearrange stack:
                     SpillAll();
-                    address = Spill(address);
+                    if (!address.IsAccumulator) address = Spill(address);
 
                     // Copy the pointer to zero page so that it can be used:
                     EmitLoadAccumulator(address);
                     EmitStoreAccumulator(TempPointer);
 
-                    if (size >= 1)
+                    if (size == 1)
                     {
                         Emit(Expr.MakeAsm("LDY", new AsmOperand(0, AddressMode.Immediate)));
                         Emit(Expr.MakeAsm("LDA", new AsmOperand(TempPointer.Name, AddressMode.IndirectY)));
                     }
-
-                    if (size >= 2)
+                    else if (size == 2)
                     {
-                        EmitAsm("INY");
-                        Emit(Expr.MakeAsm("LDX", new AsmOperand(TempPointer.Name, AddressMode.IndirectY)));
+                        Emit(Expr.MakeAsm("LDY", new AsmOperand(1, AddressMode.Immediate)));
+                        Emit(Expr.MakeAsm("LDA", new AsmOperand(TempPointer.Name, AddressMode.IndirectY)));
+                        EmitAsm("TAX");
+                        EmitAsm("DEY");
+                        Emit(Expr.MakeAsm("LDA", new AsmOperand(TempPointer.Name, AddressMode.IndirectY)));
                     }
-
-                    if (size > 2) Program.Panic("values larger than two bytes cannot be loaded via accumulator");
+                    else
+                    {
+                        Program.Panic("values larger than two bytes cannot be loaded via accumulator");
+                    }
 
                     PushAccumulator(loadedType);
                 }
