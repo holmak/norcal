@@ -714,11 +714,19 @@ partial class Parser
             { TokenType.DECREMENT, Tag.Predecrement },
         };
 
+        // These operators take the address of the input expression, not its value.
+        string[] addressOperators = new[]
+        {
+            Tag.Preincrement,
+            Tag.Predecrement,
+        };
+
         string op;
         if (prefixes.TryGetValue(PeekToken().Tag, out op))
         {
             ConsumeToken();
             ParseUnaryPrefixExpr();
+            if (addressOperators.Contains(op)) Emit(Tag.AddressOf);
             Emit(op);
         }
         else
@@ -778,10 +786,12 @@ partial class Parser
             }
             else if (TryParse(TokenType.INCREMENT))
             {
+                Emit(Tag.AddressOf);
                 Emit(Tag.Postincrement);
             }
             else if (TryParse(TokenType.DECREMENT))
             {
+                Emit(Tag.AddressOf);
                 Emit(Tag.Postdecrement);
             }
             else if (TryParse(TokenType.LBRACKET))

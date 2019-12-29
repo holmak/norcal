@@ -411,7 +411,6 @@ class StackAssembler
             {
                 // Get operand:
                 CType argType = Peek(0).Type;
-                Push(AddressOf(Pop()));
 
                 // Check types and generate code:
                 if (argType.IsInteger)
@@ -639,19 +638,6 @@ class StackAssembler
         return name;
     }
 
-    Operand AddressOf(Operand r)
-    {
-        if (r.Tag == OperandTag.Variable)
-        {
-            return Operand.MakeVariableAddress(r.Name, CType.MakePointer(r.Type));
-        }
-        else
-        {
-            Program.Error("cannot take address of expression");
-            return null;
-        }
-    }
-
     void AssertRegistersFree()
     {
         if (Stack.Any(x => x.Tag == OperandTag.Register))
@@ -752,6 +738,8 @@ class StackAssembler
 
     static readonly Dictionary<string, string> UnaryRuntimeOperators = new Dictionary<string, string>
     {
+        { Tag.BitwiseNot, "bitwise_not" },
+        { Tag.LogicalNot, "logical_not" },
         { Tag.Predecrement, "predec" },
         { Tag.Preincrement, "preinc" },
         { Tag.Postdecrement, "postdec" },
@@ -772,8 +760,6 @@ class StackAssembler
         { Tag.BitwiseAnd, "bitwise_and" },
         { Tag.BitwiseOr, "bitwise_or" },
         { Tag.BitwiseXor, "bitwise_xor" },
-        { Tag.BitwiseNot, "bitwise_not" },
-        { Tag.LogicalNot, "logical_not" },
         { Tag.ShiftLeft, "shift_left" },
         { Tag.ShiftRight, "shift_right" },
     };
