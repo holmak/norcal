@@ -788,7 +788,7 @@ partial class Parser
             {
                 RemoveLastLoadInstruction();
                 ParseExpr();
-                Emit(Tag.Index);
+                Emit(Tag.Add);
                 Emit(Tag.Load);
                 Expect(TokenType.RBRACKET);
             }

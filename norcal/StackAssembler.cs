@@ -100,7 +100,15 @@ class StackAssembler
             }
             else if (op.Match(Tag.PushVariableAddress, out name))
             {
-                Push(Operand.MakeVariableAddress(name, CType.MakePointer(Symbols[name].Type)));
+                CType valueType = Symbols[name].Type;
+
+                // Arrays decay into pointers when used in an expression:
+                if (valueType.IsArray)
+                {
+                    valueType = valueType.Subtype;
+                }
+
+                Push(Operand.MakeVariableAddress(name, CType.MakePointer(valueType)));
             }
             else if (op.Match(Tag.Drop))
             {
@@ -311,10 +319,6 @@ class StackAssembler
                     Expr.Make(Tag.Add),
                     Expr.Make(Tag.Cast, CType.MakePointer(fieldInfo.Type)),
                 });
-            }
-            else if (op.Match(Tag.Index))
-            {
-                Program.NYI();
             }
             else if (op.Match(Tag.Add))
             {
