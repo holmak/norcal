@@ -303,7 +303,7 @@ class StackAssembler
                     Program.Error("struct type '{0}' does not contain a field named '{1}'", structType.Name, name);
                 }
 
-                // Emit simplified stack code:
+                // Replace with simpler stack code:
                 input.InsertRange(0, new[]
                 {
                     Expr.Make(Tag.Cast, CType.UInt8Ptr),
