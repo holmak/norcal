@@ -326,21 +326,21 @@ class StackAssembler
                 Operand right = Pop();
                 Operand left = Pop();
 
+                int repetitions;
+
                 // Check types:
                 if (left.Type.IsPointer)
                 {
                     if (!TryToMatchLeftType(CType.UInt16, ref right)) Program.Error("types don't match");
 
                     int elementSize = SizeOf(DereferencePointerType(left.Type));
-                    if (elementSize != 1)
-                    {
-                        // TODO: Implement scaling for pointer arithmetic.
-                        Program.NYI();
-                    }
+                    // TODO: Find a better way to scale the index by the element size.
+                    repetitions = elementSize;
                 }
                 else
                 {
                     if (!TryToMatchTypes(ref left, ref right)) Program.Error("types don't match");
+                    repetitions = 1;
                 }
                 int size = SizeOf(left.Type);
 
@@ -350,22 +350,25 @@ class StackAssembler
                 EmitLoadAccumulator(left);
 
                 // Generate code:
-                if (size >= 1)
+                for (int i = 0; i < repetitions; i++)
                 {
-                    EmitAsm("CLC");
-                    EmitAsm("ADC", right.LowByte());
-                }
+                    if (size >= 1)
+                    {
+                        EmitAsm("CLC");
+                        EmitAsm("ADC", right.LowByte());
+                    }
 
-                if (size >= 2)
-                {
-                    EmitAsm("TAY");
-                    EmitAsm("TXA");
-                    EmitAsm("ADC", right.HighByte());
-                    EmitAsm("TAX");
-                    EmitAsm("TYA");
-                }
+                    if (size >= 2)
+                    {
+                        EmitAsm("TAY");
+                        EmitAsm("TXA");
+                        EmitAsm("ADC", right.HighByte());
+                        EmitAsm("TAX");
+                        EmitAsm("TYA");
+                    }
 
-                if (size > 2) Program.Panic("value is too large");
+                    if (size > 2) Program.Panic("value is too large");
+                }
 
                 PushAccumulator(left.Type);
             }
