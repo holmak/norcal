@@ -343,7 +343,7 @@ partial class Parser
 
             Emit(Tag.Label, Loop.ContinueLabel);
             EmitRange(inductionCode);
-            Emit(Tag.Drop);
+            Emit(Tag.DropFinal);
             Emit(Tag.Jump, topLabel);
             Emit(Tag.Label, Loop.BreakLabel);
 
@@ -447,7 +447,7 @@ partial class Parser
             // An expression-statement:
             // (Indicate that the resulting value must be discarded.)
             ParseExpr();
-            Emit(Tag.Drop);
+            Emit(Tag.DropFinal);
             Expect(TokenType.SEMICOLON);
         }
     }
@@ -464,7 +464,7 @@ partial class Parser
             Emit(Tag.PushVariableAddress, FindQualifiedName(name));
             ParseExpr();
             Emit(Tag.Store);
-            Emit(Tag.Drop);
+            Emit(Tag.DropFinal);
         }
 
         Expect(TokenType.SEMICOLON);
@@ -710,24 +710,28 @@ partial class Parser
             { TokenType.AMPERSAND, Tag.AddressOf },
             { TokenType.TILDE, Tag.BitwiseNot },
             { TokenType.LOGICAL_NOT, Tag.LogicalNot },
-            { TokenType.INCREMENT, Tag.Preincrement },
-            { TokenType.DECREMENT, Tag.Predecrement },
         };
 
-        // These operators take the address of the input expression, not its value.
-        string[] addressOperators = new[]
-        {
-            Tag.Preincrement,
-            Tag.Predecrement,
-        };
-
+        TokenType nextToken = PeekToken().Tag;
         string op;
-        if (prefixes.TryGetValue(PeekToken().Tag, out op))
+        if (prefixes.TryGetValue(nextToken, out op))
         {
             ConsumeToken();
             ParseUnaryPrefixExpr();
-            if (addressOperators.Contains(op)) Emit(Tag.AddressOf);
             Emit(op);
+        }
+        else if (nextToken == TokenType.INCREMENT || nextToken == TokenType.DECREMENT)
+        {
+            ConsumeToken();
+            bool increment = (nextToken == TokenType.INCREMENT);
+            ParseUnaryPrefixExpr();
+            Emit(Tag.AddressOf);
+            Emit(Tag.Comment, increment ? "pre-increment" : "pre-decrement");
+            Emit(Tag.Duplicate);
+            Emit(Tag.Load);
+            Emit(Tag.PushImmediate, 1);
+            Emit(increment ? Tag.Add : Tag.Subtract);
+            Emit(Tag.Store);
         }
         else
         {
@@ -787,12 +791,28 @@ partial class Parser
             else if (TryParse(TokenType.INCREMENT))
             {
                 Emit(Tag.AddressOf);
-                Emit(Tag.Postincrement);
+                Emit(Tag.Comment, "post-increment");
+                Emit(Tag.Duplicate);
+                Emit(Tag.Load);
+                Emit(Tag.Swap);
+                Emit(Tag.Over);
+                Emit(Tag.PushImmediate, 1);
+                Emit(Tag.Add);
+                Emit(Tag.Store);
+                Emit(Tag.Drop);
             }
             else if (TryParse(TokenType.DECREMENT))
             {
                 Emit(Tag.AddressOf);
-                Emit(Tag.Postdecrement);
+                Emit(Tag.Comment, "post-decrement");
+                Emit(Tag.Duplicate);
+                Emit(Tag.Load);
+                Emit(Tag.Swap);
+                Emit(Tag.Over);
+                Emit(Tag.PushImmediate, 1);
+                Emit(Tag.Add);
+                Emit(Tag.Store);
+                Emit(Tag.Drop);
             }
             else if (TryParse(TokenType.LBRACKET))
             {

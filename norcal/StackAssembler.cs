@@ -110,11 +110,30 @@ class StackAssembler
 
                 Push(Operand.MakeVariableAddress(name, CType.MakePointer(valueType)));
             }
-            else if (op.Match(Tag.Drop))
+            else if (op.Match(Tag.DropFinal))
             {
                 if (Stack.Count != 1) Program.Panic("the virtual stack should contain exactly one operand");
                 Stack.Clear();
-                Emit(Expr.Make(Tag.Comment, "drop"));
+                Emit(Expr.Make(Tag.Comment, "drop final"));
+            }
+            else if (op.Match(Tag.Drop))
+            {
+                Pop();
+            }
+            else if (op.Match(Tag.Duplicate))
+            {
+                Push(Peek(0));
+            }
+            else if (op.Match(Tag.Swap))
+            {
+                Operand a = Pop();
+                Operand b = Pop();
+                Push(a);
+                Push(b);
+            }
+            else if (op.Match(Tag.Over))
+            {
+                Push(Peek(1));
             }
             else if (op.Match(Tag.Cast, out newType))
             {
@@ -452,7 +471,7 @@ class StackAssembler
                 // This is a general-purpose call.
                 EmitCall(functionName);
             }
-            else if (op.MatchTag(Tag.Asm) || op.MatchTag(Tag.Label))
+            else if (op.MatchTag(Tag.Asm) || op.MatchTag(Tag.Label) || op.MatchTag(Tag.Comment))
             {
                 // Pass certain instructions through unchanged.
                 Emit(op);
@@ -741,10 +760,6 @@ class StackAssembler
     {
         { Tag.BitwiseNot, "bitwise_not" },
         { Tag.LogicalNot, "logical_not" },
-        { Tag.Predecrement, "predec" },
-        { Tag.Preincrement, "preinc" },
-        { Tag.Postdecrement, "postdec" },
-        { Tag.Postincrement, "postinc" },
     };
 
     static readonly Dictionary<string, string> BinaryRuntimeOperators = new Dictionary<string, string>
