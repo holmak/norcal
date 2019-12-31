@@ -238,6 +238,7 @@ class StackAssembler
                     Program.UnhandledCase();
                 }
 
+                // The store operation leaves the value in the accumulator; this matches the behavior of C assignment.
                 PushAccumulator(value.Type);
             }
             else if (op.Match(Tag.Load))
