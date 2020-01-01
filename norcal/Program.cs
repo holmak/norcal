@@ -257,6 +257,7 @@ static class Tag
     public static readonly string Duplicate = "$dup";
     public static readonly string Swap = "$swap";
     public static readonly string Over = "$over";
+    public static readonly string Materialize = "$materialize";
 
     // Assembly directives:
     public static readonly string Asm = "$asm";

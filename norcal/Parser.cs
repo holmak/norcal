@@ -544,15 +544,31 @@ partial class Parser
         ParseLogicalOrExpr();
         if (TryParse(TokenType.QUESTION_MARK))
         {
+            // Conditional expressions generate uniquely tricky stack code; only one
+            // of the two result expressions is executed. Each code path leaves its
+            // result in the accumulator -- this is a rare case where the stack is not
+            // empty when control flow occurs.
+            //
+            // Since the virtual stack ignores control flow, the operand pushed by one
+            // of the execution paths must be discarded; if it was kept, it would seem
+            // that the conditional expression produces two results, when it really
+            // only produces one.
+            //
+            // Since both paths produce exactly the same result (in the accumulator),
+            // it doesn't matter which result is dropped.
+
             string otherwise = MakeUniqueLabel("cond_else");
             string end = MakeUniqueLabel("cond_end");
-
+            Emit(Tag.Comment, "conditional expression");
             Emit(Tag.JumpIfFalse, otherwise);
             ParseExpr();
+            Emit(Tag.Materialize);
+            Emit(Tag.Drop);
             Emit(Tag.Jump, end);
             Emit(Tag.Label, otherwise);
             Expect(TokenType.COLON);
             ParseConditionalExpr();
+            Emit(Tag.Materialize);
             Emit(Tag.Label, end);
         }
     }

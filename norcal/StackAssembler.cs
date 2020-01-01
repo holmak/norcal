@@ -135,6 +135,14 @@ class StackAssembler
             {
                 Push(Peek(1));
             }
+            else if (op.Match(Tag.Materialize))
+            {
+                // Put the top operand in the accumulator.
+                Operand top = Pop();
+                SpillAll();
+                EmitLoadAccumulator(top);
+                PushAccumulator(top.Type);
+            }
             else if (op.Match(Tag.Cast, out newType))
             {
                 Operand r = Pop();
