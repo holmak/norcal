@@ -793,7 +793,7 @@ partial class Parser
                 Emit(Tag.AddressOf);
                 Emit(Tag.Comment, "post-increment");
                 Emit(Tag.Duplicate);
-                Emit(Tag.Load);
+                Emit(Tag.LoadNow);
                 Emit(Tag.Swap);
                 Emit(Tag.Over);
                 Emit(Tag.PushImmediate, 1);
@@ -806,11 +806,11 @@ partial class Parser
                 Emit(Tag.AddressOf);
                 Emit(Tag.Comment, "post-decrement");
                 Emit(Tag.Duplicate);
-                Emit(Tag.Load);
+                Emit(Tag.LoadNow);
                 Emit(Tag.Swap);
                 Emit(Tag.Over);
                 Emit(Tag.PushImmediate, 1);
-                Emit(Tag.Add);
+                Emit(Tag.Subtract);
                 Emit(Tag.Store);
                 Emit(Tag.Drop);
             }
