@@ -1206,8 +1206,8 @@ void reset()
 @out 8 4
 void reset()
 {
-    OUT = 9 - 3 + 2;
-    OUT = 9 - (3 + 2);
+    OUTB = 9 - 3 + 2;
+    OUTB = 9 - (3 + 2);
     STOP = 0;
 }
 
