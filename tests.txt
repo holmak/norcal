@@ -1488,6 +1488,25 @@ void reset()
 }
 
 @ Logical operators
+
+@out 21 31 40 41
+
+// This is a basic test of short circuiting.
+void f(uint8_t a, uint8_t b, uint8_t n)
+{
+    if (a && b) OUTB = n;
+    if (a || b) OUTB = n + 1;
+}
+
+void reset()
+{
+    f(0, 0, 10);
+    f(0, 1, 20);
+    f(1, 0, 30);
+    f(1, 1, 40);
+    STOP = 0;
+}
+
 @out 0 1 1 0 0 0 0 1 0 1 1 1 1 0 222
 
 // If a function call should not be made, due to short-circuiting,

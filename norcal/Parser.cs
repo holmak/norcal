@@ -579,19 +579,11 @@ partial class Parser
         ParseLogicalAndExpr();
         while (TryParse(TokenType.LOGICAL_OR))
         {
-            string testTrue = MakeUniqueLabel("test_true");
-            string testFalse = MakeUniqueLabel("test_false");
-            string testEnd = MakeUniqueLabel("test_end");
-
-            Emit(Tag.JumpIfTrue, testTrue);
+            string shortCircuit = MakeUniqueLabel("logical_or_short_circuit");
+            Emit(Tag.JumpIfTrue, shortCircuit);
             ParseLogicalAndExpr();
-            Emit(Tag.JumpIfFalse, testFalse);
-            Emit(Tag.Label, testTrue);
-            Emit(Tag.PushImmediate, 1);
-            Emit(Tag.Jump, testEnd);
-            Emit(Tag.Label, testFalse);
-            Emit(Tag.PushImmediate, 0);
-            Emit(Tag.Label, testEnd);
+            Emit(Tag.Materialize);
+            Emit(Tag.Label, shortCircuit);
         }
     }
 
@@ -601,17 +593,11 @@ partial class Parser
         ParseBitwiseOrExpr();
         while (TryParse(TokenType.LOGICAL_AND))
         {
-            string testFalse = MakeUniqueLabel("test_false");
-            string testEnd = MakeUniqueLabel("test_end");
-
-            Emit(Tag.JumpIfFalse, testFalse);
-            ParseLogicalAndExpr();
-            Emit(Tag.JumpIfFalse, testFalse);
-            Emit(Tag.PushImmediate, 1);
-            Emit(Tag.Jump, testEnd);
-            Emit(Tag.Label, testFalse);
-            Emit(Tag.PushImmediate, 0);
-            Emit(Tag.Label, testEnd);
+            string shortCircuit = MakeUniqueLabel("logical_and_short_circuit");
+            Emit(Tag.JumpIfFalse, shortCircuit);
+            ParseBitwiseOrExpr();
+            Emit(Tag.Materialize);
+            Emit(Tag.Label, shortCircuit);
         }
     }
 
