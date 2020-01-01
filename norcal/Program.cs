@@ -233,7 +233,6 @@ static class Tag
     public static readonly string Divide = "$div";
     public static readonly string Modulus = "$mod";
     public static readonly string Load = "$load";
-    public static readonly string LoadNow = "$load_now";
     public static readonly string Store = "$store";
     public static readonly string Equal = "$equal";
     public static readonly string NotEqual = "$not_equal";

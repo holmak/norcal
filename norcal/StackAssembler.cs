@@ -270,7 +270,7 @@ class StackAssembler
                 // The store operation leaves the value in the accumulator; this matches the behavior of C assignment.
                 PushAccumulator(value.Type);
             }
-            else if (op.Match(Tag.Load) || op.Match(Tag.LoadNow))
+            else if (op.Match(Tag.Load))
             {
                 // Get operands:
                 Operand address = Pop();
@@ -315,22 +315,7 @@ class StackAssembler
                 }
                 else if (address.Tag == OperandTag.VariableAddress)
                 {
-                    // The special "LoadNow" operation indicates that the location is about to be overwritten
-                    // by a post-increment operation, so the value must be loaded immediately instead of being deferred.
-                    if (op.Match(Tag.LoadNow))
-                    {
-                        SpillAll();
-
-                        if (size >= 1) Emit(Expr.MakeAsm("LDA", new AsmOperand(address.Name, 0, AddressMode.Absolute)));
-                        if (size >= 2) Emit(Expr.MakeAsm("LDX", new AsmOperand(address.Name, 1, AddressMode.Absolute)));
-                        if (size > 2) Program.Panic("values larger than two bytes cannot be loaded via accumulator");
-
-                        PushAccumulator(loadedType);
-                    }
-                    else
-                    {
-                        Push(Operand.MakeVariable(address.Name, loadedType));
-                    }
+                    Push(Operand.MakeVariable(address.Name, loadedType));
                 }
                 else
                 {
