@@ -165,7 +165,8 @@ class StackAssembler
                     if (size >= 1) EmitAsm("LDA", cond.LowByte());
                     if (size >= 2) EmitAsm("ORA", cond.HighByte());
                     if (size > 2) Program.Panic("value is too large");
-                    EmitAsm("BNE", new AsmOperand(target, AddressMode.Absolute));
+                    EmitAsm("BEQ", new AsmOperand(3, AddressMode.Relative));
+                    EmitAsm("JMP", new AsmOperand(target, AddressMode.Absolute));
                 }
             }
             else if (op.Match(Tag.JumpIfFalse, out target))
@@ -184,7 +185,8 @@ class StackAssembler
                     if (size >= 1) EmitAsm("LDA", cond.LowByte());
                     if (size >= 2) EmitAsm("ORA", cond.HighByte());
                     if (size > 2) Program.Panic("value is too large");
-                    EmitAsm("BEQ", new AsmOperand(target, AddressMode.Absolute));
+                    EmitAsm("BNE", new AsmOperand(3, AddressMode.Relative));
+                    EmitAsm("JMP", new AsmOperand(target, AddressMode.Absolute));
                 }
             }
             else if (op.Match(Tag.AddressOf))
