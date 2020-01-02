@@ -43,7 +43,8 @@ class Assembler
     void Run(IReadOnlyList<Expr> assembly, string outputFilename)
     {
         // TODO: Use a specified CHR ROM input file.
-        byte[] chr = new byte[ChrRomSize];
+        byte[] chr = File.ReadAllBytes("chr.bin");
+        if (chr.Length != ChrRomSize) Program.Error("CHR ROM has wrong length: ", chr.Length);
 
         List<byte> prg = new List<byte>();
         foreach (Expr e in assembly)
