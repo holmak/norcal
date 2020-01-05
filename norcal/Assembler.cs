@@ -50,7 +50,7 @@ class Assembler
         foreach (Expr e in assembly)
         {
             string label, name, mnemonic;
-            int skipTarget, size;
+            int skipTarget, size, number;
             MemoryRegion region;
             AsmOperand operand;
 
@@ -85,6 +85,10 @@ class Assembler
                 }
                 prg.Add(LowByte(address));
                 prg.Add(HighByte(address));
+            }
+            else if (e.Match(Tag.Constant, out name, out number))
+            {
+                DefineSymbol(name, number);
             }
             else if (e.Match(Tag.Variable, out region, out size, out name))
             {

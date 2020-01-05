@@ -1687,3 +1687,47 @@ void reset()
     }
     STOP = 0;
 }
+
+@ Inline assembly
+
+@out 40
+void reset()
+{
+    __asm
+    {
+        LDA #40
+        STA OUTB
+        STA STOP
+    }
+}
+
+@out 50
+// Assembly with variables.
+uint8_t global;
+void reset()
+{
+    global = 12;
+    uint8_t local = 26;
+    __asm
+    {
+        LDA global
+        ASL
+        CLC
+        ADC local
+        STA OUTB
+        STA STOP
+    }
+}
+
+@out 60
+// Constants with assembly.
+define uint8_t RESULT = 60;
+void reset()
+{
+    __asm
+    {
+        LDA #RESULT
+        STA OUTB
+        STA STOP
+    }
+}

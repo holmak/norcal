@@ -68,6 +68,7 @@ class StackAssembler
             {
                 // TODO: Make sure the value fits in the specified type.
                 DeclareSymbol(SymbolTag.Constant, name, type, number);
+                Emit(Tag.Constant, name, number);
             }
             else if (op.Match(Tag.Variable, out region, out type, out name))
             {

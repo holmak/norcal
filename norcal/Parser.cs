@@ -490,7 +490,16 @@ partial class Parser
             {
                 number = ExpectInt();
             }
-            return new AsmOperand(FindQualifiedLabelName(name), number, mode);
+
+            // First try looking up the name as a known variable or label; if that doesn't work,
+            // assume it is a forward reference to a label.
+            string qualifiedName;
+            if (!TryFindQualifiedName(name, out qualifiedName))
+            {
+                qualifiedName = FindQualifiedLabelName(name);
+            }
+
+            return new AsmOperand(qualifiedName, number, mode);
         }
         else
         {
