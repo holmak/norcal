@@ -228,7 +228,7 @@ def monospace(data):
         text = ', '.join([format_int(n) for n in data])
     else:
         text = '(none)'
-    return '<span class="console">{}</span>'.format(text.strip())
+    return '<span class="console">{}</span>'.format(text.strip().replace('\n', '<br>'))
 
 first_error_id = None
 with open(REPORT_FILE, 'w') as report:
