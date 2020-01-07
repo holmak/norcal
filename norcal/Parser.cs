@@ -989,11 +989,11 @@ partial class Parser
         {
             type = CType.Void;
         }
-        else if (TryParseName("uint8_t"))
+        else if (TryParseName("uint8_t") || TryParseName("u8"))
         {
             type = CType.UInt8;
         }
-        else if (TryParseName("uint16_t"))
+        else if (TryParseName("uint16_t") || TryParseName("u16"))
         {
             type = CType.UInt16;
         }

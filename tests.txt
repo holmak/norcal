@@ -198,6 +198,19 @@ void reset()
     STOP = 0;
 }
 
+@ Short type names
+@out 10 30 400
+void reset()
+{
+    u8 a = 10;
+    u16 b = 400;
+    u8 c = 30;
+    OUTB = a;
+    OUTB = c;
+    OUT = b;
+    STOP = 0;
+}
+
 @ If statement
 @out 1 1 9 2
 void reset()
