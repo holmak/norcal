@@ -1581,13 +1581,13 @@ void reset()
 void reset()
 {
     uint16_t a = 500;
-    OUTB = a;
+    OUT = a;
     a += 1000;
-    OUTB = a;
+    OUT = a;
     a += a;
-    OUTB = a;
-    OUTB = a += a;
-    OUTB = a;
+    OUT = a;
+    OUT = a += a;
+    OUT = a;
     STOP = 0;
 }
 
@@ -1612,16 +1612,16 @@ void reset()
 void reset()
 {
     uint16_t a = 500;
-    OUTB = a += 1000;
-    OUTB = a -= 500;
-    OUTB = a *= 5;
-    OUTB = a /= 8;
-    OUTB = a %= 4;
-    OUTB = a << 12;
-    OUTB = a >> 2;
-    OUTB = a |= 2000;
-    OUTB = a &= 999;
-    OUTB = a ^= 530;
+    OUT = a += 1000;
+    OUT = a -= 500;
+    OUT = a *= 5;
+    OUT = a /= 8;
+    OUT = a %= 4;
+    OUT = a << 12;
+    OUT = a >> 2;
+    OUT = a |= 2000;
+    OUT = a &= 999;
+    OUT = a ^= 530;
     STOP = 0;
 }
 
