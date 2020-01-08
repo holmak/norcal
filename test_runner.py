@@ -218,6 +218,9 @@ def format_int(n):
     else:
         return str(n)
 
+def format_source_code(text):
+    return '<pre>' + text.strip().replace('<', '&lt;').replace('>', '&gt;') + '</pre>'
+
 def monospace(data):
     text = None
     if type(data) is str:
@@ -251,7 +254,7 @@ with open(REPORT_FILE, 'w') as report:
         else:
             report.write('<td bgcolor="#E9322E"></td>\n')
         report.write('<td id="{}">{}</td>\n'.format(test.html_id, test.description))
-        report.write('<td><pre>' + test.source.strip() + '</pre></td>\n')
+        report.write('<td>' + format_source_code(test.source) + '</td>\n')
         report.write('<td><details><summary>Show</summary><pre>' + test.disasm.strip() + '</pre></details></td>\n')
         report.write('<td>' + monospace(test.actual_output) + '</td>\n')
         if test.expect_error:
