@@ -543,11 +543,36 @@ partial class Parser
     // = *= /= %= += -= <<= >>= &= ^= |=
     void ParseAssignExpr()
     {
+        Dictionary<TokenType, string> modifyAssignOperators = new Dictionary<TokenType, string>
+        {
+            { TokenType.PLUS_EQUALS, Tag.Add },
+            { TokenType.MINUS_EQUALS, Tag.Subtract },
+            { TokenType.STAR_EQUALS, Tag.Multiply },
+            { TokenType.SLASH_EQUALS, Tag.Divide },
+            { TokenType.PERCENT_EQUALS, Tag.Modulus },
+            { TokenType.SHIFT_LEFT_EQUALS, Tag.ShiftLeft },
+            { TokenType.SHIFT_RIGHT_EQUALS, Tag.ShiftRight },
+            { TokenType.PIPE_EQUALS, Tag.BitwiseOr },
+            { TokenType.AMPERSAND_EQUALS, Tag.BitwiseAnd },
+            { TokenType.CARET_EQUALS, Tag.BitwiseXor },
+        };
+
         ParseConditionalExpr();
+        string op;
         if (TryParse(TokenType.EQUAL))
         {
             RemoveLastLoadInstruction();
             ParseAssignExpr();
+            Emit(Tag.Store);
+        }
+        else if (modifyAssignOperators.TryGetValue(PeekToken().Tag, out op))
+        {
+            ConsumeToken();
+            RemoveLastLoadInstruction();
+            Emit(Tag.Duplicate);
+            Emit(Tag.Load);
+            ParseAssignExpr();
+            Emit(op);
             Emit(Tag.Store);
         }
     }

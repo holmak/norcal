@@ -1600,8 +1600,8 @@ void reset()
     OUTB = a *= 5;
     OUTB = a /= 8;
     OUTB = a %= 4;
-    OUTB = a << 3;
-    OUTB = a >> 1;
+    OUTB = a <<= 3;
+    OUTB = a >>= 1;
     OUTB = a |= 7;
     OUTB = a &= 55;
     OUTB = a ^= 35;
@@ -1617,8 +1617,8 @@ void reset()
     OUT = a *= 5;
     OUT = a /= 8;
     OUT = a %= 4;
-    OUT = a << 12;
-    OUT = a >> 2;
+    OUT = a <<= 12;
+    OUT = a >>= 2;
     OUT = a |= 2000;
     OUT = a &= 999;
     OUT = a ^= 530;
