@@ -477,11 +477,15 @@ partial class Parser
 
     AsmOperand ParseAssemblyOperand(AddressMode mode)
     {
+        ImmediateModifier modifier = ImmediateModifier.None;
+        if (TryParse(TokenType.LESS_THAN)) modifier = ImmediateModifier.LowByte;
+        else if (TryParse(TokenType.GREATER_THAN)) modifier = ImmediateModifier.HighByte;
+
         string name;
         int number;
         if (TryParseInt(out number))
         {
-            return new AsmOperand(number, mode);
+            return new AsmOperand(Maybe.Nothing, number, mode, modifier);
         }
         else if (TryParseAnyName(out name))
         {
@@ -499,7 +503,7 @@ partial class Parser
                 qualifiedName = FindQualifiedLabelName(name);
             }
 
-            return new AsmOperand(qualifiedName, number, mode);
+            return new AsmOperand(qualifiedName, number, mode, modifier);
         }
         else
         {

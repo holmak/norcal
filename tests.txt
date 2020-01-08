@@ -1744,3 +1744,17 @@ void reset()
         STA STOP
     }
 }
+
+@out 0xAB 0xCD
+// High/low bytes
+void reset()
+{
+    __asm
+    {
+        LDA #>$AB34
+        STA OUTB
+        LDA #<$12CD
+        STA OUTB
+        STA STOP
+    }
+}

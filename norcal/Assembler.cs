@@ -342,7 +342,7 @@ class AsmOperand
 
     public AsmOperand(Maybe<string> optionalBase, int offset, AddressMode mode) : this(optionalBase, offset, mode, ImmediateModifier.None) { }
 
-    private AsmOperand(Maybe<string> optionalBase, int offset, AddressMode mode, ImmediateModifier modifier)
+    public AsmOperand(Maybe<string> optionalBase, int offset, AddressMode mode, ImmediateModifier modifier)
     {
         Base = optionalBase;
         Offset = offset;
