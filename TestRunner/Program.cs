@@ -9,24 +9,16 @@ using System.Threading.Tasks;
 
 class Program
 {
-    private static readonly string TestDir = "test_files";
-    private static readonly string DebugDir = "debug_output";
     private static readonly string TestHeader = "test.h";
     private static readonly string TestsFile = "tests.txt";
     private static readonly string RuntimeFile = "runtime.c";
-    private static readonly string SourceFile = Path.Combine(TestDir, "source.c");
-    private static readonly string ImageFile = Path.Combine(TestDir, "program.nes");
-    private static readonly string ReportFile = Path.Combine(TestDir, "results.html");
-    private static readonly string DisasmFile = Path.Combine(DebugDir, "dis.s");
+    private static readonly string ReportFile = "results.html";
     private static readonly string CompilerPath = "norcal/bin/Debug/norcal.exe";
     private static readonly string SimulatorPath = "sim6502/x64/Debug/sim6502.exe";
     private static readonly float TimeoutDuration = 0.5f;
 
     static void Main(string[] args)
     {
-        // Ensure the working directory exists:
-        Directory.CreateDirectory(TestDir);
-
         // Load the tests from the tests file:
         List<Test> tests = new List<Test>();
         {
@@ -70,112 +62,105 @@ class Program
 
         // Run the tests:
         int nextHtmlID = 0;
-        bool attachDebugger = true;
-        float timeInCompiler = 0;
+        object mutex = new object();
+        List<Thread> threads = new List<Thread>();
         foreach (Test test in tests)
         {
-            Console.Write(".");
-            test.Disasm = "N/A";
-            test.Passed = false;
-            test.HtmlID = string.Format("test{0}", nextHtmlID);
-            nextHtmlID += 1;
-
-            // Compile:
-            File.WriteAllText(SourceFile, test.Source);
-            List<string> compilerArgs = new List<string>(
-                new[] { RuntimeFile, TestHeader, SourceFile, "-o", ImageFile });
-
-            // Automatically attach the debugger if a test fails. However, only do this for the 
-            // first failure, to avoid a cascade of debugger prompt windows.
-            // Also, don't attach if the test *expects* an error to occur.
-            if (attachDebugger && !test.ExpectError)
-            {
-                compilerArgs.Add("--attach");
-            }
-
-            DateTime time_before = DateTime.Now;
-            Process process = RunProcess(CompilerPath, compilerArgs.ToArray());
-            DateTime time_after = DateTime.Now;
-            timeInCompiler += (float)(time_after - time_before).TotalSeconds;
-
-            if (!process.HasExited)
-            {
-                process.WaitForExit();
-                test.ActualError = "(compiler timed out)";
-                test.Passed = false;
-            }
-            else if (process.ExitCode == 1)
-            {
-                test.ActualError = "compiler error:<br>" + process.StandardError.ReadToEnd();
-                test.Passed = test.ExpectError;
-            }
-            else if (process.ExitCode > 1)
-            {
-                test.ActualError = "compiler panic:<br>" + process.StandardError.ReadToEnd();
-                test.Passed = false;
-            }
-            else
-            {
-                test.Passed = true;
-            }
-
-            if (!test.Passed)
-            {
-                attachDebugger = false;
-            }
-
-            if (!test.Passed || test.ExpectError)
-            {
-                continue;
-            }
-
-            if (File.Exists(DisasmFile))
-            {
-                test.Disasm = File.ReadAllText(DisasmFile);
-            }
-            else
-            {
-                test.Disasm = "N/A";
-            }
-
-            // Run:
-            process = RunProcess(SimulatorPath, new[] { ImageFile });
-            if (!process.HasExited)
-            {
-                process.Kill();
-                test.ActualError = "(simulator timed out)";
-                test.Passed = false;
-                continue;
-            }
-            else if (process.ExitCode != 0)
-            {
-                test.ActualError = "simulator error:<br>" + process.StandardError.ReadToEnd();
-                test.Passed = test.ExpectError;
-                continue;
-            }
-            int[] sim_output = ParseNumberList(process.StandardOutput.ReadToEnd());
-            test.Cycles = sim_output.Last();
-            test.ActualOutput = sim_output.Take(sim_output.Length - 1).ToArray();
-            if (test.ExpectError)
+            ThreadStart runTest = () =>
             {
                 test.Passed = false;
-            }
-            else
-            {
-                test.Passed = false;
-                if (test.ActualOutput.Length == test.ExpectedOutput.Length)
+
+                lock (mutex)
                 {
-                    test.Passed = true;
-                    for (int i = 0; i < test.ActualOutput.Length; i++)
+                    test.HtmlID = string.Format("test{0}", nextHtmlID);
+                    nextHtmlID += 1;
+                }
+
+                string sourceFile = test.HtmlID + ".c";
+                string imageFile = test.HtmlID + ".nes";
+
+                // Run the compiler:
+                File.WriteAllText(sourceFile, test.Source);
+                List<string> compilerArgs = new List<string>(
+                    new[] { RuntimeFile, TestHeader, sourceFile, "-o", imageFile });
+                Process process = RunProcess(CompilerPath, compilerArgs.ToArray());
+
+                if (!process.HasExited)
+                {
+                    process.WaitForExit();
+                    test.ActualError = "(compiler timed out)";
+                    test.Passed = false;
+                    goto Finished;
+                }
+                else if (process.ExitCode == 1)
+                {
+                    test.ActualError = "compiler error:<br>" + process.StandardError.ReadToEnd();
+                    test.Passed = test.ExpectError;
+                    goto Finished;
+                }
+                else if (process.ExitCode > 1)
+                {
+                    test.ActualError = "compiler panic:<br>" + process.StandardError.ReadToEnd();
+                    test.Passed = false;
+                    goto Finished;
+                }
+
+                // Run the compiled code:
+                process = RunProcess(SimulatorPath, new[] { imageFile });
+                if (!process.HasExited)
+                {
+                    process.Kill();
+                    test.ActualError = "(simulator timed out)";
+                    test.Passed = false;
+                    goto Finished;
+                }
+                else if (process.ExitCode != 0)
+                {
+                    test.ActualError = "simulator error:<br>" + process.StandardError.ReadToEnd();
+                    test.Passed = test.ExpectError;
+                    goto Finished;
+                }
+
+                // Parse the output and check for correctness:
+                int[] sim_output = ParseNumberList(process.StandardOutput.ReadToEnd());
+                test.Cycles = sim_output.Last();
+                test.ActualOutput = sim_output.Take(sim_output.Length - 1).ToArray();
+                if (test.ExpectError)
+                {
+                    test.Passed = false;
+                }
+                else
+                {
+                    test.Passed = false;
+                    if (test.ActualOutput.Length == test.ExpectedOutput.Length)
                     {
-                        if (test.ActualOutput[i] != test.ExpectedOutput[i])
+                        test.Passed = true;
+                        for (int i = 0; i < test.ActualOutput.Length; i++)
                         {
-                            test.Passed = false;
-                            break;
+                            if (test.ActualOutput[i] != test.ExpectedOutput[i])
+                            {
+                                test.Passed = false;
+                                break;
+                            }
                         }
                     }
                 }
-            }
+
+                Finished:
+                File.Delete(sourceFile);
+                File.Delete(imageFile);
+                Console.Write(".");
+            };
+
+            Thread thread = new Thread(runTest);
+            thread.Start();
+            threads.Add(thread);
+        }
+
+        // Wait for threads to finish:
+        while (threads.Any(x => x.IsAlive))
+        {
+            Thread.Sleep(10);
         }
 
         // Generate the report:
@@ -193,7 +178,6 @@ class Program
             string plural = (failures > 1) ? "s" : "";
             report.AppendFormat("<p class=\"problem\">{0} test{1} failed.</p>\n", failures, plural);
         }
-        report.AppendFormat("<p class=\"info\">{0:0.000} seconds spent in compiler; {1:0.000} per test.</p>\n", timeInCompiler, timeInCompiler / tests.Count);
         report.Append(HtmlMiddle);
         foreach (Test test in tests)
         {
@@ -213,7 +197,6 @@ class Program
 
             report.AppendFormat("<td id=\"{0}\">{1}</td>\n", test.HtmlID, test.Description);
             report.Append("<td>" + FormatSourceCode(test.Source) + "</td>\n");
-            report.Append("<td><details><summary>Show</summary><pre>" + test.Disasm.Trim() + "</pre></details></td>\n");
 
             string testOutput = test.ActualError.Or(FormatIntArray(test.ActualOutput));
             report.Append("<td>" +  Monospace(testOutput) + "</td>\n");
@@ -360,7 +343,6 @@ pre {
 <th></th>
 <th>Description</th>
 <th>Source</th>
-<th>Disassembly</th>
 <th>Output</th>
 <th>Expected Output</th>
 <th>Cycles</th>

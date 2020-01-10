@@ -8,7 +8,6 @@ class Test
 {
     public string Description = "";
     public string Source = "";
-    public string Disasm = "";
     public int[] ExpectedOutput = new int[0];
     public int[] ActualOutput = new int[0];
     public Maybe<string> ActualError = Maybe.Nothing;

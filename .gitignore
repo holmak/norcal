@@ -5,7 +5,7 @@ Release/
 *.VC.db
 *.vcxproj.user
 ignore/
-test_files/
 debug_output/
 *.nes
 *.csproj.user
+results.html
