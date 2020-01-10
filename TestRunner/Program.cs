@@ -21,7 +21,6 @@ class Program
     private static readonly string CompilerPath = "norcal/bin/Debug/norcal.exe";
     private static readonly string SimulatorPath = "sim6502/x64/Debug/sim6502.exe";
     private static readonly float TimeoutDuration = 0.5f;
-    private static readonly string TimeoutSentinel = "TIMED_OUT";
 
     static void Main(string[] args)
     {
@@ -30,44 +29,230 @@ class Program
 
         // Load the tests from the tests file:
         List<Test> tests = new List<Test>();
-        Test test = new Test();
-        foreach (string line in File.ReadAllLines(TestsFile))
         {
-            string lineLower = line.ToLower();
+            Test test = new Test();
+            foreach (string line in File.ReadAllLines(TestsFile))
+            {
+                string lineLower = line.ToLower();
 
-            // Potentially finish the previous test:
-            if (line.StartsWith("@") && test.Source.Trim() != "")
+                // Potentially finish the previous test:
+                if (line.StartsWith("@") && test.Source.Trim() != "")
+                {
+                    tests.Add(test);
+                    test = new Test();
+                }
+
+                // Collect metadata for the upcoming test:
+                if (line.StartsWith("@ "))
+                {
+                    test.Description = line.Substring(2);
+                }
+                else if (lineLower.StartsWith("@out"))
+                {
+                    test.ExpectedOutput = ParseNumberList(line.Substring(4));
+                }
+                else if (lineLower.StartsWith("@error"))
+                {
+                    test.ExpectError = true;
+                }
+                else
+                {
+                    test.Source += line + "\n";
+                }
+            }
+
+            // Finish the last test:
+            if (test.Source.Trim() != "")
             {
                 tests.Add(test);
-                test = new Test();
             }
-
-            // Collect metadata for the upcoming test:
-            if (line.StartsWith("@ "))
-            {
-                test.Description = line.Substring(2);
-            }
-            else if (lineLower.StartsWith("@out"))
-            {
-                test.ExpectedOutput = ParseNumberList(line.Substring(5));
-            }
-            else if (lineLower.StartsWith("@error"))
-            {
-                test.ExpectError = true;
-            }
-            else
-            {
-                test.Source += line;
-            }
-        }
-                
-        // Finish the last test:
-        if (test.Source.Trim() != "")
-        {
-            tests.Add(test);
         }
 
         // Run the tests:
+        int nextHtmlID = 0;
+        bool attachDebugger = true;
+        float timeInCompiler = 0;
+        foreach (Test test in tests)
+        {
+            Console.Write(".");
+            test.Disasm = "N/A";
+            test.Passed = false;
+            test.HtmlID = string.Format("test{0}", nextHtmlID);
+            nextHtmlID += 1;
+
+            // Compile:
+            File.WriteAllText(SourceFile, test.Source);
+            List<string> compilerArgs = new List<string>(
+                new[] { RuntimeFile, TestHeader, SourceFile, "-o", ImageFile });
+
+            // Automatically attach the debugger if a test fails. However, only do this for the 
+            // first failure, to avoid a cascade of debugger prompt windows.
+            // Also, don't attach if the test *expects* an error to occur.
+            if (attachDebugger && !test.ExpectError)
+            {
+                compilerArgs.Add("--attach");
+            }
+
+            DateTime time_before = DateTime.Now;
+            Process process = RunProcess(CompilerPath, compilerArgs.ToArray());
+            DateTime time_after = DateTime.Now;
+            timeInCompiler += (float)(time_after - time_before).TotalSeconds;
+
+            if (!process.HasExited)
+            {
+                process.WaitForExit();
+                test.ActualError = "(compiler timed out)";
+                test.Passed = false;
+            }
+            else if (process.ExitCode == 1)
+            {
+                test.ActualError = "compiler error:<br>" + process.StandardError.ReadToEnd();
+                test.Passed = test.ExpectError;
+            }
+            else if (process.ExitCode > 1)
+            {
+                test.ActualError = "compiler panic:<br>" + process.StandardError.ReadToEnd();
+                test.Passed = false;
+            }
+            else
+            {
+                test.Passed = true;
+            }
+
+            if (!test.Passed)
+            {
+                attachDebugger = false;
+            }
+
+            if (!test.Passed || test.ExpectError)
+            {
+                continue;
+            }
+
+            if (File.Exists(DisasmFile))
+            {
+                test.Disasm = File.ReadAllText(DisasmFile);
+            }
+            else
+            {
+                test.Disasm = "N/A";
+            }
+
+            // Run:
+            process = RunProcess(SimulatorPath, new[] { ImageFile });
+            if (!process.HasExited)
+            {
+                process.Kill();
+                test.ActualError = "(simulator timed out)";
+                test.Passed = false;
+                continue;
+            }
+            else if (process.ExitCode != 0)
+            {
+                test.ActualError = "simulator error:<br>" + process.StandardError.ReadToEnd();
+                test.Passed = test.ExpectError;
+                continue;
+            }
+            int[] sim_output = ParseNumberList(process.StandardOutput.ReadToEnd());
+            test.Cycles = sim_output.Last();
+            test.ActualOutput = sim_output.Take(sim_output.Length - 1).ToArray();
+            if (test.ExpectError)
+            {
+                test.Passed = false;
+            }
+            else
+            {
+                test.Passed = false;
+                if (test.ActualOutput.Length == test.ExpectedOutput.Length)
+                {
+                    test.Passed = true;
+                    for (int i = 0; i < test.ActualOutput.Length; i++)
+                    {
+                        if (test.ActualOutput[i] != test.ExpectedOutput[i])
+                        {
+                            test.Passed = false;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Generate the report:
+        Maybe<string> firstErrorID = Maybe.Nothing;
+        StringBuilder report = new StringBuilder();
+
+        report.Append(HtmlHeader);
+        int failures = tests.Where(x => !x.Passed).Count();
+        if (failures == 0)
+        {
+            report.AppendFormat("<p class=\"success\">All {0} tests passed!</p>\n", tests.Count);
+        }
+        else
+        {
+            string plural = (failures > 1) ? "s" : "";
+            report.AppendFormat("<p class=\"problem\">{0} test{1} failed.</p>\n", failures, plural);
+        }
+        report.AppendFormat("<p class=\"info\">{0:0.000} seconds spent in compiler; {1:0.000} per test.</p>\n", timeInCompiler, timeInCompiler / tests.Count);
+        report.Append(HtmlMiddle);
+        foreach (Test test in tests)
+        {
+            if (!test.Passed && !firstErrorID.HasValue)
+            {
+                firstErrorID = test.HtmlID;
+            }
+            report.Append("<tr>\n");
+            if (test.Passed)
+            {
+                report.Append("<td bgcolor=\"#53F253\"></td>\n");
+            }
+            else
+            {
+                report.Append("<td bgcolor=\"#E9322E\"></td>\n");
+            }
+
+            report.AppendFormat("<td id=\"{0}\">{1}</td>\n", test.HtmlID, test.Description);
+            report.Append("<td>" + FormatSourceCode(test.Source) + "</td>\n");
+            report.Append("<td><details><summary>Show</summary><pre>" + test.Disasm.Trim() + "</pre></details></td>\n");
+
+            string testOutput = test.ActualError.Or(FormatIntArray(test.ActualOutput));
+            report.Append("<td>" +  Monospace(testOutput) + "</td>\n");
+
+            string expectedOutput;
+            if (test.ExpectError)
+            {
+                expectedOutput = Monospace("(error)");
+            }
+            else
+            {
+                expectedOutput = Monospace(FormatIntArray(test.ExpectedOutput));
+            }
+            report.Append("<td>" + expectedOutput + "</td>\n");
+            report.Append("<td>" + Monospace(test.Cycles.ToString()) + "</td>\n");
+            report.Append("</tr>\n");
+        }
+
+        report.Append(HtmlFooter1);
+        if (firstErrorID.HasValue)
+        {
+            report.AppendFormat("document.getElementById(\"{0}\").scrollIntoView();", firstErrorID.Value);
+        }
+        report.Append(HtmlFooter2);
+
+        File.WriteAllText(ReportFile, report.ToString());
+        Process.Start("explorer.exe", ReportFile);
+    }
+
+    static int ParseNumber(string n)
+    {
+        if (n.ToLower().StartsWith("0x"))
+        {
+            return Convert.ToInt32(n, 16);
+        }
+        else
+        {
+            return Convert.ToInt32(n, 10);
+        }
     }
 
     static int[] ParseNumberList(string list)
@@ -76,11 +261,11 @@ class Program
             .Split(' ')
             .Select(x => x.Trim().ToLower())
             .Where(x => x.Length > 0)
-            .Select(x => int.Parse(x))
+            .Select(x => ParseNumber(x))
             .ToArray();
     }
 
-    static string RunProcess(string program, params string[] args)
+    static Process RunProcess(string program, params string[] args)
     {
         ProcessStartInfo startInfo = new ProcessStartInfo()
         {
@@ -92,21 +277,42 @@ class Program
         };
 
         Process process = Process.Start(startInfo);
-        DateTime startTime = DateTime.Now;
-        while (!process.HasExited)
-        {
-            if (DateTime.Now - startTime > TimeSpan.FromSeconds(TimeoutDuration))
-            {
-                return TimeoutSentinel;
-            }
+        process.WaitForExit((int)(TimeoutDuration * 1000));
+        return process;
+    }
 
-            // TODO: Make sure that this isn't what is making the tests slow to run (or some equivalent code in Python).
-            Thread.Sleep(10);
+    
+    static string FormatInt(int n)
+    {
+        if (n >= 512)
+        {
+            return string.Format("0x{0:X}", n);
+        }
+        else
+        {
+            return n.ToString();
+        }
+    }
+    
+    static string FormatIntArray(int[] data)
+    {
+        return string.Join(", ", data.Select(x => FormatInt(x)));
+    }
+
+    static string FormatSourceCode(string text)
+    {
+        return "<pre>" + text.Trim().Replace("<", "&lt;").Replace(">", "&gt;") + "</pre>";
+    }
+
+    static string Monospace(string text)
+    {
+        text = text.Trim();
+        if (text.Length == 0)
+        {
+            text = "(none)";
         }
 
-        string stderr = process.StandardError.ReadToEnd();
-        string stdout = process.StandardOutput.ReadToEnd();
-        return stderr + stdout;
+        return string.Format("<span class=\"console\">{0}</span>", text.Replace("\n", "<br>"));
     }
 
     private static readonly string HtmlHeader = @"<title>Test Results</title>
@@ -172,131 +378,7 @@ window.onload = function() {
 
 /*
 
-#############################################################################
-# Run the tests.
-#############################################################################
 
-next_html_id = 0
-previously_attached = False
-time_in_compiler = 0
-for test in tests:
-    print(".", end="", flush=True)
-    test.disasm = "N/A"
-    test.passed = False
-    test.html_id = "test{}".format(next_html_id)
-    next_html_id += 1
-    # Compile:
-    with open(SOURCE_FILE, "w") as f:
-        f.write(test.source)
-    args = [COMPILER, RUNTIME_FILE, TEST_HEADER, SOURCE_FILE, "-o", IMAGE_FILE]
-    # Automatically attach the debugger if a test fails.
-    # However, only do this for the first failure, to avoid a cascade of
-    # debugger prompt windows.
-    # Also, don"t attach if the test *expects* an error to occur.
-    attach = not test.expect_error and not previously_attached
-    if attach:
-        args.append("--attach")
-    time_before = time.perf_counter()
-    process = run_process(args)
-    time_after = time.perf_counter()
-    time_in_compiler += (time_after - time_before)
-    if process == TIMED_OUT:
-        test.actual_output = "(compiler timed out)"
-        test.passed = False
-        continue
-    elif process.returncode == 1:
-        test.actual_output = "compiler error:<br>" + process.stderr.decode("utf_8")
-        test.passed = test.expect_error
-        if attach and not test.passed:
-            previously_attached = True
-        continue
-    elif process.returncode > 1:
-        test.actual_output = "compiler panic:<br>" + process.stderr.decode("utf_8")
-        test.passed = False
-        previously_attached = True
-        continue
-    if os.path.isfile(DISASM_FILE):
-        test.disasm = read_text_file(DISASM_FILE)
-    else:
-        test.disasm = "N/A"
-    # Run:
-    process = run_process([SIMULATOR, IMAGE_FILE])
-    if process == TIMED_OUT:
-        test.actual_output = "(simulator timed out)"
-        test.passed = False
-        continue
-    elif process.returncode != 0:
-        test.actual_output = "simulator error:<br>" + process.stderr.decode("utf_8")
-        test.passed = test.expect_error
-        continue
-    sim_output = parse_number_list(process.stdout.decode("utf_8"))
-    test.cycles = sim_output[-1]
-    test.actual_output = sim_output[:-1]
-    if test.expect_error:
-        test.passed = False
-    else:
-        test.passed = (test.actual_output == test.expected_output)
 
-#############################################################################
-# Create a report summarizing the test results.
-#############################################################################
-
-def format_int(n):
-    if n >= 512:
-        return "0x{:X}".format(n)
-    else:
-        return str(n)
-
-def format_source_code(text):
-    return "<pre>" + text.strip().replace("<", "&lt;").replace(">", "&gt;") + "</pre>"
-
-def monospace(data):
-    text = None
-    if type(data) is str:
-        text = data
-    elif type(data) is int:
-        text = str(data)
-    elif len(data) > 0:
-        text = ", ".join([format_int(n) for n in data])
-    else:
-        text = "(none)"
-    return "<span class="console">{}</span>".format(text.strip().replace("\n", "<br>"))
-
-first_error_id = None
-with open(REPORT_FILE, "w") as report:
-    report.write(html_header)
-    failures = len([x for x in tests if not x.passed])
-    if failures == 0:
-        report.write("<p class="success">All {} tests passed!</p>\n".format(len(tests)))
-    else:
-        plural = "s" if failures > 1 else ""
-        report.write("<p class="problem">{} test{} failed.</p>\n".format(
-            failures, plural))
-    report.write("<p class="info">{:.3f} seconds spent in compiler; {:.3f} per test.</p>\n".format(time_in_compiler, time_in_compiler / len(tests)))
-    report.write(html_middle)
-    for test in tests:
-        if not test.passed and first_error_id is None:
-            first_error_id = test.html_id
-        report.write("<tr>\n")
-        if test.passed:
-            report.write("<td bgcolor="#53F253"></td>\n")
-        else:
-            report.write("<td bgcolor="#E9322E"></td>\n")
-        report.write("<td id="{}">{}</td>\n".format(test.html_id, test.description))
-        report.write("<td>" + format_source_code(test.source) + "</td>\n")
-        report.write("<td><details><summary>Show</summary><pre>" + test.disasm.strip() + "</pre></details></td>\n")
-        report.write("<td>" + monospace(test.actual_output) + "</td>\n")
-        if test.expect_error:
-            expected_output = monospace("(error)")
-        else:
-            expected_output = monospace(test.expected_output)
-        report.write("<td>" + expected_output + "</td>\n")
-        report.write("<td>" + monospace(test.cycles) + "</td>\n")
-        report.write("</tr>\n")
-    report.write(html_footer1)
-    if first_error_id is not None:
-        report.write("document.getElementById("{}").scrollIntoView();".format(first_error_id))
-    report.write(html_footer2)
-os.startfile(REPORT_FILE)
 
 */

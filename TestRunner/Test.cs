@@ -11,6 +11,9 @@ class Test
     public string Disasm = "";
     public int[] ExpectedOutput = new int[0];
     public int[] ActualOutput = new int[0];
+    public Maybe<string> ActualError = Maybe.Nothing;
     public bool ExpectError;
     public int Cycles;
+    public string HtmlID;
+    public bool Passed;
 }

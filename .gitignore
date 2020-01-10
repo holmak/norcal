@@ -8,3 +8,4 @@ ignore/
 test_files/
 debug_output/
 *.nes
+*.csproj.user
