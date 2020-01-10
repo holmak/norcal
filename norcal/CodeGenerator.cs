@@ -523,7 +523,6 @@ class CodeGenerator
             }
             else if (op.Match(Tag.Return))
             {
-                SpillAll();
                 Operand result = Pop();
                 EmitLoadAccumulator(result);
                 EmitAsm("RTS");
