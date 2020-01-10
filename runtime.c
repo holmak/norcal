@@ -1,4 +1,7 @@
 
+define u8 FALSE = 0;
+define u8 TRUE = 1;
+
 uint8_t _rt_mul_u8(uint8_t a, uint8_t b)
 {
     __asm
