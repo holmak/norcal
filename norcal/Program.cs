@@ -66,7 +66,7 @@ static class Program
 
         IReadOnlyList<Expr> stackCode = Parser.ParseFiles(sourceFilenames);
         if (EnableDebugOutput) WritePassOutputToFile("stack-code", ShowAssembly(stackCode));
-        IReadOnlyList<Expr> assembly = StackAssembler.Convert(stackCode);
+        IReadOnlyList<Expr> assembly = CodeGenerator.Convert(stackCode);
         if (EnableDebugOutput) WritePassOutputToFile("assembly", ShowAssembly(assembly));
         Assembler.Assemble(assembly, outputFilename);
 

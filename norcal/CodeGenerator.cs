@@ -5,7 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-class StackAssembler
+class CodeGenerator
 {
     List<Expr> Output = new List<Expr>();
     Dictionary<string, CFunctionInfo> Functions = new Dictionary<string, CFunctionInfo>();
@@ -22,7 +22,7 @@ class StackAssembler
     /// </summary>
     public static List<Expr> Convert(IReadOnlyList<Expr> input)
     {
-        StackAssembler converter = new StackAssembler();
+        CodeGenerator converter = new CodeGenerator();
         converter.Run(input);
         return converter.Output;
     }
