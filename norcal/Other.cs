@@ -86,6 +86,7 @@ struct MemoryRegion
 
     public static readonly MemoryRegion ZeroPage = new MemoryRegion(MemoryRegionTag.ZeroPage, 0);
     public static readonly MemoryRegion Ram = new MemoryRegion(MemoryRegionTag.Ram, 0);
+    public static readonly MemoryRegion ProgramRom = new MemoryRegion(MemoryRegionTag.ProgramRom, 0);
     public static MemoryRegion Fixed(int address) => new MemoryRegion(MemoryRegionTag.Fixed, address);
 
     public override string ToString()
@@ -99,5 +100,6 @@ enum MemoryRegionTag
 {
     ZeroPage,
     Ram,
+    ProgramRom,
     Fixed,
 }

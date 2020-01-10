@@ -42,6 +42,7 @@ class StackAssembler
             CType type, newType, returnType;
             FieldInfo[] fields;
             int number;
+            int[] values;
             if (op.Match(Tag.Function, out returnType, out functionName, out fields))
             {
                 if (Functions.ContainsKey(functionName)) Program.Error("function is already defined: " + functionName);
@@ -73,6 +74,45 @@ class StackAssembler
             else if (op.Match(Tag.Variable, out region, out type, out name))
             {
                 DeclareVariable(region, type, name);
+            }
+            else if (op.Match(Tag.ReadonlyData, out type, out name, out values))
+            {
+                if (type.IsArray)
+                {
+                    // If the array size is unspecified, automatically make it match the number of provided values.
+                    if (type.Dimension == 0)
+                    {
+                        type = CType.MakeArray(type.Subtype, values.Length);
+                    }
+
+                    if (values.Length > type.Dimension)
+                    {
+                        Program.Error("Declared size of array ({0}) is too small for the number of specified values ({1}).",
+                            type.Dimension, values.Length);
+                    }
+                }
+                else if (values.Length != 1)
+                {
+                    Program.Panic("Non-array initializers must contain exactly one value.");
+                }
+
+                // Convert the data to raw bytes:
+                byte[] bytes = new byte[SizeOf(type)];
+                if (type.IsArray && type.Subtype == CType.UInt8)
+                {
+                    for (int i = 0; i < type.Dimension; i++)
+                    {
+                        // Unspecified elements are initialized to zero.
+                        bytes[i] = (i < values.Length) ? (byte)values[i] : (byte)0;
+                    }
+                }
+                else
+                {
+                    Program.NYI();
+                }
+
+                DeclareSymbol(SymbolTag.Variable, name, type, 0);
+                Emit(Tag.ReadonlyData, name, bytes);
             }
             else if (op.Match(Tag.Struct, out name, out fields))
             {

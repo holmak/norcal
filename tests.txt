@@ -1758,3 +1758,78 @@ void reset()
         STA STOP
     }
 }
+
+@ Memory specifiers
+
+@out 111
+u8 arr[4];
+__zeropage u8 *ptr;
+void reset()
+{
+    __asm
+    {
+        LDA #<arr
+        STA ptr
+        LDA #>arr
+        STA ptr+1
+
+        LDA #90
+        LDY #1
+        STA (ptr),Y
+        LDA #111
+        INY
+        STA (ptr),Y
+        LDA #200
+        INY
+        STA (ptr),Y
+
+        LDY #2
+        LDA (ptr),Y
+        STA OUTB
+
+        STA STOP
+    }
+}
+
+@error
+// You can't use zero-page address modes with non-zero-page operands.
+__ram u8 arr[4];
+void reset()
+{
+    __asm
+    {
+        LDY #2
+        LDA (arr),Y
+        STA STOP
+    }
+}
+
+@out 10 20 30 40 50 60
+__prg_rom u8 data[] = { 10, 20, 30, 40, 50, 60, 0 };
+void reset()
+{
+    for (__zeropage u8 *p = data; *p; ++p)
+    {
+        OUTB = *p;
+    }
+    STOP = 0;
+}
+
+@out 42
+__prg_rom u8 constant = 42;
+void reset()
+{
+    // Assigning to PRGROM has no effect:
+    constant = 88;
+    OUTB = constant;
+    STOP = 0;
+}
+
+@error
+void reset()
+{
+    // Locals can't be put in PRGROM.
+    __prg_rom u8 local = 24;
+    OUTB = local;
+    STOP = 0;
+}

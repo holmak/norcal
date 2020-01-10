@@ -216,6 +216,7 @@ static class Tag
     public static readonly string Function = "$function";
     public static readonly string Constant = "$constant";
     public static readonly string Variable = "$variable";
+    public static readonly string ReadonlyData = "$readonly_data";
     public static readonly string Struct = "$struct";
 
     // Special nodes:

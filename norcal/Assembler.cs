@@ -51,6 +51,7 @@ class Assembler
         {
             string label, name, mnemonic;
             int skipTarget, size, number;
+            byte[] bytes;
             MemoryRegion region;
             AsmOperand operand;
 
@@ -93,6 +94,11 @@ class Assembler
             else if (e.Match(Tag.Variable, out region, out size, out name))
             {
                 DefineSymbol(name, AllocateGlobal(region, size));
+            }
+            else if (e.Match(Tag.ReadonlyData, out name, out bytes))
+            {
+                DefineSymbol(name, PrgRomBase + prg.Count);
+                prg.AddRange(bytes);
             }
             else if (e.Match(Tag.Asm, out mnemonic, out operand))
             {

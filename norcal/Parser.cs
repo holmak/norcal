@@ -192,9 +192,41 @@ partial class Parser
                 else
                 {
                     ParseArrayDeclaration(ref type);
-                    if (TryParse(TokenType.EQUAL)) ParserError("global variables cannot be initialized");
+                    if (TryParse(TokenType.EQUAL))
+                    {
+                        if (region.Tag == MemoryRegionTag.ProgramRom)
+                        {
+                            List<int> values = new List<int>();
+                            if (type.IsArray)
+                            {
+                                Expect(TokenType.LBRACE);
+                                if (!TryParse(TokenType.RBRACE))
+                                {
+                                    while (true)
+                                    {
+                                        values.Add(ExpectInt());
+                                        if (!TryParse(TokenType.COMMA)) break;
+                                    }
+                                }
+                                Expect(TokenType.RBRACE);
+                            }
+                            else
+                            {
+                                values.Add(ExpectInt());
+                            }
+
+                            Emit(Tag.ReadonlyData, type, DefineQualifiedVariableName(name), values.ToArray());
+                        }
+                        else
+                        {
+                            ParserError("global variables cannot be initialized");
+                        }
+                    }
+                    else
+                    {
+                        Emit(Tag.Variable, region, type, DefineQualifiedVariableName(name));
+                    }
                     Expect(TokenType.SEMICOLON);
-                    Emit(Tag.Variable, region, type, DefineQualifiedVariableName(name));
                 }
             }
         }
@@ -205,6 +237,16 @@ partial class Parser
         if (TryParseName("__zeropage"))
         {
             region = MemoryRegion.ZeroPage;
+            return true;
+        }
+        else if (TryParseName("__ram"))
+        {
+            region = MemoryRegion.Ram;
+            return true;
+        }
+        else if (TryParseName("__prg_rom"))
+        {
+            region = MemoryRegion.ProgramRom;
             return true;
         }
         else if (TryParseName("__location"))
@@ -233,7 +275,9 @@ partial class Parser
     {
         if (TryParse(TokenType.LBRACKET))
         {
-            int dimension = ExpectInt();
+            // TODO: Figure out how to handle missing array dimensions.
+            int dimension;
+            if (!TryParseInt(out dimension)) dimension = 0;
             Expect(TokenType.RBRACKET);
             type = CType.MakeArray(type, dimension);
         }
