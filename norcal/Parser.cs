@@ -863,7 +863,6 @@ partial class Parser
             }
             else if (TryParse(TokenType.LBRACKET))
             {
-                RemoveLastLoadInstruction();
                 ParseExpr();
                 Emit(Tag.Add);
                 Emit(Tag.Load);

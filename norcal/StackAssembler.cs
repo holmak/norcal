@@ -103,10 +103,21 @@ class StackAssembler
             {
                 CType valueType = Symbols[name].Type;
 
-                // Arrays decay into pointers when used in an expression:
                 if (valueType.IsArray)
                 {
+                    // Arrays are treated like a pointer to their first element:
                     valueType = valueType.Subtype;
+
+                    // Arrays can only be used as rvalues.
+                    // (In VSM terms, this means that every array operand must be "loaded".)
+                    if (input.Count > 0 && input[0].Match(Tag.Load))
+                    {
+                        input.RemoveAt(0);
+                    }
+                    else
+                    {
+                        Program.Error("arrays cannot be used as the target of an assignment");
+                    }
                 }
 
                 Push(Operand.MakeVariableAddress(name, CType.MakePointer(valueType)));
