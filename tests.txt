@@ -1826,20 +1826,20 @@ void reset()
 }
 
 @out 42
-__prg_rom u8 constant = 42;
+__prg_rom u8 constants[] = { 21, 42 };
 void reset()
 {
-    // Assigning to PRGROM has no effect:
-    constant = 88;
-    OUTB = constant;
+    // Assigning to PRG-ROM has no effect:
+    constants[1] = 88;
+    OUTB = constants[1];
     STOP = 0;
 }
 
 @error
 void reset()
 {
-    // Locals can't be put in PRGROM.
-    __prg_rom u8 local = 24;
-    OUTB = local;
+    // Locals can't be put in PRG-ROM.
+    __prg_rom u8 local[] = { 24, 48 };
+    OUTB = local[1];
     STOP = 0;
 }
