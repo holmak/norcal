@@ -18,7 +18,8 @@ class Expr
         foreach (object arg in args)
         {
             if (arg == null) throw new Exception("Null in tuple.");
-            if (!(arg is int || arg is string || arg is MemoryRegion || arg is CType || arg is FieldInfo[] || arg is Expr || arg is AsmOperand))
+            if (!(arg is int || arg is string || arg is MemoryRegion || arg is CType || arg is FieldInfo[] ||
+                arg is Expr || arg is AsmOperand || arg is int[] || arg is byte[]))
             {
                 throw new Exception("Unsupported type in tuple: " + arg.GetType());
             }
@@ -204,6 +205,8 @@ class Expr
         for (int i = 0; i < Args.Length; i++)
         {
             int? integer = Args[i] as int?;
+            int[] ints = Args[i] as int[];
+            byte[] bytes = Args[i] as byte[];
             string name = Args[i] as string;
             Expr subexpr = Args[i] as Expr;
             MemoryRegion? region = Args[i] as MemoryRegion?;
@@ -215,6 +218,14 @@ class Expr
             {
                 int n = integer.Value;
                 tree[i] = (n < 128) ? n.ToString() : "$" + n.ToString("X");
+            }
+            else if (ints != null)
+            {
+                tree[i] = "{ " + string.Join(", ", ints.Select(FormatInt)) + " }";
+            }
+            else if (bytes != null)
+            {
+                tree[i] = "{ " + string.Join(", 0x", bytes.Select(x => x.ToString("X2"))) + " }";
             }
             else if (name != null)
             {
@@ -248,6 +259,8 @@ class Expr
 
         return tree;
     }
+
+    static string FormatInt(int n) => (n < 128) ? n.ToString() : "$" + n.ToString("X");
 
     /// <summary>
     /// Format a "string tree" into a multi-line, indented string.
