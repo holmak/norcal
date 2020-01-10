@@ -199,16 +199,25 @@ partial class Parser
                             List<int> values = new List<int>();
                             if (type.IsArray)
                             {
+                                // Parse a comma separated list; a final comma is allowed, but not required.
                                 Expect(TokenType.LBRACE);
                                 if (!TryParse(TokenType.RBRACE))
                                 {
                                     while (true)
                                     {
-                                        values.Add(ExpectInt());
-                                        if (!TryParse(TokenType.COMMA)) break;
+                                        int n = ExpectInt();
+                                        values.Add(n);
+                                        if (TryParse(TokenType.COMMA))
+                                        {
+                                            if (TryParse(TokenType.RBRACE)) break;
+                                        }
+                                        else
+                                        {
+                                            Expect(TokenType.RBRACE);
+                                            break;
+                                        }
                                     }
                                 }
-                                Expect(TokenType.RBRACE);
                             }
                             else
                             {

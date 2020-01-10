@@ -1804,6 +1804,16 @@ void reset()
     }
 }
 
+@out 25
+// Array initializer syntax
+__prg_rom u8 minimum_commas[] = { 10, 20, 30, 40 };
+__prg_rom u8 extra_comma[] = { 5, 15, 25, 35, };
+void reset()
+{
+    OUTB = extra_comma[2];
+    STOP = 0;
+}
+
 @out 10 20 30 40 50 60
 __prg_rom u8 data[] = { 10, 20, 30, 40, 50, 60, 0 };
 void reset()
