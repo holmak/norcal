@@ -603,8 +603,8 @@ void reset()
 @ structs (u16)
 @out 500 530
 
-struct Triple { uint16_t x, y, z; }
-struct Pair { uint16_t x; uint16_t y; }
+struct Triple { uint16_t x, y, z; };
+struct Pair { uint16_t x; uint16_t y; };
 
 void reset()
 {
@@ -619,8 +619,8 @@ void reset()
 @ structs (u8)
 @out 40 42
 
-struct Triple { uint8_t x, y, z; }
-struct Pair { uint8_t x; uint8_t y; }
+struct Triple { uint8_t x, y, z; };
+struct Pair { uint8_t x; uint8_t y; };
 
 void reset()
 {
@@ -635,7 +635,7 @@ void reset()
 @ structs
 @out 135
 
-struct Pair { uint8_t a, b; }
+struct Pair { uint8_t a, b; };
 
 uint8_t hadd(struct Pair *p)
 {
@@ -654,7 +654,7 @@ void reset()
 @ structs as globals
 @out 45
 
-struct Range { uint8_t a, z; }
+struct Range { uint8_t a, z; };
 struct Range r;
 
 void reset()
