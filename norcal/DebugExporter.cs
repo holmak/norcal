@@ -13,9 +13,22 @@ class DebugExporter
     public DebugExporter()
     {
         // HACK: This is hard-coded to match the values hard-coded in Assembler.
-        Segments.Add(new SegmentInfo() { ID = 0, Start = 0x0000, Size = 0x0800, IsWritable = true, IsPrgRom = false });
-        Segments.Add(new SegmentInfo() { ID = 1, Start = 0x6000, Size = 0x0006, IsWritable = false, IsPrgRom = false });
-        Segments.Add(new SegmentInfo() { ID = 2, Start = 0x8000, Size = 0x8000, IsWritable = false, IsPrgRom = true });
+        AddSegment(0x0000, 0x0800, false);
+        AddSegment(0x2000, 0x0008, false);
+        AddSegment(0x4000, 0x0018, false);
+        AddSegment(0x6000, 0x0006, false);
+        AddSegment(0x8000, 0x8000, true);
+    }
+
+    void AddSegment(int address, int size, bool isPrgRom)
+    {
+        Segments.Add(new SegmentInfo()
+        {
+            ID = Segments.Count,
+            Start = address,
+            Size = size,
+            IsPrgRom = isPrgRom,
+        });
     }
 
     public void AddVariable(string name, int address, int size)
@@ -58,7 +71,7 @@ class DebugExporter
 
         foreach (SegmentInfo segment in Segments)
         {
-            lines.Add(string.Format("seg\tid={0},start=0x{1:X4},size=0x{2:X4},type={3}{4}", segment.ID, segment.Start, segment.Size, segment.IsWritable ? "rw" : "ro", segment.IsPrgRom ? ",ooffs=16" : ""));
+            lines.Add(string.Format("seg\tid={0},start=0x{1:X4},size=0x{2:X4},{3}", segment.ID, segment.Start, segment.Size, segment.IsPrgRom ? "type=ro,ooffs=16" : "type=rw"));
         }
 
         // ^sym\tid=([0-9]+),.*name=\"([0-9a-zA-Z@_-]+)\"(,.*size=([0-9]+)){0,1}(,.*def=([0-9+]+)){0,1}(,.*ref=([0-9+]+)){0,1}(,.*val=0x([0-9a-fA-F]+)){0,1}(,.*seg=([0-9]+)){0,1}(,.*exp=([0-9]+)){0,1}
@@ -75,8 +88,6 @@ class DebugExporter
         public int ID;
         public int Start;
         public int Size;
-        public int FileOffset;
-        public bool IsWritable;
         public bool IsPrgRom;
     }
 
