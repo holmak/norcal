@@ -14,13 +14,13 @@ class DebugExporter
     {
         // HACK: This is hard-coded to match the values hard-coded in Assembler.
         AddSegment(0x0000, 0x0800, false);
-        AddSegment(0x2000, 0x0008, false);
-        AddSegment(0x4000, 0x0018, false);
-        AddSegment(0x6000, 0x0006, false);
+        AddSegment(0x2000, 0x0008, false, false);
+        AddSegment(0x4000, 0x0018, false, false);
+        AddSegment(0x6000, 0x0006, false, false);
         AddSegment(0x8000, 0x8000, true);
     }
 
-    void AddSegment(int address, int size, bool isPrgRom)
+    void AddSegment(int address, int size, bool isPrgRom, bool export = true)
     {
         Segments.Add(new SegmentInfo()
         {
@@ -28,6 +28,7 @@ class DebugExporter
             Start = address,
             Size = size,
             IsPrgRom = isPrgRom,
+            Export = export,
         });
     }
 
@@ -71,13 +72,19 @@ class DebugExporter
 
         foreach (SegmentInfo segment in Segments)
         {
-            lines.Add(string.Format("seg\tid={0},start=0x{1:X4},size=0x{2:X4},{3}", segment.ID, segment.Start, segment.Size, segment.IsPrgRom ? "type=ro,ooffs=16" : "type=rw"));
+            if (segment.Export)
+            {
+                lines.Add(string.Format("seg\tid={0},start=0x{1:X4},size=0x{2:X4},{3}", segment.ID, segment.Start, segment.Size, segment.IsPrgRom ? "type=ro,ooffs=16" : "type=rw"));
+            }
         }
 
         // ^sym\tid=([0-9]+),.*name=\"([0-9a-zA-Z@_-]+)\"(,.*size=([0-9]+)){0,1}(,.*def=([0-9+]+)){0,1}(,.*ref=([0-9+]+)){0,1}(,.*val=0x([0-9a-fA-F]+)){0,1}(,.*seg=([0-9]+)){0,1}(,.*exp=([0-9]+)){0,1}
         foreach (SymbolInfo symbol in Symbols)
         {
-            lines.Add(string.Format("sym\tid={0},name=\"{1}\",size={2},val=0x{3:X4},seg={4}", symbol.ID, symbol.Name, symbol.Size, symbol.Address, symbol.SegmentID));
+            if (Segments[symbol.SegmentID].Export)
+            {
+                lines.Add(string.Format("sym\tid={0},name=\"{1}\",size={2},val=0x{3:X4},seg={4}", symbol.ID, symbol.Name, symbol.Size, symbol.Address, symbol.SegmentID));
+            }
         }
 
         File.WriteAllLines(path, lines);
@@ -89,16 +96,18 @@ class DebugExporter
         public int Start;
         public int Size;
         public bool IsPrgRom;
+        public bool Export;
     }
 
     class SymbolInfo
     {
         public int ID;
         public string Name;
-        public int? Address;
-        public int? SegmentID;
+        public int Address;
+        public int SegmentID;
+        public int Size;
+
         public int? ExportSymbolID;
-        public int? Size;
         public List<int> References;
         public List<int> Definitions;
     }
