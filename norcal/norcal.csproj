@@ -44,6 +44,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Assembler.cs" />
+    <Compile Include="DebugExporter.cs" />
     <Compile Include="Other.cs" />
     <Compile Include="CType.cs" />
     <Compile Include="Disassembler.cs" />

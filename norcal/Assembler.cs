@@ -12,6 +12,7 @@ class Assembler
     List<Fixup> Fixups = new List<Fixup>();
     int ZeroPageNext = ZeroPageStart;
     int RamNext = RamStart;
+    DebugExporter Debug = new DebugExporter();
 
     static readonly int ZeroPageStart = 0x000;
     static readonly int ZeroPageEnd = 0x100;
@@ -93,12 +94,16 @@ class Assembler
             }
             else if (e.Match(Tag.Variable, out region, out size, out name))
             {
-                DefineSymbol(name, AllocateGlobal(region, size));
+                int address = AllocateGlobal(region, size);
+                DefineSymbol(name, address);
+                Debug.AddVariable(name, address, size);
             }
             else if (e.Match(Tag.ReadonlyData, out name, out bytes))
             {
-                DefineSymbol(name, PrgRomBase + prg.Count);
+                int address = PrgRomBase + prg.Count;
+                DefineSymbol(name, address);
                 prg.AddRange(bytes);
+                Debug.AddVariable(name, address, bytes.Length);
             }
             else if (e.Match(Tag.Asm, out mnemonic, out operand))
             {
@@ -197,6 +202,8 @@ class Assembler
             w.Write(prg.ToArray());
             w.Write(chr);
         }
+
+        Debug.Save(Path.ChangeExtension(outputFilename, ".dbg"));
     }
 
     void DefineSymbol(string symbol, int address)
