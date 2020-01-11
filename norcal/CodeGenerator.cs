@@ -291,7 +291,7 @@ class CodeGenerator
             {
                 ConsumeInput(1);
 
-                Program.Panic("this should never be emitted by the parser; it should always cancel a 'load' operation");
+                Program.Error("it is not possible to take the address of this expression");
             }
             else if (Next().Match(Tag.Store))
             {
@@ -363,6 +363,11 @@ class CodeGenerator
 
                 // The store operation leaves the value in the accumulator; this matches the behavior of C assignment.
                 PushAccumulator(value.Type);
+            }
+            else if (Next(0).Match(Tag.Load) && Next(1).Match(Tag.AddressOf))
+            {
+                // An "address of" cancels out a preceding "load".
+                ConsumeInput(2);
             }
             else if (Next().Match(Tag.Load))
             {

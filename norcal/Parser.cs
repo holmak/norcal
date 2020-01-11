@@ -46,31 +46,12 @@ partial class Parser
 
     void Emit(Expr e)
     {
-        if (e.Match(Tag.AddressOf))
-        {
-            RemoveLastLoadInstruction();
-        }
-        else
-        {
-            Output.Add(e);
-        }
+        Output.Add(e);
     }
 
     void EmitRange(IEnumerable<Expr> items)
     {
         Output.AddRange(items);
-    }
-
-    void RemoveLastLoadInstruction()
-    {
-        if (Output.Last().Match(Tag.Load))
-        {
-            Output.RemoveAt(Output.Count - 1);
-        }
-        else
-        {
-            Program.Error("it is not possible to take the address of this expression");
-        }
     }
 
     void BeginDivertingOutput()
@@ -618,14 +599,14 @@ partial class Parser
         string op;
         if (TryParse(TokenType.EQUAL))
         {
-            RemoveLastLoadInstruction();
+            Emit(Tag.AddressOf);
             ParseAssignExpr();
             Emit(Tag.Store);
         }
         else if (modifyAssignOperators.TryGetValue(PeekToken().Tag, out op))
         {
             ConsumeToken();
-            RemoveLastLoadInstruction();
+            Emit(Tag.AddressOf);
             Emit(Tag.Duplicate);
             Emit(Tag.Load);
             ParseAssignExpr();
@@ -873,14 +854,14 @@ partial class Parser
             }
             else if (TryParse(TokenType.PERIOD))
             {
-                RemoveLastLoadInstruction();
+                Emit(Tag.AddressOf);
                 string fieldName = ExpectAnyName();
                 Emit(Tag.Field, fieldName);
                 Emit(Tag.Load);
             }
             else if (TryParse(TokenType.ARROW))
             {
-                RemoveLastLoadInstruction();
+                Emit(Tag.AddressOf);
                 string fieldName = ExpectAnyName();
                 Emit(Tag.Load);
                 Emit(Tag.Field, fieldName);
