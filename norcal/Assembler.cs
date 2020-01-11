@@ -12,7 +12,6 @@ class Assembler
     List<Fixup> Fixups = new List<Fixup>();
     int ZeroPageNext = ZeroPageStart;
     int RamNext = RamStart;
-    List<string> DebugInfo = new List<string>();
 
     static readonly int ZeroPageStart = 0x000;
     static readonly int ZeroPageEnd = 0x100;
@@ -63,7 +62,6 @@ class Assembler
             else if (e.Match(Tag.Function, out label) || e.Match(Tag.Label, out label))
             {
                 DefineSymbol(label, PrgRomBase + prg.Count);
-                AddDebugInfo("P", label, prg.Count, 1);
             }
             else if (e.Match(Tag.SkipTo, out skipTarget))
             {
@@ -95,18 +93,11 @@ class Assembler
             }
             else if (e.Match(Tag.Variable, out region, out size, out name))
             {
-                int address = AllocateGlobal(region, size);
-                DefineSymbol(name, address);
-
-                if (address < 0x0800)
-                {
-                    AddDebugInfo("R", name, address, size);
-                }
+                DefineSymbol(name, AllocateGlobal(region, size));
             }
             else if (e.Match(Tag.ReadonlyData, out name, out bytes))
             {
                 DefineSymbol(name, PrgRomBase + prg.Count);
-                AddDebugInfo("P", name, prg.Count, bytes.Length);
                 prg.AddRange(bytes);
             }
             else if (e.Match(Tag.Asm, out mnemonic, out operand))
@@ -206,8 +197,6 @@ class Assembler
             w.Write(prg.ToArray());
             w.Write(chr);
         }
-
-        File.WriteAllLines(Path.ChangeExtension(outputFilename, ".mlb"), DebugInfo);
     }
 
     void DefineSymbol(string symbol, int address)
@@ -328,21 +317,6 @@ class Assembler
         }
 
         return address;
-    }
-
-    void AddDebugInfo(string type, string name, int address, int size)
-    {
-        // The MLB file format uses colons for delimiters, so we need to use something else:
-        name = name.Replace(":", "_");
-
-        if (size == 1)
-        {
-            DebugInfo.Add(string.Format("{0}:{1}:{2}", type, Convert.ToString(address, 16), name));
-        }
-        else
-        {
-            DebugInfo.Add(string.Format("{0}:{1}-{2}:{3}", type, Convert.ToString(address, 16), Convert.ToString(address + size - 1, 16), name));
-        }
     }
 }
 
