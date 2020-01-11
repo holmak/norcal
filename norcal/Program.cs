@@ -74,6 +74,8 @@ static class Program
         {
             Disassembler.Disassemble(outputFilename);
         }
+
+        Exit(0);
     }
 
     public static void WriteDebugFile(string filename, string text)
