@@ -36,7 +36,6 @@ void write6502(uint16_t address, uint8_t value)
     else if (address == DEBUG_PORT_LOW) outputLow = value;
     else if (address == DEBUG_PORT_HIGH) printf("%d ", (value << 8) | outputLow);
     else if (address == DEBUG_PORT_BYTE) printf("%d ", value);
-    else if (address >= ROM_BASE) rom[address - ROM_BASE] = value;
 }
 
 int main(int argc, char *argv[])
