@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 
 class CodeGenerator
 {
+    List<Expr> Input;
     List<Expr> Output = new List<Expr>();
     Dictionary<string, CFunctionInfo> Functions = new Dictionary<string, CFunctionInfo>();
     Dictionary<string, CStructInfo> Structs = new Dictionary<string, CStructInfo>();
@@ -23,28 +24,33 @@ class CodeGenerator
     public static List<Expr> Convert(IReadOnlyList<Expr> input)
     {
         CodeGenerator converter = new CodeGenerator();
-        converter.Run(input);
+        converter.Input = input.ToList();
+        converter.Run();
         return converter.Output;
     }
 
-    void Run(IReadOnlyList<Expr> originalInput)
+    void Run()
     {
         DeclareVariable(MemoryRegion.ZeroPage, TempPointer.Type, TempPointer.Name);
 
-        List<Expr> input = new List<Expr>(originalInput);
-        while (input.Count > 0)
+        while (Input.Count > 0)
         {
-            Expr op = input[0];
-            input.RemoveAt(0);
-
             string name, functionName, target;
             MemoryRegion region;
             CType type, newType, returnType;
             FieldInfo[] fields;
             int number;
             int[] values;
-            if (op.Match(Tag.Function, out returnType, out functionName, out fields))
+            if (Next().Match(Tag.NoOperation))
             {
+                ConsumeInput(1);
+
+                // This does nothing.
+            }
+            else if (Next().Match(Tag.Function, out returnType, out functionName, out fields))
+            {
+                ConsumeInput(1);
+
                 if (Functions.ContainsKey(functionName)) Program.Error("function is already defined: " + functionName);
 
                 Emit(Tag.Function, functionName);
@@ -65,18 +71,24 @@ class CodeGenerator
                 };
                 Functions.Add(functionName, function);
             }
-            else if (op.Match(Tag.Constant, out type, out name, out number))
+            else if (Next().Match(Tag.Constant, out type, out name, out number))
             {
+                ConsumeInput(1);
+
                 // TODO: Make sure the value fits in the specified type.
                 DeclareSymbol(SymbolTag.Constant, name, type, number);
                 Emit(Tag.Constant, name, number);
             }
-            else if (op.Match(Tag.Variable, out region, out type, out name))
+            else if (Next().Match(Tag.Variable, out region, out type, out name))
             {
+                ConsumeInput(1);
+
                 DeclareVariable(region, type, name);
             }
-            else if (op.Match(Tag.ReadonlyData, out type, out name, out values))
+            else if (Next().Match(Tag.ReadonlyData, out type, out name, out values))
             {
+                ConsumeInput(1);
+
                 if (type.IsArray)
                 {
                     // If the array size is unspecified, automatically make it match the number of provided values.
@@ -114,8 +126,10 @@ class CodeGenerator
                 DeclareSymbol(SymbolTag.Variable, name, type, 0);
                 Emit(Tag.ReadonlyData, name, bytes);
             }
-            else if (op.Match(Tag.Struct, out name, out fields))
+            else if (Next().Match(Tag.Struct, out name, out fields))
             {
+                ConsumeInput(1);
+
                 CField[] structFields = new CField[fields.Length];
                 int offset = 0;
                 for (int i = 0; i < fields.Length; i++)
@@ -135,12 +149,16 @@ class CodeGenerator
                     Fields = structFields,
                 });
             }
-            else if (op.Match(Tag.PushImmediate, out number))
+            else if (Next().Match(Tag.PushImmediate, out number))
             {
+                ConsumeInput(1);
+
                 Push(Operand.MakeImmediate(number, (number <= byte.MaxValue) ? CType.UInt8 : CType.UInt16));
             }
-            else if (op.Match(Tag.PushVariableAddress, out name))
+            else if (Next().Match(Tag.PushVariableAddress, out name))
             {
+                ConsumeInput(1);
+
                 CType valueType = Symbols[name].Type;
 
                 if (valueType.IsArray)
@@ -150,9 +168,9 @@ class CodeGenerator
 
                     // Arrays can only be used as rvalues.
                     // (In VSM terms, this means that every array operand must be "loaded".)
-                    if (input.Count > 0 && input[0].Match(Tag.Load))
+                    if (Next().Match(Tag.Load))
                     {
-                        input.RemoveAt(0);
+                        ConsumeInput(1);
                     }
                     else
                     {
@@ -162,41 +180,55 @@ class CodeGenerator
 
                 Push(Operand.MakeVariableAddress(name, CType.MakePointer(valueType)));
             }
-            else if (op.Match(Tag.DropFinal))
+            else if (Next().Match(Tag.DropFinal))
             {
+                ConsumeInput(1);
+
                 if (Stack.Count != 1) Program.Panic("the virtual stack should contain exactly one operand");
                 Stack.Clear();
                 Emit(Expr.Make(Tag.Comment, "drop final"));
             }
-            else if (op.Match(Tag.Drop))
+            else if (Next().Match(Tag.Drop))
             {
+                ConsumeInput(1);
+
                 Pop();
             }
-            else if (op.Match(Tag.Duplicate))
+            else if (Next().Match(Tag.Duplicate))
             {
+                ConsumeInput(1);
+
                 Push(Peek(0));
             }
-            else if (op.Match(Tag.Swap))
+            else if (Next().Match(Tag.Swap))
             {
+                ConsumeInput(1);
+
                 Operand a = Pop();
                 Operand b = Pop();
                 Push(a);
                 Push(b);
             }
-            else if (op.Match(Tag.Over))
+            else if (Next().Match(Tag.Over))
             {
+                ConsumeInput(1);
+
                 Push(Peek(1));
             }
-            else if (op.Match(Tag.Materialize))
+            else if (Next().Match(Tag.Materialize))
             {
+                ConsumeInput(1);
+
                 // Put the top operand in the accumulator.
                 Operand top = Pop();
                 SpillAll();
                 EmitLoadAccumulator(top);
                 PushAccumulator(top.Type);
             }
-            else if (op.Match(Tag.Cast, out newType))
+            else if (Next().Match(Tag.Cast, out newType))
             {
+                ConsumeInput(1);
+
                 Operand r = Pop();
                 if (SizeOf(r.Type) != SizeOf(newType))
                 {
@@ -205,12 +237,16 @@ class CodeGenerator
                 }
                 Push(r.WithType(newType));
             }
-            else if (op.Match(Tag.Jump, out target))
+            else if (Next().Match(Tag.Jump, out target))
             {
+                ConsumeInput(1);
+
                 EmitAsm("JMP", new AsmOperand(target, AddressMode.Absolute));
             }
-            else if (op.Match(Tag.JumpIfTrue, out target))
+            else if (Next().Match(Tag.JumpIfTrue, out target))
             {
+                ConsumeInput(1);
+
                 SpillAll();
                 Operand cond = Pop();
 
@@ -229,8 +265,10 @@ class CodeGenerator
                     EmitAsm("JMP", new AsmOperand(target, AddressMode.Absolute));
                 }
             }
-            else if (op.Match(Tag.JumpIfFalse, out target))
+            else if (Next().Match(Tag.JumpIfFalse, out target))
             {
+                ConsumeInput(1);
+
                 SpillAll();
                 Operand cond = Pop();
 
@@ -249,12 +287,16 @@ class CodeGenerator
                     EmitAsm("JMP", new AsmOperand(target, AddressMode.Absolute));
                 }
             }
-            else if (op.Match(Tag.AddressOf))
+            else if (Next().Match(Tag.AddressOf))
             {
+                ConsumeInput(1);
+
                 Program.Panic("this should never be emitted by the parser; it should always cancel a 'load' operation");
             }
-            else if (op.Match(Tag.Store))
+            else if (Next().Match(Tag.Store))
             {
+                ConsumeInput(1);
+
                 // Get operands:
                 Operand value = Pop();
                 Operand address = Pop();
@@ -322,8 +364,10 @@ class CodeGenerator
                 // The store operation leaves the value in the accumulator; this matches the behavior of C assignment.
                 PushAccumulator(value.Type);
             }
-            else if (op.Match(Tag.Load))
+            else if (Next().Match(Tag.Load))
             {
+                ConsumeInput(1);
+
                 // Get operands:
                 Operand address = Pop();
 
@@ -374,8 +418,10 @@ class CodeGenerator
                     Program.NYI();
                 }
             }
-            else if (op.Match(Tag.Field, out name))
+            else if (Next().Match(Tag.Field, out name))
             {
+                ConsumeInput(1);
+
                 // Get operands:
                 Operand structAddress = Peek(0);
 
@@ -394,7 +440,7 @@ class CodeGenerator
                 }
 
                 // Replace with simpler stack code:
-                input.InsertRange(0, new[]
+                Input.InsertRange(0, new[]
                 {
                     Expr.Make(Tag.Cast, CType.UInt8Ptr),
                     Expr.Make(Tag.PushImmediate, fieldInfo.Offset),
@@ -402,8 +448,10 @@ class CodeGenerator
                     Expr.Make(Tag.Cast, CType.MakePointer(fieldInfo.Type)),
                 });
             }
-            else if (op.Match(Tag.Add))
+            else if (Next().Match(Tag.Add))
             {
+                ConsumeInput(1);
+
                 // Get operands:
                 Operand right = Pop();
                 Operand left = Pop();
@@ -454,8 +502,10 @@ class CodeGenerator
 
                 PushAccumulator(left.Type);
             }
-            else if (op.Match(Tag.Subtract))
+            else if (Next().Match(Tag.Subtract))
             {
+                ConsumeInput(1);
+
                 // Get operands:
                 Operand right = Pop();
                 Operand left = Pop();
@@ -489,8 +539,10 @@ class CodeGenerator
 
                 PushAccumulator(left.Type);
             }
-            else if (op.Match(out name) && UnaryRuntimeOperators.TryGetValue(name, out functionName))
+            else if (Next().Match(out name) && UnaryRuntimeOperators.TryGetValue(name, out functionName))
             {
+                ConsumeInput(1);
+
                 // Get operand:
                 CType argType = Peek(0).Type;
 
@@ -508,8 +560,10 @@ class CodeGenerator
                     Program.Error("unary operator cannot be used with type '{0}'", argType.Show());
                 }
             }
-            else if (op.Match(out name) && BinaryRuntimeOperators.TryGetValue(name, out functionName))
+            else if (Next().Match(out name) && BinaryRuntimeOperators.TryGetValue(name, out functionName))
             {
+                ConsumeInput(1);
+
                 // Get operands:
                 Operand right = Peek(0);
                 Operand left = Peek(1);
@@ -521,19 +575,26 @@ class CodeGenerator
                 // Generate code:
                 EmitCall(GetRuntimeFunctionName(functionName, left.Type));
             }
-            else if (op.Match(Tag.Return))
+            else if (Next().Match(Tag.Return))
             {
+                ConsumeInput(1);
+
                 Operand result = Pop();
                 EmitLoadAccumulator(result);
                 EmitAsm("RTS");
             }
-            else if (op.Match(out functionName))
+            else if (Next().Match(out functionName))
             {
+                ConsumeInput(1);
+
                 // This is a general-purpose call.
                 EmitCall(functionName);
             }
-            else if (op.MatchTag(Tag.Asm) || op.MatchTag(Tag.Label) || op.MatchTag(Tag.Comment))
+            else if (Next().MatchTag(Tag.Asm) || Next().MatchTag(Tag.Label) || Next().MatchTag(Tag.Comment))
             {
+                Expr op = Next();
+                ConsumeInput(1);
+
                 // Pass certain instructions through unchanged.
                 Emit(op);
             }
@@ -548,6 +609,22 @@ class CodeGenerator
         Emit(Tag.Word, "nmi");
         Emit(Tag.Word, "reset");
         Emit(Tag.Word, "brk");
+    }
+
+    Expr Next() => Next(0);
+
+    /// <summary>
+    /// Return the Nth item in the input queue.
+    /// </summary>
+    Expr Next(int offset)
+    {
+        return (offset < Input.Count) ? Input[offset] : Expr.Make(Tag.NoOperation);
+    }
+
+    void ConsumeInput(int count)
+    {
+        count = Math.Min(count, Input.Count);
+        Input.RemoveRange(0, count);
     }
 
     void Emit(params object[] args)
