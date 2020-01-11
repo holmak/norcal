@@ -133,6 +133,7 @@ class Assembler
 
                 if (candidates.Count == 1)
                 {
+                    Debug.AddInstruction(PrgRomBase + prg.Count, formalSize + 1);
                     prg.Add(candidates[0]);
                 }
                 else if (candidates.Count == 0)

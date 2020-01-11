@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 class DebugExporter
 {
     List<SegmentInfo> Segments = new List<SegmentInfo>();
+    List<SpanInfo> Spans = new List<SpanInfo>();
     List<SymbolInfo> Symbols = new List<SymbolInfo>();
 
     public DebugExporter()
@@ -32,8 +33,23 @@ class DebugExporter
         });
     }
 
+    void AddSpan(int address, int size, bool isData)
+    {
+        SegmentInfo segment = GetSegment(address);
+        Spans.Add(new SpanInfo()
+        {
+            ID = Spans.Count,
+            SegmentID = segment.ID,
+            Offset = address - segment.Start,
+            Size = size,
+            IsData = isData,
+        });
+    }
+
     public void AddVariable(string name, int address, int size)
     {
+        AddSpan(address, size, true);
+
         Symbols.Add(new SymbolInfo()
         {
             ID = Symbols.Count,
@@ -42,6 +58,11 @@ class DebugExporter
             SegmentID = GetSegment(address).ID,
             Size = size,
         });
+    }
+
+    public void AddInstruction(int address, int size)
+    {
+        AddSpan(address, size, false);
     }
 
     string SanitizeName(string name)
@@ -68,7 +89,7 @@ class DebugExporter
         lines.Add(string.Format("version\tmajor=2,minor=0"));
         lines.Add(string.Format(
             "info\tcsym={0},file={1},lib={2},line={3},mod={4},scope={5},seg={6},span={7},sym={8},type={9}", 
-            0, 0, 0, 0, 0, 0, Segments.Count, 0, Symbols.Count, 0));
+            0, 0, 0, 0, 0, 0, Segments.Count, Spans.Count, Symbols.Count, 0));
 
         foreach (SegmentInfo segment in Segments)
         {
@@ -78,7 +99,14 @@ class DebugExporter
             }
         }
 
-        // ^sym\tid=([0-9]+),.*name=\"([0-9a-zA-Z@_-]+)\"(,.*size=([0-9]+)){0,1}(,.*def=([0-9+]+)){0,1}(,.*ref=([0-9+]+)){0,1}(,.*val=0x([0-9a-fA-F]+)){0,1}(,.*seg=([0-9]+)){0,1}(,.*exp=([0-9]+)){0,1}
+        foreach (SpanInfo span in Spans)
+        {
+            if (Segments[span.SegmentID].Export)
+            {
+                lines.Add(string.Format("span\tid={0},seg={1},start={2},size={3}{4}", span.ID, span.SegmentID, span.Offset, span.Size, span.IsData ? ",type=0" : ""));
+            }
+        }
+
         foreach (SymbolInfo symbol in Symbols)
         {
             if (Segments[symbol.SegmentID].Export)
@@ -97,6 +125,15 @@ class DebugExporter
         public int Size;
         public bool IsPrgRom;
         public bool Export;
+    }
+
+    class SpanInfo
+    {
+        public int ID;
+        public int SegmentID;
+        public int Offset;
+        public int Size;
+        public bool IsData;
     }
 
     class SymbolInfo
