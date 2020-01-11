@@ -9,3 +9,4 @@ debug_output/
 *.nes
 *.csproj.user
 results.html
+*.mlb
