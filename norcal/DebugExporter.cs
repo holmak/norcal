@@ -60,7 +60,19 @@ class DebugExporter
         });
     }
 
-    public void AddInstruction(int address, int size)
+    public void AddFunction(string name, int address)
+    {
+        Symbols.Add(new SymbolInfo()
+        {
+            ID = Symbols.Count,
+            Name = SanitizeName(name),
+            Address = address,
+            SegmentID = GetSegment(address).ID,
+            Size = 1
+        });
+    }
+
+    public void TagInstruction(int address, int size)
     {
         AddSpan(address, size, false);
     }
@@ -85,6 +97,18 @@ class DebugExporter
 
     public void Save(string path)
     {
+        // Purge segments that should not be exported, like NES register segments (which Mesen treats as errors):
+        foreach (SegmentInfo segment in Segments.ToArray())
+        {
+            if (!segment.Export)
+            {
+                Segments.Remove(segment);
+                Spans.RemoveAll(x => x.SegmentID == segment.ID);
+                Symbols.RemoveAll(x => x.SegmentID == segment.ID);
+            }
+        }
+
+        // Write the file contents:
         List<string> lines = new List<string>();
         lines.Add(string.Format("version\tmajor=2,minor=0"));
         lines.Add(string.Format(
@@ -93,26 +117,17 @@ class DebugExporter
 
         foreach (SegmentInfo segment in Segments)
         {
-            if (segment.Export)
-            {
-                lines.Add(string.Format("seg\tid={0},start=0x{1:X4},size=0x{2:X4},{3}", segment.ID, segment.Start, segment.Size, segment.IsPrgRom ? "type=ro,ooffs=16" : "type=rw"));
-            }
+            lines.Add(string.Format("seg\tid={0},start=0x{1:X4},size=0x{2:X4},{3}", segment.ID, segment.Start, segment.Size, segment.IsPrgRom ? "type=ro,ooffs=16" : "type=rw"));
         }
 
         foreach (SpanInfo span in Spans)
         {
-            if (Segments[span.SegmentID].Export)
-            {
-                lines.Add(string.Format("span\tid={0},seg={1},start={2},size={3}{4}", span.ID, span.SegmentID, span.Offset, span.Size, span.IsData ? ",type=0" : ""));
-            }
+            lines.Add(string.Format("span\tid={0},seg={1},start={2},size={3}{4}", span.ID, span.SegmentID, span.Offset, span.Size, span.IsData ? ",type=0" : ""));
         }
 
         foreach (SymbolInfo symbol in Symbols)
         {
-            if (Segments[symbol.SegmentID].Export)
-            {
-                lines.Add(string.Format("sym\tid={0},name=\"{1}\",size={2},val=0x{3:X4},seg={4}", symbol.ID, symbol.Name, symbol.Size, symbol.Address, symbol.SegmentID));
-            }
+            lines.Add(string.Format("sym\tid={0},name=\"{1}\",size={2},val=0x{3:X4},seg={4}", symbol.ID, symbol.Name, symbol.Size, symbol.Address, symbol.SegmentID));
         }
 
         File.WriteAllLines(path, lines);
@@ -143,9 +158,5 @@ class DebugExporter
         public int Address;
         public int SegmentID;
         public int Size;
-
-        public int? ExportSymbolID;
-        public List<int> References;
-        public List<int> Definitions;
     }
 }

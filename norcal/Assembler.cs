@@ -62,7 +62,9 @@ class Assembler
             }
             else if (e.Match(Tag.Function, out label) || e.Match(Tag.Label, out label))
             {
-                DefineSymbol(label, PrgRomBase + prg.Count);
+                int address = PrgRomBase + prg.Count;
+                DefineSymbol(label, address);
+                Debug.AddFunction(label, address);
             }
             else if (e.Match(Tag.SkipTo, out skipTarget))
             {
@@ -133,7 +135,7 @@ class Assembler
 
                 if (candidates.Count == 1)
                 {
-                    Debug.AddInstruction(PrgRomBase + prg.Count, formalSize + 1);
+                    Debug.TagInstruction(PrgRomBase + prg.Count, formalSize + 1);
                     prg.Add(candidates[0]);
                 }
                 else if (candidates.Count == 0)
