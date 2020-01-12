@@ -149,6 +149,7 @@ class Program
                 Finished:
                 File.Delete(sourceFile);
                 File.Delete(imageFile);
+                File.Delete(Path.ChangeExtension(imageFile, ".dbg"));
                 Console.Write(".");
             };
 
