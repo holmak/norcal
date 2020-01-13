@@ -175,14 +175,17 @@ static class Program
     [DebuggerStepThrough]
     static void Exit(int code)
     {
-        if (AttachDebuggerOnError)
+        if (code != 0)
         {
-            Debugger.Launch();
-        }
+            if (AttachDebuggerOnError)
+            {
+                Debugger.Launch();
+            }
 
-        if (Debugger.IsAttached)
-        {
-            Debugger.Break();
+            if (Debugger.IsAttached)
+            {
+                Debugger.Break();
+            }
         }
 
         Environment.Exit(code);
