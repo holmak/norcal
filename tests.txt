@@ -357,6 +357,50 @@ void reset()
     STOP = act();
 }
 
+@ Forward reference of functions
+@error
+
+void reset()
+{
+    OUTB = f(3);
+    STOP = 0;
+}
+
+u8 f(u8 arg)
+{
+    return arg + 2;
+}
+
+@ Forward reference of structs
+@error
+
+void reset()
+{
+    Point p;
+    p.x = 10;
+    p.y = 20;
+    OUTB = p.x + p.y;
+    STOP = 0;
+}
+
+struct Point
+{
+    u8 x, y;
+};
+
+@ Forward reference of variables
+@error
+
+void reset()
+{
+    width = 100;
+    height = 150;
+    OUTB = height - width;
+    STOP = 0;
+}
+
+u8 width, height;
+
 @ Multiple functions
 @out 3 4 7
 

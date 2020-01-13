@@ -31,30 +31,18 @@ class CodeGenerator
 
     void Run()
     {
-        DeclareVariable(MemoryRegion.ZeroPage, TempPointer.Type, TempPointer.Name);
-
-        while (Input.Count > 0)
+        // Process all declarations first. This avoids the need for forward declarations.
+        foreach (Expr op in Input)
         {
-            string name, functionName, target;
+            string name, functionName;
             MemoryRegion region;
-            CType type, newType, returnType;
+            CType type, returnType;
             FieldInfo[] fields;
-            int number, argCount;
+            int number;
             int[] values;
-            if (Next().Match(Tag.NoOperation))
+            if (op.Match(Tag.Function, out returnType, out functionName, out fields))
             {
-                ConsumeInput(1);
-
-                // This does nothing.
-            }
-            else if (Next().Match(Tag.Function, out returnType, out functionName, out fields))
-            {
-                ConsumeInput(1);
-
                 if (Functions.ContainsKey(functionName)) Program.Error("function is already defined: " + functionName);
-
-                Emit(Tag.Function, functionName);
-                NameOfCurrentFunction = functionName;
 
                 // Allocate a global variable for each parameter:
                 foreach (FieldInfo field in fields)
@@ -71,24 +59,18 @@ class CodeGenerator
                 };
                 Functions.Add(functionName, function);
             }
-            else if (Next().Match(Tag.Constant, out type, out name, out number))
+            else if (op.Match(Tag.Constant, out type, out name, out number))
             {
-                ConsumeInput(1);
-
                 // TODO: Make sure the value fits in the specified type.
                 DeclareSymbol(SymbolTag.Constant, name, type, number);
                 Emit(Tag.Constant, name, number);
             }
-            else if (Next().Match(Tag.Variable, out region, out type, out name))
+            else if (op.Match(Tag.Variable, out region, out type, out name))
             {
-                ConsumeInput(1);
-
                 DeclareVariable(region, type, name);
             }
-            else if (Next().Match(Tag.ReadonlyData, out type, out name, out values))
+            else if (op.Match(Tag.ReadonlyData, out type, out name, out values))
             {
-                ConsumeInput(1);
-
                 if (type.IsArray)
                 {
                     // If the array size is unspecified, automatically make it match the number of provided values.
@@ -126,10 +108,8 @@ class CodeGenerator
                 DeclareSymbol(SymbolTag.Variable, name, type, 0);
                 Emit(Tag.ReadonlyData, name, bytes);
             }
-            else if (Next().Match(Tag.Struct, out name, out fields))
+            else if (op.Match(Tag.Struct, out name, out fields))
             {
-                ConsumeInput(1);
-
                 CField[] structFields = new CField[fields.Length];
                 int offset = 0;
                 for (int i = 0; i < fields.Length; i++)
@@ -148,6 +128,36 @@ class CodeGenerator
                     TotalSize = offset,
                     Fields = structFields,
                 });
+            }
+        }
+
+        DeclareVariable(MemoryRegion.ZeroPage, TempPointer.Type, TempPointer.Name);
+
+        while (Input.Count > 0)
+        {
+            string name, functionName, target;
+            CType newType, returnType;
+            FieldInfo[] fields;
+            int number, argCount;
+            if (Next().Match(Tag.NoOperation))
+            {
+                ConsumeInput(1);
+
+                // This does nothing.
+            }
+            else if (Next().Match(Tag.Function, out returnType, out functionName, out fields))
+            {
+                ConsumeInput(1);
+
+                Emit(Tag.Function, functionName);
+                NameOfCurrentFunction = functionName;
+            }
+            else if (Next().MatchTag(Tag.Constant) || Next().MatchTag(Tag.Variable) ||
+                Next().MatchTag(Tag.ReadonlyData) || Next().MatchTag(Tag.Struct))
+            {
+                ConsumeInput(1);
+
+                // All the necessary work was handled in the declaration pre-pass.
             }
             else if (Next().Match(Tag.PushImmediate, out number))
             {
