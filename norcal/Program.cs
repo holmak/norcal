@@ -229,6 +229,7 @@ static class Tag
     public static readonly string Field = "$field";
     public static readonly string Continue = "$continue";
     public static readonly string Break = "$break";
+    public static readonly string Call = "$call";
 
     // Intrinsic functions:
     public static readonly string Add = "$add";

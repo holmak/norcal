@@ -841,17 +841,19 @@ partial class Parser
                     ParserError("functions may only be called by name");
                 }
 
+                int argCount = 0;
                 if (!TryParse(TokenType.RPAREN))
                 {
                     while (true)
                     {
                         ParseExpr();
+                        argCount += 1;
                         if (TryParse(TokenType.RPAREN)) break;
                         Expect(TokenType.COMMA);
                     }
                 }
 
-                Emit(functionName);
+                Emit(Tag.Call, functionName, argCount);
             }
             else if (TryParse(TokenType.PERIOD))
             {

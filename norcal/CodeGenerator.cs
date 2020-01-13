@@ -39,7 +39,7 @@ class CodeGenerator
             MemoryRegion region;
             CType type, newType, returnType;
             FieldInfo[] fields;
-            int number;
+            int number, argCount;
             int[] values;
             if (Next().Match(Tag.NoOperation))
             {
@@ -554,7 +554,7 @@ class CodeGenerator
                 // Check types and generate code:
                 if (argType.IsInteger)
                 {
-                    EmitCall(GetRuntimeFunctionName(functionName, argType));
+                    EmitCall(GetRuntimeFunctionName(functionName, argType), 1);
                 }
                 else if (argType.IsPointer)
                 {
@@ -578,7 +578,7 @@ class CodeGenerator
                 if (!TryToMatchTypes(ref left, ref right)) Program.Error("types don't match");
 
                 // Generate code:
-                EmitCall(GetRuntimeFunctionName(functionName, left.Type));
+                EmitCall(GetRuntimeFunctionName(functionName, left.Type), 2);
             }
             else if (Next().Match(Tag.Return))
             {
@@ -588,12 +588,12 @@ class CodeGenerator
                 EmitLoadAccumulator(result);
                 EmitAsm("RTS");
             }
-            else if (Next().Match(out functionName))
+            else if (Next().Match(Tag.Call, out functionName, out argCount))
             {
                 ConsumeInput(1);
 
                 // This is a general-purpose call.
-                EmitCall(functionName);
+                EmitCall(functionName, argCount);
             }
             else if (Next().MatchTag(Tag.Asm) || Next().MatchTag(Tag.Label) || Next().MatchTag(Tag.Comment))
             {
@@ -865,7 +865,7 @@ class CodeGenerator
         if (size > 2) Program.Panic("value is too large");
     }
 
-    void EmitCall(string functionName)
+    void EmitCall(string functionName, int argCount)
     {
         // Copy the arguments into the function's call frame:
         SpillAll();
@@ -873,6 +873,12 @@ class CodeGenerator
         if (!Functions.TryGetValue(functionName, out function))
         {
             Program.Panic("function not implemented: {0}", functionName);
+        }
+
+        if (argCount != function.Parameters.Length)
+        {
+            Program.Error("wrong number of arguments in call to '{0}': {1} required; {2} specified",
+                functionName, function.Parameters.Length, argCount);
         }
 
         for (int i = function.Parameters.Length - 1; i >= 0; i--)

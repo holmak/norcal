@@ -313,6 +313,19 @@ void reset()
     STOP = 0;
 }
 
+@ Function argument count
+@error
+
+void g(u8 a, u8 b)
+{
+    OUTB = a + b;
+}
+
+void reset()
+{
+    STOP = g(2);
+}
+
 @ Function return values
 @out 3 5 7
 
