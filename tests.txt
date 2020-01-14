@@ -358,7 +358,7 @@ void reset()
 }
 
 @ Forward reference of functions
-@error
+@out 5
 
 void reset()
 {
@@ -372,7 +372,7 @@ u8 f(u8 arg)
 }
 
 @ Forward reference of structs
-@error
+@out 30
 
 void reset()
 {
@@ -389,7 +389,7 @@ struct Point
 };
 
 @ Forward reference of variables
-@error
+@out 50
 
 void reset()
 {
