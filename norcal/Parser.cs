@@ -444,6 +444,9 @@ partial class Parser
                 {
                     string symbol = ExpectAnyName();
 
+                    // Determine whether this instruction will refer to labels, or ordinary symbols:
+                    bool isJump = AsmInfo.ShortJumpInstructions.Contains(symbol) || symbol == "JMP";
+
                     if (TryParse(TokenType.NEWLINE))
                     {
                         Emit(Expr.MakeAsm(symbol));
@@ -455,13 +458,13 @@ partial class Parser
                     }
                     else if (TryParse(TokenType.NUMBER_SIGN))
                     {
-                        AsmOperand operand = ParseAssemblyOperand(AddressMode.Immediate);
+                        AsmOperand operand = ParseAssemblyOperand(AddressMode.Immediate, isJump);
                         Expect(TokenType.NEWLINE);
                         Emit(Expr.MakeAsm(symbol, operand));
                     }
                     else if (TryParse(TokenType.LPAREN))
                     {
-                        AsmOperand operand = ParseAssemblyOperand(AddressMode.IndirectY);
+                        AsmOperand operand = ParseAssemblyOperand(AddressMode.IndirectY, isJump);
                         Expect(TokenType.RPAREN);
                         Expect(TokenType.COMMA);
                         ExpectKeyword("Y");
@@ -470,7 +473,7 @@ partial class Parser
                     }
                     else
                     {
-                        AsmOperand operand = ParseAssemblyOperand(AddressMode.Absolute);
+                        AsmOperand operand = ParseAssemblyOperand(AddressMode.Absolute, isJump);
                         if (TryParse(TokenType.COMMA))
                         {
                             ExpectKeyword("X");
@@ -510,7 +513,7 @@ partial class Parser
         Expect(TokenType.SEMICOLON);
     }
 
-    AsmOperand ParseAssemblyOperand(AddressMode mode)
+    AsmOperand ParseAssemblyOperand(AddressMode mode, bool isJump)
     {
         ImmediateModifier modifier = ImmediateModifier.None;
         if (TryParse(TokenType.LESS_THAN)) modifier = ImmediateModifier.LowByte;
@@ -530,14 +533,8 @@ partial class Parser
                 number = ExpectInt();
             }
 
-            // First try looking up the name as a known variable or label; if that doesn't work,
-            // assume it is a forward reference to a label.
-            string qualifiedName;
-            if (!TryFindQualifiedName(name, out qualifiedName))
-            {
-                qualifiedName = FindQualifiedLabelName(name);
-            }
-
+            // Figure out whether to treat this as a label or a variable name.
+            string qualifiedName = isJump ? FindQualifiedLabelName(name) : FindQualifiedName(name);
             return new AsmOperand(qualifiedName, number, mode, modifier);
         }
         else
@@ -1166,30 +1163,23 @@ partial class Parser
         return qualifiedName;
     }
 
-    bool TryFindQualifiedName(string name, out string qualifiedName)
+    string FindQualifiedName(string name)
     {
         // Search all scopes, starting from the innermost.
         foreach (LexicalScope scope in Enumerable.Reverse(Scopes))
         {
-            if (scope.QualifiedNames.TryGetValue(name, out qualifiedName)) return true;
+            string qualifiedName;
+            if (scope.QualifiedNames.TryGetValue(name, out qualifiedName)) return qualifiedName;
         }
-        qualifiedName = null;
-        return false;
+
+        // If the variable wasn't found, assume it is a forward reference to a global variable.
+        return name;
     }
 
-    string FindQualifiedName(string name)
-    {
-        string qualifiedName = null;
-        if (!TryFindQualifiedName(name, out qualifiedName)) Program.Error("symbol not defined: {0}", name);
-        return qualifiedName;
-    }
-
-    /// <summary>
-    /// Labels can be referenced before they are defined.
-    /// </summary>
     string FindQualifiedLabelName(string name)
     {
-        // Forward-declare the label:
+        // Labels are allowed to be forward-referenced (within a function), and so the parser
+        // treats them all as forward references, to be resolved later by the assembler.
         UndefinedLabels.Add(name);
         return DefineQualifiedLabelName(name);
     }

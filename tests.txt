@@ -371,12 +371,41 @@ u8 f(u8 arg)
     return arg + 2;
 }
 
-@ Forward reference of structs
+@ Forward reference to missing function.
+@error
+
+void reset()
+{
+    OUTB = h(3);
+    STOP = 0;
+}
+
+// 'h' is not defined.
+
+@ Forward reference of structs (global)
+@out 30
+
+struct Point p;
+
+void reset()
+{
+    p.x = 10;
+    p.y = 20;
+    OUTB = p.x + p.y;
+    STOP = 0;
+}
+
+struct Point
+{
+    u8 x, y;
+};
+
+@ Forward reference of structs (local)
 @out 30
 
 void reset()
 {
-    Point p;
+    struct Point p;
     p.x = 10;
     p.y = 20;
     OUTB = p.x + p.y;
@@ -399,7 +428,8 @@ void reset()
     STOP = 0;
 }
 
-u8 width, height;
+u8 width;
+u8 height;
 
 @ Multiple functions
 @out 3 4 7

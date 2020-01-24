@@ -31,7 +31,35 @@ class CodeGenerator
 
     void Run()
     {
-        // Process all declarations first. This avoids the need for forward declarations.
+        // Process struct declarations first so we know how much space to allocate for variables.
+        foreach (Expr op in Input)
+        {
+            string name;
+            FieldInfo[] fields;
+            if (op.Match(Tag.Struct, out name, out fields))
+            {
+                CField[] structFields = new CField[fields.Length];
+                int offset = 0;
+                for (int i = 0; i < fields.Length; i++)
+                {
+                    structFields[i] = new CField
+                    {
+                        Type = fields[i].Type,
+                        Name = fields[i].Name,
+                        Offset = offset,
+                    };
+                    offset += SizeOf(fields[i].Type);
+                }
+
+                Structs.Add(name, new CStructInfo
+                {
+                    TotalSize = offset,
+                    Fields = structFields,
+                });
+            }
+        }
+
+        // Process all other declarations.
         foreach (Expr op in Input)
         {
             string name, functionName;
@@ -67,7 +95,10 @@ class CodeGenerator
             }
             else if (op.Match(Tag.Variable, out region, out type, out name))
             {
-                DeclareVariable(region, type, name);
+                if (IsVariableGlobal(name))
+                {
+                    DeclareVariable(region, type, name);
+                }
             }
             else if (op.Match(Tag.ReadonlyData, out type, out name, out values))
             {
@@ -108,27 +139,6 @@ class CodeGenerator
                 DeclareSymbol(SymbolTag.Variable, name, type, 0);
                 Emit(Tag.ReadonlyData, name, bytes);
             }
-            else if (op.Match(Tag.Struct, out name, out fields))
-            {
-                CField[] structFields = new CField[fields.Length];
-                int offset = 0;
-                for (int i = 0; i < fields.Length; i++)
-                {
-                    structFields[i] = new CField
-                    {
-                        Type = fields[i].Type,
-                        Name = fields[i].Name,
-                        Offset = offset,
-                    };
-                    offset += SizeOf(fields[i].Type);
-                }
-
-                Structs.Add(name, new CStructInfo
-                {
-                    TotalSize = offset,
-                    Fields = structFields,
-                });
-            }
         }
 
         DeclareVariable(MemoryRegion.ZeroPage, TempPointer.Type, TempPointer.Name);
@@ -136,7 +146,8 @@ class CodeGenerator
         while (Input.Count > 0)
         {
             string name, functionName, target;
-            CType newType, returnType;
+            MemoryRegion region;
+            CType type, newType, returnType;
             FieldInfo[] fields;
             int number, argCount;
             if (Next().Match(Tag.NoOperation))
@@ -152,12 +163,20 @@ class CodeGenerator
                 Emit(Tag.Function, functionName);
                 NameOfCurrentFunction = functionName;
             }
-            else if (Next().MatchTag(Tag.Constant) || Next().MatchTag(Tag.Variable) ||
-                Next().MatchTag(Tag.ReadonlyData) || Next().MatchTag(Tag.Struct))
+            else if (Next().MatchTag(Tag.Constant) || Next().MatchTag(Tag.ReadonlyData) || Next().MatchTag(Tag.Struct))
             {
                 ConsumeInput(1);
 
-                // All the necessary work was handled in the declaration pre-pass.
+                // All the necessary work was handled in the declaration pre-passes.
+            }
+            else if (Next().Match(Tag.Variable, out region, out type, out name))
+            {
+                ConsumeInput(1);
+
+                if (!IsVariableGlobal(name))
+                {
+                    DeclareVariable(region, type, name);
+                }
             }
             else if (Next().Match(Tag.PushImmediate, out number))
             {
@@ -882,7 +901,7 @@ class CodeGenerator
         CFunctionInfo function;
         if (!Functions.TryGetValue(functionName, out function))
         {
-            Program.Panic("function not implemented: {0}", functionName);
+            Program.Error("function not implemented: {0}", functionName);
         }
 
         if (argCount != function.Parameters.Length)
@@ -913,6 +932,11 @@ class CodeGenerator
 
         // Use the return value:
         PushAccumulator(function.ReturnType);
+    }
+
+    static bool IsVariableGlobal(string name)
+    {
+        return !name.Contains(Program.NamespaceSeparator);
     }
 
     static readonly Dictionary<string, string> UnaryRuntimeOperators = new Dictionary<string, string>
