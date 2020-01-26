@@ -188,7 +188,12 @@ class CodeGenerator
             {
                 ConsumeInput(1);
 
-                CType valueType = Symbols[name].Type;
+                Symbol sym;
+                if (!Symbols.TryGetValue(name, out sym))
+                {
+                    Program.Error("reference to undefined symbol: {0}", name);
+                }
+                CType valueType = sym.Type;
 
                 if (valueType.IsArray)
                 {
