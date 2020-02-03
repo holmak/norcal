@@ -12,11 +12,12 @@ class CodeGenerator
     Dictionary<string, CFunctionInfo> Functions = new Dictionary<string, CFunctionInfo>();
     Dictionary<string, CStructInfo> Structs = new Dictionary<string, CStructInfo>();
     Dictionary<string, Symbol> Symbols = new Dictionary<string, Symbol>();
-    List<Operand> Stack = new List<Operand>();
+    List<OperandInfo> Stack = new List<OperandInfo>();
+    long StackEpoch = 100;
     string NameOfCurrentFunction = null;
     int NextTemporary = 0;
 
-    static readonly Operand TempPointer = Operand.MakeVariable("$ptr", CType.UInt8Ptr);
+    static readonly string TempPointer = "$ptr";
 
     /// <summary>
     /// Convert stack machine code to 6502 assembly code.
@@ -141,7 +142,7 @@ class CodeGenerator
             }
         }
 
-        DeclareVariable(MemoryRegion.ZeroPage, TempPointer.Type, TempPointer.Name);
+        Emit(Tag.Variable, MemoryRegion.ZeroPage, SizeOf(CType.UInt8Ptr), TempPointer);
 
         while (Input.Count > 0)
         {
@@ -182,7 +183,7 @@ class CodeGenerator
             {
                 ConsumeInput(1);
 
-                Push(Operand.MakeImmediate(number, (number <= byte.MaxValue) ? CType.UInt8 : CType.UInt16));
+                Push(OperandInfo.MakeImmediate(number, (number <= byte.MaxValue) ? CType.UInt8 : CType.UInt16));
             }
             else if (Next().Match(Tag.PushVariableAddress, out name))
             {
@@ -212,7 +213,7 @@ class CodeGenerator
                     }
                 }
 
-                Push(Operand.MakeVariableAddress(name, CType.MakePointer(valueType)));
+                Push(OperandInfo.MakeVariableAddress(name, CType.MakePointer(valueType)));
             }
             else if (Next().Match(Tag.DropFinal))
             {
@@ -226,20 +227,21 @@ class CodeGenerator
             {
                 ConsumeInput(1);
 
-                Pop();
+                Drop(1);
             }
             else if (Next().Match(Tag.Duplicate))
             {
                 ConsumeInput(1);
 
-                Push(Peek(0));
+                Push(Stack[Stack.Count - 1]);
             }
             else if (Next().Match(Tag.Swap))
             {
                 ConsumeInput(1);
 
-                Operand a = Pop();
-                Operand b = Pop();
+                OperandInfo a = Stack[Stack.Count - 1];
+                OperandInfo b = Stack[Stack.Count - 2];
+                Drop(2);
                 Push(a);
                 Push(b);
             }
@@ -247,29 +249,27 @@ class CodeGenerator
             {
                 ConsumeInput(1);
 
-                Push(Peek(1));
+                Push(Stack[Stack.Count - 2]);
             }
             else if (Next().Match(Tag.Materialize))
             {
                 ConsumeInput(1);
 
                 // Put the top operand in the accumulator.
-                Operand top = Pop();
-                SpillAll();
-                EmitLoadAccumulator(top);
-                PushAccumulator(top.Type);
+                LoadAccumulator(Peek(0));
             }
             else if (Next().Match(Tag.Cast, out newType))
             {
                 ConsumeInput(1);
 
-                Operand r = Pop();
+                OperandReference r = Peek(0);
                 if (SizeOf(r.Type) != SizeOf(newType))
                 {
                     // TODO: Perform any necessary type conversions.
                     Program.Panic("a type conversion is required");
                 }
-                Push(r.WithType(newType));
+
+                Replace(r, r.WithType(newType));
             }
             else if (Next().Match(Tag.Jump, out target))
             {
@@ -281,45 +281,35 @@ class CodeGenerator
             {
                 ConsumeInput(1);
 
-                SpillAll();
-                Operand cond = Pop();
+                OperandReference cond = Peek(0);
 
                 int size = SizeOf(cond.Type);
 
-                if (cond.Tag == OperandTag.Register)
-                {
-                    Program.NYI();
-                }
-                else
-                {
-                    if (size >= 1) EmitAsm("LDA", cond.LowByte());
-                    if (size >= 2) EmitAsm("ORA", cond.HighByte());
-                    if (size > 2) Program.Panic("value is too large");
-                    EmitAsm("BEQ", new AsmOperand(3, AddressMode.Relative));
-                    EmitAsm("JMP", new AsmOperand(target, AddressMode.Absolute));
-                }
+                Spill(cond);
+                if (size >= 1) EmitAsm("LDA", cond.LowByte());
+                if (size >= 2) EmitAsm("ORA", cond.HighByte());
+                if (size > 2) Program.Panic("value is too large");
+                EmitAsm("BEQ", new AsmOperand(3, AddressMode.Relative));
+                EmitAsm("JMP", new AsmOperand(target, AddressMode.Absolute));
+
+                Drop(1);
             }
             else if (Next().Match(Tag.JumpIfFalse, out target))
             {
                 ConsumeInput(1);
 
-                SpillAll();
-                Operand cond = Pop();
+                OperandReference cond = Peek(0);
 
                 int size = SizeOf(cond.Type);
 
-                if (cond.Tag == OperandTag.Register)
-                {
-                    Program.NYI();
-                }
-                else
-                {
-                    if (size >= 1) EmitAsm("LDA", cond.LowByte());
-                    if (size >= 2) EmitAsm("ORA", cond.HighByte());
-                    if (size > 2) Program.Panic("value is too large");
-                    EmitAsm("BNE", new AsmOperand(3, AddressMode.Relative));
-                    EmitAsm("JMP", new AsmOperand(target, AddressMode.Absolute));
-                }
+                Spill(cond);
+                if (size >= 1) EmitAsm("LDA", cond.LowByte());
+                if (size >= 2) EmitAsm("ORA", cond.HighByte());
+                if (size > 2) Program.Panic("value is too large");
+                EmitAsm("BNE", new AsmOperand(3, AddressMode.Relative));
+                EmitAsm("JMP", new AsmOperand(target, AddressMode.Absolute));
+
+                Drop(1);
             }
             else if (Next().Match(Tag.AddressOf))
             {
@@ -332,50 +322,45 @@ class CodeGenerator
                 ConsumeInput(1);
 
                 // Get operands:
-                Operand value = Pop();
-                Operand address = Pop();
+                OperandReference value = Peek(0);
+                OperandReference address = Peek(1);
 
                 // Check types:
-                if (!TryToMatchLeftType(DereferencePointerType(address.Type), ref value))
+                CType storedType = DereferencePointerType(address.Type);
+                if (!TryToMatchLeftType(storedType, value))
                 {
                     Program.Error("types in assignment don't match");
                 }
                 int size = SizeOf(value.Type);
-
-                // Rearrange stack:
-                SpillAll();
-                address = Spill(address);
 
                 // Generate code:
 
                 // First, copy the address to zero page:
                 if (address.Tag == OperandTag.Immediate)
                 {
-                    EmitLoadAccumulator(value);
+                    LoadAccumulator(value);
                     if (size >= 1) Emit(Expr.MakeAsm("STA", new AsmOperand(address.Value, AddressMode.Absolute)));
                     if (size >= 2) Emit(Expr.MakeAsm("STX", new AsmOperand(address.Value + 1, AddressMode.Absolute)));
                     if (size > 2) Program.Panic("values larger than two bytes cannot be stored via accumulator");
                 }
                 else if (address.Tag == OperandTag.VariableAddress)
                 {
-                    EmitLoadAccumulator(value);
+                    LoadAccumulator(value);
                     if (size >= 1) Emit(Expr.MakeAsm("STA", new AsmOperand(address.Name, AddressMode.Absolute)));
                     if (size >= 2) Emit(Expr.MakeAsm("STX", new AsmOperand(address.Name, 1, AddressMode.Absolute)));
                     if (size > 2) Program.Panic("values larger than two bytes cannot be stored via accumulator");
                 }
-                else if (address.Tag == OperandTag.Variable)
+                else if (address.Tag == OperandTag.Variable || address.Tag == OperandTag.Register)
                 {
-                    value = Spill(value);
-                    EmitLoadAccumulator(address);
-                    EmitStoreAccumulator(TempPointer);
+                    Store(address, TempPointer);
 
                     // Now copy the value:
-                    EmitLoadAccumulator(value);
+                    LoadAccumulator(value);
 
                     if (size >= 1)
                     {
                         Emit(Expr.MakeAsm("LDY", new AsmOperand(0, AddressMode.Immediate)));
-                        Emit(Expr.MakeAsm("STA", new AsmOperand(TempPointer.Name, AddressMode.IndirectY)));
+                        Emit(Expr.MakeAsm("STA", new AsmOperand(TempPointer, AddressMode.IndirectY)));
                     }
 
                     if (size >= 2)
@@ -384,7 +369,7 @@ class CodeGenerator
                         // The store operation must leave the stored value in the accumulator, so save and restore A:
                         EmitAsm("PHA");
                         EmitAsm("TXA");
-                        Emit(Expr.MakeAsm("STA", new AsmOperand(TempPointer.Name, AddressMode.IndirectY)));
+                        Emit(Expr.MakeAsm("STA", new AsmOperand(TempPointer, AddressMode.IndirectY)));
                         EmitAsm("PLA");
                     }
 
@@ -396,7 +381,8 @@ class CodeGenerator
                 }
 
                 // The store operation leaves the value in the accumulator; this matches the behavior of C assignment.
-                PushAccumulator(value.Type);
+                Drop(2);
+                PushAccumulator(storedType);
             }
             else if (Next(0).Match(Tag.Load) && Next(1).Match(Tag.AddressOf))
             {
@@ -408,7 +394,7 @@ class CodeGenerator
                 ConsumeInput(1);
 
                 // Get operands:
-                Operand address = Pop();
+                OperandReference address = Peek(0);
 
                 // Check types:
                 CType loadedType = DereferencePointerType(address.Type);
@@ -420,37 +406,33 @@ class CodeGenerator
                 }
                 else if (address.Tag == OperandTag.Variable || address.IsAccumulator)
                 {
-                    // Rearrange stack:
-                    SpillAll();
-                    if (!address.IsAccumulator) address = Spill(address);
-
                     // Copy the pointer to zero page so that it can be used:
-                    EmitLoadAccumulator(address);
-                    EmitStoreAccumulator(TempPointer);
+                    Store(address, TempPointer);
 
                     if (size == 1)
                     {
                         Emit(Expr.MakeAsm("LDY", new AsmOperand(0, AddressMode.Immediate)));
-                        Emit(Expr.MakeAsm("LDA", new AsmOperand(TempPointer.Name, AddressMode.IndirectY)));
+                        Emit(Expr.MakeAsm("LDA", new AsmOperand(TempPointer, AddressMode.IndirectY)));
                     }
                     else if (size == 2)
                     {
                         Emit(Expr.MakeAsm("LDY", new AsmOperand(1, AddressMode.Immediate)));
-                        Emit(Expr.MakeAsm("LDA", new AsmOperand(TempPointer.Name, AddressMode.IndirectY)));
+                        Emit(Expr.MakeAsm("LDA", new AsmOperand(TempPointer, AddressMode.IndirectY)));
                         EmitAsm("TAX");
                         EmitAsm("DEY");
-                        Emit(Expr.MakeAsm("LDA", new AsmOperand(TempPointer.Name, AddressMode.IndirectY)));
+                        Emit(Expr.MakeAsm("LDA", new AsmOperand(TempPointer, AddressMode.IndirectY)));
                     }
                     else
                     {
                         Program.Panic("values larger than two bytes cannot be loaded via accumulator");
                     }
 
+                    Drop(1);
                     PushAccumulator(loadedType);
                 }
                 else if (address.Tag == OperandTag.VariableAddress)
                 {
-                    Push(Operand.MakeVariable(address.Name, loadedType));
+                    Replace(address, OperandInfo.MakeVariable(address.Name, loadedType));
                 }
                 else
                 {
@@ -462,7 +444,7 @@ class CodeGenerator
                 ConsumeInput(1);
 
                 // Get operands:
-                Operand structAddress = Peek(0);
+                OperandReference structAddress = Peek(0);
 
                 // Check types:
                 CType structType = DereferencePointerType(structAddress.Type);
@@ -492,15 +474,17 @@ class CodeGenerator
                 ConsumeInput(1);
 
                 // Get operands:
-                Operand right = Pop();
-                Operand left = Pop();
+                OperandReference right = Peek(0);
+                OperandReference left = Peek(1);
 
                 int repetitions;
 
                 // Check types:
+                CType resultType;
                 if (left.Type.IsPointer)
                 {
-                    if (!TryToMatchLeftType(CType.UInt16, ref right)) Program.Error("types don't match");
+                    resultType = left.Type;
+                    if (!TryToMatchLeftType(CType.UInt16, right)) Program.Error("types don't match");
 
                     int elementSize = SizeOf(DereferencePointerType(left.Type));
                     // TODO: Find a better way to scale the index by the element size.
@@ -508,17 +492,14 @@ class CodeGenerator
                 }
                 else
                 {
-                    if (!TryToMatchTypes(ref left, ref right)) Program.Error("types don't match");
+                    resultType = left.Type;
+                    if (!TryToMatchTypes(left, right)) Program.Error("types don't match");
                     repetitions = 1;
                 }
                 int size = SizeOf(left.Type);
 
-                // Rearrange the stack:
-                SpillAll();
-                right = Spill(right);
-                EmitLoadAccumulator(left);
-
                 // Generate code:
+                LoadAccumulator(left);
                 for (int i = 0; i < repetitions; i++)
                 {
                     if (size >= 1)
@@ -539,26 +520,25 @@ class CodeGenerator
                     if (size > 2) Program.Panic("value is too large");
                 }
 
-                PushAccumulator(left.Type);
+                Drop(2);
+                PushAccumulator(resultType);
             }
             else if (Next().Match(Tag.Subtract))
             {
                 ConsumeInput(1);
 
                 // Get operands:
-                Operand right = Pop();
-                Operand left = Pop();
+                OperandReference right = Peek(0);
+                OperandReference left = Peek(1);
 
                 // Check types:
-                if (!TryToMatchTypes(ref left, ref right)) Program.Error("types don't match");
+                CType resultType = left.Type;
+                if (!TryToMatchTypes(left, right)) Program.Error("types don't match");
                 int size = SizeOf(left.Type);
 
-                // Rearrange the stack:
-                SpillAll();
-                right = Spill(right);
-                EmitLoadAccumulator(left);
-
                 // Generate code:
+                LoadAccumulator(left);
+
                 if (size >= 1)
                 {
                     EmitAsm("SEC");
@@ -576,7 +556,8 @@ class CodeGenerator
 
                 if (size > 2) Program.Panic("value is too large");
 
-                PushAccumulator(left.Type);
+                Drop(2);
+                PushAccumulator(resultType);
             }
             else if (Next().Match(out name) && UnaryRuntimeOperators.TryGetValue(name, out functionName))
             {
@@ -604,12 +585,12 @@ class CodeGenerator
                 ConsumeInput(1);
 
                 // Get operands:
-                Operand right = Peek(0);
-                Operand left = Peek(1);
+                OperandReference right = Peek(0);
+                OperandReference left = Peek(1);
 
                 // Check types:
                 if (!left.Type.IsInteger || !right.Type.IsInteger) Program.Error("arithmetic requires integers");
-                if (!TryToMatchTypes(ref left, ref right)) Program.Error("types don't match");
+                if (!TryToMatchTypes(left, right)) Program.Error("types don't match");
 
                 // Generate code:
                 EmitCall(GetRuntimeFunctionName(functionName, left.Type), 2);
@@ -618,8 +599,8 @@ class CodeGenerator
             {
                 ConsumeInput(1);
 
-                Operand result = Pop();
-                EmitLoadAccumulator(result);
+                LoadAccumulator(Peek(0));
+                Drop(1);
                 EmitAsm("RTS");
             }
             else if (Next().Match(Tag.Call, out functionName, out argCount))
@@ -708,7 +689,7 @@ class CodeGenerator
     /// Return true if the operand types match.
     /// This function is necessary because the type of immediates has some flexibility.
     /// </summary>
-    static bool TryToMatchTypes(ref Operand left, ref Operand right)
+    bool TryToMatchTypes(OperandReference left, OperandReference right)
     {
         if (left.Type == right.Type)
         {
@@ -717,8 +698,8 @@ class CodeGenerator
         else if (left.Tag == OperandTag.Immediate || right.Tag == OperandTag.Immediate)
         {
             // Try promoting the immediate values to a larger type:
-            if (left.Tag == OperandTag.Immediate && left.Type == CType.UInt8) left = left.WithType(CType.UInt16);
-            if (right.Tag == OperandTag.Immediate && right.Type == CType.UInt8) right = right.WithType(CType.UInt16);
+            if (left.Tag == OperandTag.Immediate && left.Type == CType.UInt8) Replace(left, left.WithType(CType.UInt16));
+            if (right.Tag == OperandTag.Immediate && right.Type == CType.UInt8) Replace(right, right.WithType(CType.UInt16));
             return left.Type == right.Type;
         }
         else
@@ -731,7 +712,7 @@ class CodeGenerator
     /// Return true if the operand types match.
     /// This function is necessary because the type of immediates has some flexibility.
     /// </summary>
-    static bool TryToMatchLeftType(CType leftType, ref Operand right)
+    bool TryToMatchLeftType(CType leftType, OperandReference right)
     {
         if (leftType == right.Type)
         {
@@ -740,7 +721,7 @@ class CodeGenerator
         else if (right.Tag == OperandTag.Immediate)
         {
             // Try promoting the immediate value to a larger type:
-            if (right.Type == CType.UInt8) right = right.WithType(CType.UInt16);
+            if (right.Type == CType.UInt8) Replace(right, right.WithType(CType.UInt16));
             return leftType == right.Type;
         }
         else
@@ -793,39 +774,6 @@ class CodeGenerator
         return 1;
     }
 
-    void SpillAll()
-    {
-        Stack = Stack.Select(Spill).ToList();
-    }
-
-    /// <summary>
-    /// Returns the corresponding new operand.
-    /// </summary>
-    Operand Spill(Operand r)
-    {
-        if (r.Tag == OperandTag.Register)
-        {
-            if (r.Register == OperandRegister.Accumulator)
-            {
-                string temp = DeclareTemporary(r.Type);
-                int size = SizeOf(r.Type);
-                if (size >= 1) EmitAsm("STA", new AsmOperand(temp, AddressMode.Absolute));
-                if (size >= 2) EmitAsm("STX", new AsmOperand(temp, 1, AddressMode.Absolute));
-                if (size > 2) Program.Panic("value is too large");
-                return Operand.MakeVariable(temp, r.Type);
-            }
-            else
-            {
-                Program.NYI();
-                return null;
-            }
-        }
-        else
-        {
-            return r;
-        }
-    }
-
     string DeclareTemporary(CType type)
     {
         string name = NameOfCurrentFunction + ":$" + NextTemporary;
@@ -835,46 +783,79 @@ class CodeGenerator
         return name;
     }
 
-    void AssertRegistersFree()
+    void Push(OperandInfo r)
     {
-        if (Stack.Any(x => x.Tag == OperandTag.Register))
-        {
-            Program.Panic("An accumulator or flag operand was overwritten; it should have been saved.");
-        }
+        Stack.Add(r);
+        StackWasResized();
     }
 
     void PushAccumulator(CType type)
     {
-        AssertRegistersFree();
-        Push(Operand.MakeRegister(OperandRegister.Accumulator, type));
+        Push(OperandInfo.MakeRegister(OperandRegister.Accumulator, type));
     }
 
-    void Push(Operand r)
+    void Drop(int count)
     {
-        Stack.Add(r);
+        Stack.RemoveRange(Stack.Count - count, count);
+        StackWasResized();
     }
 
-    Operand Pop()
+    OperandReference Peek(int offset)
     {
-        Operand r = Stack[Stack.Count - 1];
-        Stack.RemoveAt(Stack.Count - 1);
-        return r;
+        if (offset < 0 || offset >= Stack.Count) throw new IndexOutOfRangeException("Operand offset is out of range.");
+        return new OperandReference(this, Stack.Count - 1 - offset, StackEpoch);
     }
 
-    Operand Peek(int offset)
+    public OperandInfo GetOperandInfo(int index, long epoch)
     {
-        return Stack[Stack.Count - 1 - offset];
+        CheckStackEpoch(epoch);
+        return Stack[index];
     }
 
-    void EmitLoadAccumulator(Operand r)
+    void Replace(OperandReference original, OperandInfo replacement)
     {
-        AssertRegistersFree();
+        CheckStackEpoch(original.StackEpoch);
+        Stack[original.Index] = replacement;
+    }
 
-        int size = SizeOf(r.Type);
+    void StackWasResized()
+    {
+        // Invalidate any existing OperandReferences.
+        StackEpoch += 1;
+    }
 
+    void CheckStackEpoch(long submission)
+    {
+        if (submission != StackEpoch) Program.Panic("This operand reference is out of date; the stack has changed.");
+    }
+
+    void Spill(OperandReference r)
+    {
         if (r.Tag == OperandTag.Register)
         {
-            if (r.Register == OperandRegister.Accumulator)
+            string temp = DeclareTemporary(r.Type);
+            Store(r, temp);
+            Replace(r, OperandInfo.MakeVariable(temp, r.Type));
+        }
+    }
+
+    void LoadAccumulator(OperandReference source)
+    {
+        CheckStackEpoch(source.StackEpoch);
+
+        // If any other operands are in registers, spill them to memory and remember their new location.
+        for (int i = 0; i < Stack.Count; i++)
+        {
+            if (i != source.Index)
+            {
+                OperandReference r = new OperandReference(this, i, StackEpoch);
+                Spill(r);
+            }
+        }
+
+        if (source.Tag == OperandTag.Register)
+        {
+            if (source.Register == OperandRegister.Accumulator)
             {
                 // NOP
             }
@@ -885,24 +866,28 @@ class CodeGenerator
         }
         else
         {
-            if (size >= 1) EmitAsm("LDA", r.LowByte());
-            if (size >= 2) EmitAsm("LDX", r.HighByte());
+            int size = SizeOf(source.Type);
+            if (size >= 1) EmitAsm("LDA", source.LowByte());
+            if (size >= 2) EmitAsm("LDX", source.HighByte());
             if (size > 2) Program.Panic("value is too large");
         }
     }
 
-    void EmitStoreAccumulator(Operand r)
+    /// <summary>
+    /// Store an operand on the stack into memory.
+    /// </summary>
+    void Store(OperandReference source, string destination)
     {
-        int size = SizeOf(r.Type);
-        if (size >= 1) EmitAsm("STA", r.LowByte());
-        if (size >= 2) EmitAsm("STX", r.HighByte());
+        LoadAccumulator(source);
+        int size = SizeOf(source.Type);
+        if (size >= 1) EmitAsm("STA", new AsmOperand(destination, 0, AddressMode.Absolute));
+        if (size >= 2) EmitAsm("STX", new AsmOperand(destination, 1, AddressMode.Absolute));
         if (size > 2) Program.Panic("value is too large");
     }
 
     void EmitCall(string functionName, int argCount)
     {
         // Copy the arguments into the function's call frame:
-        SpillAll();
         CFunctionInfo function;
         if (!Functions.TryGetValue(functionName, out function))
         {
@@ -915,27 +900,25 @@ class CodeGenerator
                 functionName, function.Parameters.Length, argCount);
         }
 
-        for (int i = function.Parameters.Length - 1; i >= 0; i--)
+        for (int i = 0; i < function.Parameters.Length; i++)
         {
-            Operand arg = Pop();
+            OperandReference arg = Peek(i);
 
             // Check types:
-            CParameter param = function.Parameters[i];
-            if (!TryToMatchLeftType(param.Type, ref arg))
+            CParameter param = function.Parameters[function.Parameters.Length - 1 - i];
+            if (!TryToMatchLeftType(param.Type, arg))
             {
                 Program.Error("in call to function '{0}', argument '{1}' has the wrong type", functionName, param.Name);
             }
 
-            Operand paramOperand = Operand.MakeVariable(
-                functionName + Program.NamespaceSeparator + param.Name,
-                param.Type);
-            EmitLoadAccumulator(arg);
-            EmitStoreAccumulator(paramOperand);
+            string paramName = functionName + Program.NamespaceSeparator + param.Name;
+            Store(arg, paramName);
         }
 
         EmitAsm("JSR", new AsmOperand(functionName, AddressMode.Absolute));
 
         // Use the return value:
+        Drop(argCount);
         PushAccumulator(function.ReturnType);
     }
 
@@ -995,31 +978,31 @@ class CodeGenerator
     }
 }
 
-[DebuggerDisplay("{Show(),nq}")]
-class Operand
+class OperandReference
 {
-    public readonly OperandTag Tag;
-    public readonly int Value;
-    public readonly string Name;
-    public readonly OperandRegister Register;
-    public readonly CType Type;
+    private readonly CodeGenerator Generator;
+    public readonly int Index;
+    public readonly long StackEpoch;
 
-    public Operand(OperandTag tag, int value, string name, OperandRegister register, CType type)
+    public OperandReference(CodeGenerator generator, int index, long epoch)
     {
-        Tag = tag;
-        Value = value;
-        Name = name;
-        Register = register;
-        Type = type;
+        Generator = generator;
+        Index = index;
+        StackEpoch = epoch;
     }
 
-    public static Operand MakeImmediate(int value, CType type) => new Operand(OperandTag.Immediate, value, null, OperandRegister.Invalid, type);
-    public static Operand MakeVariable(string name, CType type) => new Operand(OperandTag.Variable, 0, name, OperandRegister.Invalid, type);
-    public static Operand MakeVariableAddress(string name, CType type) => new Operand(OperandTag.VariableAddress, 0, name, OperandRegister.Invalid, type);
-    public static Operand MakeRegister(OperandRegister register, CType type) => new Operand(OperandTag.Register, 0, null, register, type);
+    public override string ToString() => Get().Show();
+
+    OperandInfo Get() => Generator.GetOperandInfo(Index, StackEpoch);
+
+    public OperandTag Tag => Get().Tag;
+    public int Value => Get().Value;
+    public string Name => Get().Name;
+    public OperandRegister Register => Get().Register;
+    public CType Type => Get().Type;
 
     public bool IsAccumulator => Tag == OperandTag.Register && Register == OperandRegister.Accumulator;
-    public Operand WithType(CType newType) => new Operand(Tag, Value, Name, Register, newType);
+    public OperandInfo WithType(CType newType) => new OperandInfo(Tag, Value, Name, Register, newType);
 
     public AsmOperand LowByte()
     {
@@ -1044,6 +1027,30 @@ class Operand
             return null;
         }
     }
+}
+
+[DebuggerDisplay("{Show(),nq}")]
+class OperandInfo
+{
+    public readonly OperandTag Tag;
+    public readonly int Value;
+    public readonly string Name;
+    public readonly OperandRegister Register;
+    public readonly CType Type;
+
+    public OperandInfo(OperandTag tag, int value, string name, OperandRegister register, CType type)
+    {
+        Tag = tag;
+        Value = value;
+        Name = name;
+        Register = register;
+        Type = type;
+    }
+
+    public static OperandInfo MakeImmediate(int value, CType type) => new OperandInfo(OperandTag.Immediate, value, null, OperandRegister.Invalid, type);
+    public static OperandInfo MakeVariable(string name, CType type) => new OperandInfo(OperandTag.Variable, 0, name, OperandRegister.Invalid, type);
+    public static OperandInfo MakeVariableAddress(string name, CType type) => new OperandInfo(OperandTag.VariableAddress, 0, name, OperandRegister.Invalid, type);
+    public static OperandInfo MakeRegister(OperandRegister register, CType type) => new OperandInfo(OperandTag.Register, 0, null, register, type);
 
     public string Show()
     {
