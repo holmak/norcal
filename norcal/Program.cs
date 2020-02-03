@@ -64,15 +64,22 @@ static class Program
             Error("error: no source files provided");
         }
 
-        IReadOnlyList<Expr> stackCode = Parser.ParseFiles(sourceFilenames);
-        if (EnableDebugOutput) WritePassOutputToFile("stack-code", ShowAssembly(stackCode));
-        IReadOnlyList<Expr> assembly = CodeGenerator.Convert(stackCode);
-        if (EnableDebugOutput) WritePassOutputToFile("assembly", ShowAssembly(assembly));
-        Assembler.Assemble(assembly, outputFilename);
-
-        if (EnableDebugOutput)
+        try
         {
-            Disassembler.Disassemble(outputFilename);
+            IReadOnlyList<Expr> stackCode = Parser.ParseFiles(sourceFilenames);
+            if (EnableDebugOutput) WritePassOutputToFile("stack-code", ShowAssembly(stackCode));
+            IReadOnlyList<Expr> assembly = CodeGenerator.Convert(stackCode);
+            if (EnableDebugOutput) WritePassOutputToFile("assembly", ShowAssembly(assembly));
+            Assembler.Assemble(assembly, outputFilename);
+
+            if (EnableDebugOutput)
+            {
+                Disassembler.Disassemble(outputFilename);
+            }
+        }
+        catch (Exception ex)
+        {
+            Panic(ex.Message);
         }
 
         Exit(0);
