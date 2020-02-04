@@ -233,7 +233,10 @@ class CodeGenerator
             {
                 ConsumeInput(1);
 
-                Push(Stack[Stack.Count - 1]);
+                OperandReference top = Peek(0);
+                // Register operands can't be duplicated, so spill them first:
+                Spill(top);
+                Push(GetOperandInfo(top));
             }
             else if (Next().Match(Tag.Swap))
             {
@@ -326,12 +329,9 @@ class CodeGenerator
                 OperandReference address = Peek(1);
 
                 // Check types:
-                CType storedType = DereferencePointerType(address.Type);
-                if (!TryToMatchLeftType(storedType, value))
-                {
-                    Program.Error("types in assignment don't match");
-                }
-                int size = SizeOf(value.Type);
+                CType typeToStore = DereferencePointerType(address.Type);
+                ConvertType(value, typeToStore);
+                int size = SizeOf(typeToStore);
 
                 // Generate code:
 
@@ -382,7 +382,7 @@ class CodeGenerator
 
                 // The store operation leaves the value in the accumulator; this matches the behavior of C assignment.
                 Drop(2);
-                PushAccumulator(storedType);
+                PushAccumulator(typeToStore);
             }
             else if (Next(0).Match(Tag.Load) && Next(1).Match(Tag.AddressOf))
             {
@@ -477,28 +477,40 @@ class CodeGenerator
                 OperandReference right = Peek(0);
                 OperandReference left = Peek(1);
 
-                int repetitions;
-
                 // Check types:
                 CType resultType;
-                if (left.Type.IsPointer)
+                // TODO: Find a better way to scale the index by the element size.
+                int repetitions = 1;
+                if (left.Type.IsPointer && right.Type.IsPointer)
+                {
+                    Program.Error("pointers cannot be added together");
+                }
+                if (left.Type.IsPointer && right.Type.IsInteger)
                 {
                     resultType = left.Type;
-                    if (!TryToMatchLeftType(CType.UInt16, right)) Program.Error("types don't match");
+                    repetitions = SizeOf(DereferencePointerType(resultType));
+                    ConvertType(right, CType.UInt16);
+                }
+                else if (left.Type.IsInteger && right.Type.IsPointer)
+                {
+                    // Swap the roles of the operands:
+                    OperandReference temp = left;
+                    left = right;
+                    right = temp;
 
-                    int elementSize = SizeOf(DereferencePointerType(left.Type));
-                    // TODO: Find a better way to scale the index by the element size.
-                    repetitions = elementSize;
+                    resultType = left.Type;
+                    repetitions = SizeOf(DereferencePointerType(resultType));
+                    ConvertType(right, CType.UInt16);
                 }
                 else
                 {
-                    resultType = left.Type;
-                    if (!TryToMatchTypes(left, right)) Program.Error("types don't match");
-                    repetitions = 1;
+                    resultType = FindCommonType(left.Type, right.Type);
+                    ConvertType(right, resultType);
+                    ConvertType(left, resultType);
                 }
-                int size = SizeOf(left.Type);
 
                 // Generate code:
+                int size = SizeOf(resultType);
                 LoadAccumulator(left);
                 for (int i = 0; i < repetitions; i++)
                 {
@@ -532,11 +544,34 @@ class CodeGenerator
                 OperandReference left = Peek(1);
 
                 // Check types:
-                CType resultType = left.Type;
-                if (!TryToMatchTypes(left, right)) Program.Error("types don't match");
-                int size = SizeOf(left.Type);
+                CType resultType;
+                // TODO: Find a better way to scale the index by the element size.
+                int repetitions = 1;
+                if (left.Type.IsPointer && right.Type.IsPointer)
+                {
+                    resultType = CType.UInt16;
+                    Program.NYI();
+                }
+                if (left.Type.IsPointer && right.Type.IsInteger)
+                {
+                    resultType = left.Type;
+                    repetitions = SizeOf(DereferencePointerType(resultType));
+                    ConvertType(right, CType.UInt16);
+                }
+                else if (left.Type.IsInteger && right.Type.IsPointer)
+                {
+                    Program.Error("cannot subtract a pointer from an integer");
+                    resultType = left.Type;
+                }
+                else
+                {
+                    resultType = FindCommonType(left.Type, right.Type);
+                    ConvertType(right, resultType);
+                    ConvertType(left, resultType);
+                }
 
                 // Generate code:
+                int size = SizeOf(resultType);
                 LoadAccumulator(left);
 
                 if (size >= 1)
@@ -590,10 +625,12 @@ class CodeGenerator
 
                 // Check types:
                 if (!left.Type.IsInteger || !right.Type.IsInteger) Program.Error("arithmetic requires integers");
-                if (!TryToMatchTypes(left, right)) Program.Error("types don't match");
+                CType resultType = FindCommonType(left.Type, right.Type);
+                ConvertType(right, resultType);
+                ConvertType(left, resultType);
 
                 // Generate code:
-                EmitCall(GetRuntimeFunctionName(functionName, left.Type), 2);
+                EmitCall(GetRuntimeFunctionName(functionName, resultType), 2);
             }
             else if (Next().Match(Tag.Return))
             {
@@ -685,48 +722,81 @@ class CodeGenerator
         });
     }
 
-    /// <summary>
-    /// Return true if the operand types match.
-    /// This function is necessary because the type of immediates has some flexibility.
-    /// </summary>
-    bool TryToMatchTypes(OperandReference left, OperandReference right)
+    static CType FindCommonType(CType left, CType right)
     {
-        if (left.Type == right.Type)
+        if (left == right)
         {
-            return true;
+            return left;
         }
-        else if (left.Tag == OperandTag.Immediate || right.Tag == OperandTag.Immediate)
+        else if ((left == CType.UInt8 && right == CType.UInt16) ||
+            (left == CType.UInt16 && right == CType.UInt8))
         {
-            // Try promoting the immediate values to a larger type:
-            if (left.Tag == OperandTag.Immediate && left.Type == CType.UInt8) Replace(left, left.WithType(CType.UInt16));
-            if (right.Tag == OperandTag.Immediate && right.Type == CType.UInt8) Replace(right, right.WithType(CType.UInt16));
-            return left.Type == right.Type;
+            return CType.UInt16;
         }
         else
         {
-            return false;
+            Program.NYI();
+            return null;
         }
     }
 
-    /// <summary>
-    /// Return true if the operand types match.
-    /// This function is necessary because the type of immediates has some flexibility.
-    /// </summary>
-    bool TryToMatchLeftType(CType leftType, OperandReference right)
+    void ConvertType(OperandReference r, CType desiredType)
     {
-        if (leftType == right.Type)
+        CType originalType = r.Type;
+
+        if (originalType != desiredType)
         {
-            return true;
+            Emit(Tag.Comment, string.Format("convert type from '{0}' to '{1}':", originalType.Show(), desiredType.Show()));
         }
-        else if (right.Tag == OperandTag.Immediate)
+
+        bool narrowed = false;
+
+        if (originalType == desiredType)
         {
-            // Try promoting the immediate value to a larger type:
-            if (right.Type == CType.UInt8) Replace(right, right.WithType(CType.UInt16));
-            return leftType == right.Type;
+            // NOP
+        }
+        else if (originalType == CType.UInt8 && desiredType == CType.UInt16)
+        {
+            if (r.Tag == OperandTag.Immediate)
+            {
+                // The type and value of immediates can be changed directly:
+                Replace(r, OperandInfo.MakeImmediate(r.Value, desiredType));
+            }
+            else
+            {
+                // Zero-extend the value:
+                LoadAccumulator(r);
+                EmitAsm("LDX", new AsmOperand(0, AddressMode.Immediate));
+                Replace(r, OperandInfo.MakeRegister(OperandRegister.Accumulator, desiredType));
+            }
+        }
+        else if (originalType == CType.UInt16 && desiredType == CType.UInt8)
+        {
+            if (r.Tag == OperandTag.Immediate)
+            {
+                if (r.Value > 0xFF)
+                {
+                    Replace(r, OperandInfo.MakeImmediate(r.Value & 0xFF, desiredType));
+                    narrowed = true;
+                }
+            }
+            else
+            {
+                narrowed = true;
+            }
+
+            // The actual type doesn't need to be modified; just change the operand's type to exclude the high byte.
+            Replace(r, OperandInfo.MakeRegister(OperandRegister.Accumulator, desiredType));
         }
         else
         {
-            return false;
+            Program.Error("Type mismatch; expected type is {1}; actual type is {0}", originalType.Show(), desiredType.Show());
+        }
+
+        // The value was truncated, so display a warning.
+        if (narrowed)
+        {
+            Program.Warning("Information may have been lost by the implicit conversion from {0} to {1}.", originalType.Show(), desiredType.Show());
         }
     }
 
@@ -785,6 +855,11 @@ class CodeGenerator
 
     void Push(OperandInfo r)
     {
+        if (r.Tag == OperandTag.Register && Stack.Any(x => x.Tag == OperandTag.Register))
+        {
+            throw new Exception("Attempted to push a register operand while another operand is in a register.");
+        }
+
         Stack.Add(r);
         StackWasResized();
     }
@@ -805,6 +880,8 @@ class CodeGenerator
         if (offset < 0 || offset >= Stack.Count) throw new IndexOutOfRangeException("Operand offset is out of range.");
         return new OperandReference(this, Stack.Count - 1 - offset, StackEpoch);
     }
+
+    public OperandInfo GetOperandInfo(OperandReference r) => GetOperandInfo(r.Index, r.StackEpoch);
 
     public OperandInfo GetOperandInfo(int index, long epoch)
     {
@@ -903,14 +980,8 @@ class CodeGenerator
         for (int i = 0; i < function.Parameters.Length; i++)
         {
             OperandReference arg = Peek(i);
-
-            // Check types:
             CParameter param = function.Parameters[function.Parameters.Length - 1 - i];
-            if (!TryToMatchLeftType(param.Type, arg))
-            {
-                Program.Error("in call to function '{0}', argument '{1}' has the wrong type", functionName, param.Name);
-            }
-
+            ConvertType(arg, param.Type);
             string paramName = functionName + Program.NamespaceSeparator + param.Name;
             Store(arg, paramName);
         }

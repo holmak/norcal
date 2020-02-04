@@ -779,12 +779,12 @@ void reset()
 }
 
 @ arrays
-@out 43
+@out 342
 
 void reset()
 {
     uint16_t factors[9];
-    factors[8] = 43;
+    factors[8] = 342;
     OUT = factors[8];
     STOP = 0;
 }
@@ -1957,5 +1957,38 @@ void reset()
     // Locals can't be put in PRG-ROM.
     __prg_rom u8 local[] = { 24, 48 };
     OUTB = local[1];
+    STOP = 0;
+}
+
+@ Implicit integer conversions
+
+@out 23
+
+// Use u8 as an index.
+u8 arr[5];
+
+void reset()
+{
+    u8 i = 3;
+    u16 j = 3;
+    arr[3] = 2;
+    arr[i] += 9;
+    arr[j] += 12;
+    OUT = arr[i];
+    STOP = 0;
+}
+
+@out 10 13 15 19 34
+
+// Arithmetic with mixed types.
+void reset()
+{
+    u8 b = 7;
+    u16 w = 3;
+    OUT = b += w; // b == 10
+    OUT = w += b; // w == 13
+    OUT = b += 5; // b == 15
+    OUT = w += 6; // w == 19
+    OUT = b + w;
     STOP = 0;
 }
