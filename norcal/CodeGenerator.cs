@@ -855,11 +855,6 @@ class CodeGenerator
 
     void Push(OperandInfo r)
     {
-        if (r.Tag == OperandTag.Register && Stack.Any(x => x.Tag == OperandTag.Register))
-        {
-            throw new Exception("Attempted to push a register operand while another operand is in a register.");
-        }
-
         Stack.Add(r);
         StackWasResized();
     }
@@ -911,8 +906,11 @@ class CodeGenerator
         if (r.Tag == OperandTag.Register)
         {
             string temp = DeclareTemporary(r.Type);
-            Store(r, temp);
+            // Note: The operand's location must be updated before the "store" operation. Otherwise, if there
+            // are multiple register operands on the stack, the compiler will go into an infinite loop while
+            // each register operand tries to spill the others so that it can be loaded into the accumulator.
             Replace(r, OperandInfo.MakeVariable(temp, r.Type));
+            Store(r, temp);
         }
     }
 
