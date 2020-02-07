@@ -605,3 +605,59 @@ uint16_t _rt_shift_right_u16(uint16_t a, uint16_t b)
         RTS
     }
 }
+
+u8 _rt_preinc_u8(u8 *p, u8 a)
+{
+    u8 r = *p + a;
+    *p = r;
+    return r;
+}
+
+u16 _rt_preinc_u16(u16 *p, u16 a)
+{
+    u16 r = *p + a;
+    *p = r;
+    return r;
+}
+
+u8 _rt_predec_u8(u8 *p, u8 a)
+{
+    u8 r = *p - a;
+    *p = r;
+    return r;
+}
+
+u16 _rt_predec_u16(u16 *p, u16 a)
+{
+    u16 r = *p - a;
+    *p = r;
+    return r;
+}
+
+u8 _rt_postinc_u8(u8 *p, u8 a)
+{
+    u8 r = *p;
+    *p += a;
+    return r;
+}
+
+u16 _rt_postinc_u16(u16 *p, u16 a)
+{
+    u16 r = *p;
+    *p += a;
+    return r;
+}
+
+u8 _rt_postdec_u8(u8 *p, u8 a)
+{
+    u8 r = *p;
+    *p -= a;
+    return r;
+}
+
+u16 _rt_postdec_u16(u16 *p, u16 a)
+{
+    u16 r = *p;
+    *p -= a;
+    return r;
+}

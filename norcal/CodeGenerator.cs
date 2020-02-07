@@ -238,22 +238,6 @@ class CodeGenerator
                 Spill(top);
                 Push(GetOperandInfo(top));
             }
-            else if (Next().Match(Tag.Swap))
-            {
-                ConsumeInput(1);
-
-                OperandInfo a = Stack[Stack.Count - 1];
-                OperandInfo b = Stack[Stack.Count - 2];
-                Drop(2);
-                Push(a);
-                Push(b);
-            }
-            else if (Next().Match(Tag.Over))
-            {
-                ConsumeInput(1);
-
-                Push(Stack[Stack.Count - 2]);
-            }
             else if (Next().Match(Tag.Materialize))
             {
                 ConsumeInput(1);
@@ -289,6 +273,7 @@ class CodeGenerator
                 int size = SizeOf(cond.Type);
 
                 Spill(cond);
+                UnloadAccumulator();
                 if (size >= 1) EmitAsm("LDA", cond.LowByte());
                 if (size >= 2) EmitAsm("ORA", cond.HighByte());
                 if (size > 2) Program.Panic("value is too large");
@@ -306,6 +291,7 @@ class CodeGenerator
                 int size = SizeOf(cond.Type);
 
                 Spill(cond);
+                UnloadAccumulator();
                 if (size >= 1) EmitAsm("LDA", cond.LowByte());
                 if (size >= 2) EmitAsm("ORA", cond.HighByte());
                 if (size > 2) Program.Panic("value is too large");
@@ -330,7 +316,7 @@ class CodeGenerator
 
                 // Check types:
                 CType typeToStore = DereferencePointerType(address.Type);
-                ConvertType(value, typeToStore);
+                ConvertType(Conversion.Implicit, value, typeToStore);
                 int size = SizeOf(typeToStore);
 
                 // Generate code:
@@ -409,6 +395,7 @@ class CodeGenerator
                     // Copy the pointer to zero page so that it can be used:
                     Store(address, TempPointer);
 
+                    UnloadAccumulator();
                     if (size == 1)
                     {
                         Emit(Expr.MakeAsm("LDY", new AsmOperand(0, AddressMode.Immediate)));
@@ -469,6 +456,80 @@ class CodeGenerator
                     Expr.Make(Tag.Cast, CType.MakePointer(fieldInfo.Type)),
                 });
             }
+            else if (Next().Match(Tag.PreIncrement) || Next().Match(Tag.PreDecrement))
+            {
+                bool increment = Next().Match(Tag.PreIncrement);
+                ConsumeInput(1);
+
+                OperandReference address = Peek(0);
+                CType valueType = DereferencePointerType(address.Type);
+                int size = SizeOf(valueType);
+
+                // Pointer arithmetic must be scaled by element size:
+                int amount = 1;
+                if (valueType.IsPointer)
+                {
+                    amount = SizeOf(DereferencePointerType(valueType));
+                }
+
+                if (address.Tag == OperandTag.VariableAddress && amount == 1 && size == 1)
+                {
+                    EmitAsm(increment ? "INC" : "DEC", new AsmOperand(address.Name, AddressMode.Absolute));
+                    UnloadAccumulator();
+                    EmitAsm("LDA", new AsmOperand(address.Name, AddressMode.Absolute));
+
+                    Drop(1);
+                    PushAccumulator(valueType);
+                }
+                else
+                {
+                    CType effectiveType = CType.UInt8;
+                    if (size == 2) effectiveType = CType.UInt16;
+                    if (size > 2) Program.Panic("value is too large");
+
+                    ConvertType(Conversion.Explicit, address, CType.MakePointer(effectiveType));
+                    Push(OperandInfo.MakeImmediate(amount, effectiveType));
+                    EmitCall(GetRuntimeFunctionName(increment ? "preinc" : "predec", effectiveType), 2);
+                    ConvertType(Conversion.Explicit, Peek(0), valueType);
+                }
+            }
+            else if (Next().Match(Tag.PostIncrement) || Next().Match(Tag.PostDecrement))
+            {
+                bool increment = Next().Match(Tag.PostIncrement);
+                ConsumeInput(1);
+
+                OperandReference address = Peek(0);
+                CType valueType = DereferencePointerType(address.Type);
+                int size = SizeOf(valueType);
+
+                // Pointer arithmetic must be scaled by element size:
+                int amount = 1;
+                if (valueType.IsPointer)
+                {
+                    amount = SizeOf(DereferencePointerType(valueType));
+                }
+
+                if (address.Tag == OperandTag.VariableAddress && amount == 1 && size == 1)
+                {
+                    UnloadAccumulator();
+                    EmitAsm("LDA", new AsmOperand(address.Name, AddressMode.Absolute));
+                    EmitAsm(increment ? "INC" : "DEC", new AsmOperand(address.Name, AddressMode.Absolute));
+
+                    Drop(1);
+                    PushAccumulator(valueType);
+                }
+                else
+                {
+                    CType effectiveType = CType.UInt8;
+                    if (size == 2) effectiveType = CType.UInt16;
+                    if (size > 2) Program.Panic("value is too large");
+
+                    ConvertType(Conversion.Explicit, address, CType.MakePointer(effectiveType));
+                    Push(OperandInfo.MakeImmediate(amount, effectiveType));
+                    EmitCall(GetRuntimeFunctionName(increment ? "postinc" : "postdec", effectiveType), 2);
+                    ConvertType(Conversion.Explicit, Peek(0), valueType);
+                }
+            }
             else if (Next().Match(Tag.Add))
             {
                 ConsumeInput(1);
@@ -489,7 +550,7 @@ class CodeGenerator
                 {
                     resultType = left.Type;
                     repetitions = SizeOf(DereferencePointerType(resultType));
-                    ConvertType(right, CType.UInt16);
+                    ConvertType(Conversion.Implicit, right, CType.UInt16);
                 }
                 else if (left.Type.IsInteger && right.Type.IsPointer)
                 {
@@ -500,13 +561,13 @@ class CodeGenerator
 
                     resultType = left.Type;
                     repetitions = SizeOf(DereferencePointerType(resultType));
-                    ConvertType(right, CType.UInt16);
+                    ConvertType(Conversion.Implicit, right, CType.UInt16);
                 }
                 else
                 {
                     resultType = FindCommonType(left.Type, right.Type);
-                    ConvertType(right, resultType);
-                    ConvertType(left, resultType);
+                    ConvertType(Conversion.Implicit, right, resultType);
+                    ConvertType(Conversion.Implicit, left, resultType);
                 }
 
                 // Generate code:
@@ -556,7 +617,7 @@ class CodeGenerator
                 {
                     resultType = left.Type;
                     repetitions = SizeOf(DereferencePointerType(resultType));
-                    ConvertType(right, CType.UInt16);
+                    ConvertType(Conversion.Implicit, right, CType.UInt16);
                 }
                 else if (left.Type.IsInteger && right.Type.IsPointer)
                 {
@@ -566,8 +627,8 @@ class CodeGenerator
                 else
                 {
                     resultType = FindCommonType(left.Type, right.Type);
-                    ConvertType(right, resultType);
-                    ConvertType(left, resultType);
+                    ConvertType(Conversion.Implicit, right, resultType);
+                    ConvertType(Conversion.Implicit, left, resultType);
                 }
 
                 // Generate code:
@@ -626,8 +687,8 @@ class CodeGenerator
                 // Check types:
                 if (!left.Type.IsInteger || !right.Type.IsInteger) Program.Error("arithmetic requires integers");
                 CType resultType = FindCommonType(left.Type, right.Type);
-                ConvertType(right, resultType);
-                ConvertType(left, resultType);
+                ConvertType(Conversion.Implicit, right, resultType);
+                ConvertType(Conversion.Implicit, left, resultType);
 
                 // Generate code:
                 EmitCall(GetRuntimeFunctionName(functionName, resultType), 2);
@@ -740,7 +801,7 @@ class CodeGenerator
         }
     }
 
-    void ConvertType(OperandReference r, CType desiredType)
+    void ConvertType(Conversion kind, OperandReference r, CType desiredType)
     {
         CType originalType = r.Type;
 
@@ -787,6 +848,10 @@ class CodeGenerator
 
             // The actual type doesn't need to be modified; just change the operand's type to exclude the high byte.
             Replace(r, OperandInfo.MakeRegister(OperandRegister.Accumulator, desiredType));
+        }
+        else if (kind == Conversion.Explicit && SizeOf(originalType) == SizeOf(desiredType))
+        {
+            Replace(r, r.WithType(desiredType));
         }
         else
         {
@@ -906,11 +971,20 @@ class CodeGenerator
         if (r.Tag == OperandTag.Register)
         {
             string temp = DeclareTemporary(r.Type);
-            // Note: The operand's location must be updated before the "store" operation. Otherwise, if there
-            // are multiple register operands on the stack, the compiler will go into an infinite loop while
-            // each register operand tries to spill the others so that it can be loaded into the accumulator.
-            Replace(r, OperandInfo.MakeVariable(temp, r.Type));
             Store(r, temp);
+            Replace(r, OperandInfo.MakeVariable(temp, r.Type));
+        }
+    }
+
+    /// <summary>
+    /// Spill all registers so that they can be used for something else.
+    /// </summary>
+    void UnloadAccumulator()
+    {
+        for (int i = 0; i < Stack.Count; i++)
+        {
+            OperandReference r = new OperandReference(this, i, StackEpoch);
+            Spill(r);
         }
     }
 
@@ -979,7 +1053,7 @@ class CodeGenerator
         {
             OperandReference arg = Peek(i);
             CParameter param = function.Parameters[function.Parameters.Length - 1 - i];
-            ConvertType(arg, param.Type);
+            ConvertType(Conversion.Implicit, arg, param.Type);
             string paramName = functionName + Program.NamespaceSeparator + param.Name;
             Store(arg, paramName);
         }
@@ -1156,4 +1230,10 @@ enum OperandRegister
     FlagNotZero,
     FlagCarry,
     FlagNotCarry,
+}
+
+enum Conversion
+{
+    Implicit,
+    Explicit,
 }

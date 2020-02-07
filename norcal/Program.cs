@@ -262,6 +262,10 @@ static class Tag
     public static readonly string ShiftLeft = "$shift_left";
     public static readonly string ShiftRight = "$shift_right";
     public static readonly string LogicalNot = "$logical_not";
+    public static readonly string PreIncrement = "$pre_increment";
+    public static readonly string PostIncrement = "$post_increment";
+    public static readonly string PreDecrement = "$pre_decrement";
+    public static readonly string PostDecrement = "$post_decrement";
 
     // Virtual stack machine instructions:
     public static readonly string PushImmediate = "$push";
@@ -269,8 +273,6 @@ static class Tag
     public static readonly string DropFinal = "$drop_final";
     public static readonly string Drop = "$drop";
     public static readonly string Duplicate = "$dup";
-    public static readonly string Swap = "$swap";
-    public static readonly string Over = "$over";
     public static readonly string Materialize = "$materialize";
 
     // Assembly directives:

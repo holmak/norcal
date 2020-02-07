@@ -803,12 +803,7 @@ partial class Parser
             bool increment = (nextToken == TokenType.INCREMENT);
             ParseUnaryPrefixExpr();
             Emit(Tag.AddressOf);
-            Emit(Tag.Comment, increment ? "pre-increment" : "pre-decrement");
-            Emit(Tag.Duplicate);
-            Emit(Tag.Load);
-            Emit(Tag.PushImmediate, 1);
-            Emit(increment ? Tag.Add : Tag.Subtract);
-            Emit(Tag.Store);
+            Emit(increment ? Tag.PreIncrement : Tag.PreDecrement);
         }
         else
         {
@@ -870,30 +865,12 @@ partial class Parser
             else if (TryParse(TokenType.INCREMENT))
             {
                 Emit(Tag.AddressOf);
-                Emit(Tag.Comment, "post-increment");
-                Emit(Tag.Duplicate);
-                Emit(Tag.Load);
-                Emit(Tag.Materialize);
-                Emit(Tag.Swap);
-                Emit(Tag.Over);
-                Emit(Tag.PushImmediate, 1);
-                Emit(Tag.Add);
-                Emit(Tag.Store);
-                Emit(Tag.Drop);
+                Emit(Tag.PostIncrement);
             }
             else if (TryParse(TokenType.DECREMENT))
             {
                 Emit(Tag.AddressOf);
-                Emit(Tag.Comment, "post-decrement");
-                Emit(Tag.Duplicate);
-                Emit(Tag.Load);
-                Emit(Tag.Materialize);
-                Emit(Tag.Swap);
-                Emit(Tag.Over);
-                Emit(Tag.PushImmediate, 1);
-                Emit(Tag.Subtract);
-                Emit(Tag.Store);
-                Emit(Tag.Drop);
+                Emit(Tag.PostDecrement);
             }
             else if (TryParse(TokenType.LBRACKET))
             {
