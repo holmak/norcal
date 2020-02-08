@@ -233,8 +233,10 @@ class CodeGenerator
             {
                 ConsumeInput(1);
 
-                // Put the top operand in the accumulator.
-                LoadAccumulator(Peek(0));
+                // Put the top operand in the accumulator and update the stack to reflect its new location.
+                OperandReference top = Peek(0);
+                LoadAccumulator(top);
+                Replace(top, OperandInfo.MakeRegister(OperandRegister.Accumulator, top.Type));
             }
             else if (Next().Match(Tag.Cast, out newType))
             {

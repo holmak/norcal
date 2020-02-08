@@ -1581,6 +1581,22 @@ void reset()
 }
 
 @ Conditional expressions
+@out 2 98 2
+
+void reset()
+{
+    OUTB = test(0);
+    OUTB = test(51);
+    OUTB = test(50);
+    STOP = 0;
+}
+
+u8 test(u8 x)
+{
+    return x > 50 ? 98 : 2;
+}
+
+@ Conditional expressions
 @out 1 2 0xFFFF 4 0xBBBB 0xFFFF 7 8 0xFFFF 0xBBBB 11 0xFFFF 13 14 0xFFBB 16 17 0xFFFF 19 0xBBBB
 void reset()
 {
