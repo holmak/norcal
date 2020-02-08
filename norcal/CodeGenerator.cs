@@ -229,15 +229,6 @@ class CodeGenerator
 
                 Drop(1);
             }
-            else if (Next().Match(Tag.Duplicate))
-            {
-                ConsumeInput(1);
-
-                OperandReference top = Peek(0);
-                // Register operands can't be duplicated, so spill them first:
-                Spill(top);
-                Push(GetOperandInfo(top));
-            }
             else if (Next().Match(Tag.Materialize))
             {
                 ConsumeInput(1);
@@ -375,8 +366,9 @@ class CodeGenerator
                 // An "address of" cancels out a preceding "load".
                 ConsumeInput(2);
             }
-            else if (Next().Match(Tag.Load))
+            else if (Next().Match(Tag.Load) || Next().Match(Tag.LoadNondestructive))
             {
+                bool drop = !Next().Match(Tag.LoadNondestructive);
                 ConsumeInput(1);
 
                 // Get operands:
@@ -414,12 +406,14 @@ class CodeGenerator
                         Program.Panic("values larger than two bytes cannot be loaded via accumulator");
                     }
 
-                    Drop(1);
+                    if (drop) Drop(1);
                     PushAccumulator(loadedType);
                 }
                 else if (address.Tag == OperandTag.VariableAddress)
                 {
-                    Replace(address, OperandInfo.MakeVariable(address.Name, loadedType));
+                    OperandInfo result = OperandInfo.MakeVariable(address.Name, loadedType);
+                    if (drop) Drop(1);
+                    Push(result);
                 }
                 else
                 {

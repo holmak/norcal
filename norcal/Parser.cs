@@ -605,8 +605,7 @@ partial class Parser
         {
             ConsumeToken();
             Emit(Tag.AddressOf);
-            Emit(Tag.Duplicate);
-            Emit(Tag.Load);
+            Emit(Tag.LoadNondestructive);
             ParseAssignExpr();
             Emit(op);
             Emit(Tag.Store);

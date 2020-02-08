@@ -248,6 +248,7 @@ static class Tag
     public static readonly string Divide = "$div";
     public static readonly string Modulus = "$mod";
     public static readonly string Load = "$load";
+    public static readonly string LoadNondestructive = "$load_nondestructive";
     public static readonly string Store = "$store";
     public static readonly string Equal = "$equal";
     public static readonly string NotEqual = "$not_equal";
@@ -272,7 +273,6 @@ static class Tag
     public static readonly string PushVariableAddress = "$pushva";
     public static readonly string DropFinal = "$drop_final";
     public static readonly string Drop = "$drop";
-    public static readonly string Duplicate = "$dup";
     public static readonly string Materialize = "$materialize";
 
     // Assembly directives:
