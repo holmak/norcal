@@ -16,6 +16,7 @@ class Program
     private static readonly string CompilerPath = "norcal/bin/Debug/norcal.exe";
     private static readonly string SimulatorPath = "sim6502/x64/Debug/sim6502.exe";
     private static readonly float TimeoutDuration = 5.0f;
+    private static readonly bool ShowPassingTests = false;
 
     static void Main(string[] args)
     {
@@ -180,7 +181,7 @@ class Program
             report.AppendFormat("<p class=\"problem\">{0} test{1} failed.</p>\n", failures, plural);
         }
         report.Append(HtmlMiddle);
-        foreach (Test test in tests)
+        foreach (Test test in tests.Where(x => !x.Passed || ShowPassingTests))
         {
             if (!test.Passed && !firstErrorID.HasValue)
             {
