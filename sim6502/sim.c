@@ -1,5 +1,4 @@
 #define _CRT_SECURE_NO_WARNINGS
-#include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -48,13 +47,25 @@ int main(int argc, char *argv[])
     char *imagefilename = argv[1];
 
     FILE *image = fopen(imagefilename, "rb");
-    assert(image);
+    if (!image)
+    {
+        fprintf(stderr, "Error: Input file does not exist: %s\n", imagefilename);
+        exit(2);
+    }
 
     uint8_t header[16];
-    assert(fread(header, sizeof(header), 1, image) == 1);
-    // TODO: Check the file header.
+    if (fread(header, sizeof(header), 1, image) != 1)
+    {
+        fprintf(stderr, "Error: Input file has no iNES header.\n");
+        exit(2);
+    }
+    // TODO: Check the file header's contents.
 
-    assert(fread(rom, sizeof(rom), 1, image) == 1);
+    if (fread(rom, sizeof(rom), 1, image) != 1)
+    {
+        fprintf(stderr, "Error: Input file has wrong length.\n");
+        exit(2);
+    }
     fclose(image);
 
     reset6502();
