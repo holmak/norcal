@@ -676,15 +676,44 @@ class CodeGenerator
             {
                 ConsumeInput(1);
 
+                bool pointersAllowed = BinaryOperatorsThatAllowPointers.Contains(name);
+
                 // Get operands:
                 OperandReference right = Peek(0);
                 OperandReference left = Peek(1);
 
                 // Check types:
-                if (!left.Type.IsInteger || !right.Type.IsInteger) Program.Error("arithmetic requires integers");
-                CType resultType = FindCommonType(left.Type, right.Type);
-                ConvertType(Conversion.Implicit, right, resultType);
-                ConvertType(Conversion.Implicit, left, resultType);
+                CType resultType = CType.Void;
+                if (left.Type.IsInteger && right.Type.IsInteger)
+                {
+                    // All of these operators work on integers.
+                    resultType = FindCommonType(left.Type, right.Type);
+                    ConvertType(Conversion.Implicit, right, resultType);
+                    ConvertType(Conversion.Implicit, left, resultType);
+                }
+                else if (left.Type.IsPointer || right.Type.IsPointer)
+                {
+                    if (!pointersAllowed)
+                    {
+                        Program.Error("operation does not support pointers");
+                    }
+                    else if (left.Type != right.Type)
+                    {
+                        Program.Error("these pointer operands must have the same type");
+                    }
+                    else
+                    {
+                        // Treat the pointer operands as unsigned integers of the same size.
+                        resultType = CType.UInt16;
+                        ConvertType(Conversion.Explicit, left, resultType);
+                        ConvertType(Conversion.Explicit, right, resultType);
+                    }
+                }
+                else
+                {
+                    // TODO: Make this error message more specific.
+                    Program.Error("operation does not allow these types");
+                }
 
                 // Generate code:
                 EmitCall(GetRuntimeFunctionName(functionName, resultType), 2);
@@ -1088,6 +1117,16 @@ class CodeGenerator
         { Tag.BitwiseXor, "bitwise_xor" },
         { Tag.ShiftLeft, "shift_left" },
         { Tag.ShiftRight, "shift_right" },
+    };
+
+    static readonly string[] BinaryOperatorsThatAllowPointers = new string[]
+    {
+        Tag.Equal,
+        Tag.NotEqual,
+        Tag.LessThan,
+        Tag.GreaterThan,
+        Tag.LessThanOrEqual,
+        Tag.GreaterThanOrEqual,
     };
 
     static string GetRuntimeFunctionName(string operation, CType type)
