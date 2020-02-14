@@ -71,7 +71,7 @@ class CodeGenerator
             int[] values;
             if (op.Match(Tag.Function, out returnType, out functionName, out fields))
             {
-                if (Functions.ContainsKey(functionName)) Program.Error("function is already defined: " + functionName);
+                if (Functions.ContainsKey(functionName)) Error("function is already defined: " + functionName);
 
                 // Allocate a global variable for each parameter:
                 foreach (FieldInfo field in fields)
@@ -113,7 +113,7 @@ class CodeGenerator
 
                     if (values.Length > type.Dimension)
                     {
-                        Program.Error("Declared size of array ({0}) is too small for the number of specified values ({1}).",
+                        Error("Declared size of array ({0}) is too small for the number of specified values ({1}).",
                             type.Dimension, values.Length);
                     }
                 }
@@ -192,7 +192,7 @@ class CodeGenerator
                 Symbol sym;
                 if (!Symbols.TryGetValue(name, out sym))
                 {
-                    Program.Error("reference to undefined symbol: {0}", name);
+                    Error("reference to undefined symbol: {0}", name);
                 }
                 CType valueType = sym.Type;
 
@@ -209,7 +209,7 @@ class CodeGenerator
                     }
                     else
                     {
-                        Program.Error("arrays cannot be used as the target of an assignment");
+                        Error("arrays cannot be used as the target of an assignment");
                     }
                 }
 
@@ -297,7 +297,7 @@ class CodeGenerator
             {
                 ConsumeInput(1);
 
-                Program.Error("it is not possible to take the address of this expression");
+                Error("it is not possible to take the address of this expression");
             }
             else if (Next().Match(Tag.Store))
             {
@@ -433,14 +433,14 @@ class CodeGenerator
                 CType structType = DereferencePointerType(structAddress.Type);
                 if (!structType.IsStruct)
                 {
-                    Program.Error("expression must be a struct");
+                    Error("expression must be a struct");
                 }
                 CStructInfo structInfo = GetStructInfo(structType.Name);
 
                 CField fieldInfo = structInfo.Fields.FirstOrDefault(x => x.Name == name);
                 if (fieldInfo == null)
                 {
-                    Program.Error("struct type '{0}' does not contain a field named '{1}'", structType.Name, name);
+                    Error("struct type '{0}' does not contain a field named '{1}'", structType.Name, name);
                 }
 
                 // Replace with simpler stack code:
@@ -540,7 +540,7 @@ class CodeGenerator
                 int repetitions = 1;
                 if (left.Type.IsPointer && right.Type.IsPointer)
                 {
-                    Program.Error("pointers cannot be added together");
+                    Error("pointers cannot be added together");
                 }
                 if (left.Type.IsPointer && right.Type.IsInteger)
                 {
@@ -617,7 +617,7 @@ class CodeGenerator
                 }
                 else if (left.Type.IsInteger && right.Type.IsPointer)
                 {
-                    Program.Error("cannot subtract a pointer from an integer");
+                    Error("cannot subtract a pointer from an integer");
                     resultType = left.Type;
                 }
                 else
@@ -669,7 +669,7 @@ class CodeGenerator
                 }
                 else
                 {
-                    Program.Error("unary operator cannot be used with type '{0}'", argType.Show());
+                    Error("unary operator cannot be used with type '{0}'", argType.Show());
                 }
             }
             else if (Next().Match(out name) && BinaryRuntimeOperators.TryGetValue(name, out functionName))
@@ -695,11 +695,11 @@ class CodeGenerator
                 {
                     if (!pointersAllowed)
                     {
-                        Program.Error("operation does not support pointers");
+                        Error("operation does not support pointers");
                     }
                     else if (left.Type != right.Type)
                     {
-                        Program.Error("these pointer operands must have the same type");
+                        Error("these pointer operands must have the same type");
                     }
                     else
                     {
@@ -712,7 +712,7 @@ class CodeGenerator
                 else
                 {
                     // TODO: Make this error message more specific.
-                    Program.Error("operation does not allow these types");
+                    Error("operation does not allow these types");
                 }
 
                 // Generate code:
@@ -796,7 +796,7 @@ class CodeGenerator
         // It is an error to define two things with the same name in the same scope.
         if (Symbols.ContainsKey(name))
         {
-            Program.Error("symbols cannot be redefined: {0}", name);
+            Error("symbols cannot be redefined: {0}", name);
         }
 
         Symbols.Add(name, new Symbol
@@ -880,26 +880,26 @@ class CodeGenerator
         }
         else
         {
-            Program.Error("Type mismatch; expected type is {1}; actual type is {0}", originalType.Show(), desiredType.Show());
+            Error("expected type '{1}' does not match actual type '{0}'", originalType.Show(), desiredType.Show());
         }
 
         // The value was truncated, so display a warning.
         if (narrowed)
         {
-            Program.Warning("Information may have been lost by the implicit conversion from {0} to {1}.", originalType.Show(), desiredType.Show());
+            Warning("implicit conversion from '{0}' to '{1}' may lose information", originalType.Show(), desiredType.Show());
         }
     }
 
     CType DereferencePointerType(CType pointer)
     {
-        if (!pointer.IsPointer) Program.Error("a pointer type is required");
+        if (!pointer.IsPointer) Error("a pointer type is required");
         return pointer.Subtype;
     }
 
     CStructInfo GetStructInfo(string name)
     {
         CStructInfo info;
-        if (!Structs.TryGetValue(name, out info)) Program.Error("struct not defined: {0}", name);
+        if (!Structs.TryGetValue(name, out info)) Error("struct not defined: {0}", name);
         return info;
     }
 
@@ -1065,12 +1065,12 @@ class CodeGenerator
         CFunctionInfo function;
         if (!Functions.TryGetValue(functionName, out function))
         {
-            Program.Error("function not implemented: {0}", functionName);
+            Error("function not implemented: {0}", functionName);
         }
 
         if (argCount != function.Parameters.Length)
         {
-            Program.Error("wrong number of arguments in call to '{0}': {1} required; {2} specified",
+            Error("wrong number of arguments in call to '{0}': {1} required; {2} specified",
                 functionName, function.Parameters.Length, argCount);
         }
 
@@ -1093,6 +1093,16 @@ class CodeGenerator
     static bool IsVariableGlobal(string name)
     {
         return !name.Contains(Program.NamespaceSeparator);
+    }
+
+    static void Warning(string format, params object[] args)
+    {
+        Program.Warning("warning: " + format, args);
+    }
+
+    static void Error(string format, params object[] args)
+    {
+        Program.Error("error: " + format, args);
     }
 
     static readonly Dictionary<string, string> UnaryRuntimeOperators = new Dictionary<string, string>

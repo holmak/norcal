@@ -71,8 +71,8 @@ class Assembler
                 skipTarget -= PrgRomBase;
 
                 // Pad out the code until reaching the target address:
-                if (skipTarget > ushort.MaxValue) Program.Panic("assembler: skip address is too large");
-                if (prg.Count > skipTarget) Program.Panic("assembler: cannot skip backward");
+                if (skipTarget > ushort.MaxValue) Program.Panic("assembler: warning: skip address is too large");
+                if (prg.Count > skipTarget) Program.Panic("assembler: warning: cannot skip backward");
                 while (prg.Count < skipTarget)
                 {
                     prg.Add(0);
@@ -84,7 +84,7 @@ class Assembler
                 if (!Symbols.TryGetValue(label, out address))
                 {
                     // TODO: Figure out what to do if an entrypoint is not defined.
-                    Program.Warning("assembler: label not defined: {0}", label);
+                    Program.Warning("assembler: warning: label not defined: {0}", label);
                     address = PrgRomBase;
                 }
                 prg.Add(LowByte(address));

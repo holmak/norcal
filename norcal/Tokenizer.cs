@@ -346,7 +346,7 @@ class Tokenizer
 
     static void Warning(FilePosition pos, string message)
     {
-        Program.Warning("warning (\"{0}\", line {1}, column {2}): {3}", pos.Filename, pos.Line, pos.Column, message);
+        Program.Warning("syntax warning (\"{0}\", line {1}, column {2}): {3}", pos.Filename, pos.Line, pos.Column, message);
     }
 
     static void Error(FilePosition pos, string message)
