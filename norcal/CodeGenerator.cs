@@ -860,19 +860,15 @@ class CodeGenerator
         {
             if (r.Tag == OperandTag.Immediate)
             {
-                if (r.Value > 0xFF)
-                {
-                    Replace(r, OperandInfo.MakeImmediate(r.Value & 0xFF, desiredType));
-                    narrowed = true;
-                }
+                narrowed = r.Value > 0xFF;
+                Replace(r, OperandInfo.MakeImmediate(r.Value & 0xFF, desiredType));
             }
             else
             {
                 narrowed = true;
+                // The actual type doesn't need to be modified; just change the operand's type to exclude the high byte.
+                Replace(r, r.WithType(desiredType));
             }
-
-            // The actual type doesn't need to be modified; just change the operand's type to exclude the high byte.
-            Replace(r, OperandInfo.MakeRegister(OperandRegister.Accumulator, desiredType));
         }
         else if (kind == Conversion.Explicit && SizeOf(originalType) == SizeOf(desiredType))
         {
