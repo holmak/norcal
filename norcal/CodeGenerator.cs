@@ -15,6 +15,7 @@ class CodeGenerator
     List<OperandInfo> Stack = new List<OperandInfo>();
     long StackEpoch = 100;
     string NameOfCurrentFunction = null;
+    CType ReturnTypeOfCurrentFunction = null;
     int NextTemporary = 0;
 
     static readonly string TempPointer = "$ptr";
@@ -163,6 +164,7 @@ class CodeGenerator
 
                 Emit(Tag.Function, functionName);
                 NameOfCurrentFunction = functionName;
+                ReturnTypeOfCurrentFunction = returnType;
             }
             else if (Next().MatchTag(Tag.Constant) || Next().MatchTag(Tag.ReadonlyData) || Next().MatchTag(Tag.Struct))
             {
@@ -722,8 +724,19 @@ class CodeGenerator
             {
                 ConsumeInput(1);
 
-                LoadAccumulator(Peek(0));
+                OperandReference top = Peek(0);
+
+                ConvertType(Conversion.Implicit, top, ReturnTypeOfCurrentFunction);
+                LoadAccumulator(top);
                 Drop(1);
+                EmitAsm("RTS");
+            }
+            else if (Next().Match(Tag.ReturnImplicitly))
+            {
+                ConsumeInput(1);
+
+                // TODO: Return statement analysis will make this fallback code unnecessary for non-void functions.
+                // Functions that return non-void should never reach this point.
                 EmitAsm("RTS");
             }
             else if (Next().Match(Tag.Call, out functionName, out argCount))

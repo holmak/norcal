@@ -552,15 +552,28 @@ void reset()
 @out
 @error
 
-uint8_t fwide()
+void v()
 {
-    uint16_t wide = 0x1234;
-    return wide;
+    return 56;
 }
 
 void reset()
 {
-    OUT = fwide();
+    v();
+    STOP = 0;
+}
+
+@out
+@error
+
+u8 f()
+{
+    return;
+}
+
+void reset()
+{
+    OUTB = f();
     STOP = 0;
 }
 

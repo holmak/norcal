@@ -164,11 +164,7 @@ partial class Parser
                         ParseStatement(true);
                     }
 
-                    // TODO: Return statement analysis will make this fallback code unnecessary.
-                    // Functions that return non-void should never reach this point.
-                    Emit(Tag.PushImmediate, 0);
-                    Emit(Tag.Return);
-
+                    Emit(Tag.ReturnImplicitly);
                     EndScope();
                 }
                 else
