@@ -1607,16 +1607,6 @@ void reset()
     STOP = 0;
 }
 
-@ Invalid conditional expressions
-@error
-void reset()
-{
-    uint8_t a = 0;
-    uint16_t b = 0;
-    OUTB = (a == 4) ? a : b;
-    STOP = 0;
-}
-
 @ Logical operators
 
 @out 21 31 40 41
