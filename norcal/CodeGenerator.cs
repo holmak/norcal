@@ -731,12 +731,10 @@ class CodeGenerator
                 Drop(1);
                 EmitAsm("RTS");
             }
-            else if (Next().Match(Tag.ReturnImplicitly))
+            else if (Next().Match(Tag.ReturnVoid))
             {
                 ConsumeInput(1);
 
-                // TODO: Return statement analysis will make this fallback code unnecessary for non-void functions.
-                // Functions that return non-void should never reach this point.
                 EmitAsm("RTS");
             }
             else if (Next().Match(Tag.Call, out functionName, out argCount))

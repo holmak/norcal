@@ -164,7 +164,7 @@ partial class Parser
                         ParseStatement(true);
                     }
 
-                    Emit(Tag.ReturnImplicitly);
+                    Emit(Tag.ReturnVoid);
                     EndScope();
                 }
                 else
@@ -421,9 +421,17 @@ partial class Parser
         else if (TryParseName("return"))
         {
             if (!allowLong) Error_NotAllowedInFor();
-            ParseExpr();
-            Emit(Tag.Return);
-            Expect(TokenType.SEMICOLON);
+
+            if (TryParse(TokenType.SEMICOLON))
+            {
+                Emit(Tag.ReturnVoid);
+            }
+            else
+            {
+                ParseExpr();
+                Emit(Tag.Return);
+                Expect(TokenType.SEMICOLON);
+            }
         }
         else if (TryParseName("__asm"))
         {

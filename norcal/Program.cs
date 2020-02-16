@@ -235,7 +235,7 @@ static class Tag
     public static readonly string NoOperation = "$nop";
     public static readonly string AddressOf = "$address_of";
     public static readonly string Return = "$return";
-    public static readonly string ReturnImplicitly = "$return_implicitly";
+    public static readonly string ReturnVoid = "$return_void";
     public static readonly string Cast = "$cast";
     public static readonly string Field = "$field";
     public static readonly string Continue = "$continue";
