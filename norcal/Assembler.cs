@@ -251,7 +251,7 @@ class Assembler
 
         if (mode == AddressMode.Relative && (value < sbyte.MinValue || value > sbyte.MaxValue))
         {
-            Program.Panic("relative branch offset is too large: {0}", operand.Show());
+            Program.Error("relative branch offset is too large: {0}", operand.Show());
         }
         else
         {
@@ -263,7 +263,7 @@ class Assembler
 
             if (actualSize > GetFormalOperandSize(mode))
             {
-                Program.Panic("assembly operand is too large: {0}", operand.Show());
+                Program.Error("assembly operand is too large: {0}", operand.Show());
             }
         }
 
