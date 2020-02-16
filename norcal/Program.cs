@@ -11,7 +11,6 @@ static class Program
 {
     public static bool EnableDebugOutput { get; private set; } = false;
     private static bool AttachDebuggerOnError = false;
-    private static int NextPassNumber = 0;
 
     public static readonly string DebugOutputPath = "debug_output";
     public static readonly string NamespaceSeparator = ":";
@@ -67,9 +66,9 @@ static class Program
         try
         {
             IReadOnlyList<Expr> stackCode = Parser.ParseFiles(sourceFilenames);
-            if (EnableDebugOutput) WritePassOutputToFile("stack-code", ShowAssembly(stackCode));
+            if (EnableDebugOutput) WritePassOutputToFile("virtual_stack_code", ShowAssembly(stackCode));
             IReadOnlyList<Expr> assembly = CodeGenerator.Convert(stackCode);
-            if (EnableDebugOutput) WritePassOutputToFile("assembly", ShowAssembly(assembly));
+            if (EnableDebugOutput) WritePassOutputToFile("assembly_code", ShowAssembly(assembly));
             Assembler.Assemble(assembly, outputFilename);
 
             if (EnableDebugOutput)
@@ -94,27 +93,9 @@ static class Program
         }
     }
 
-    public static void WritePassOutputToFile(string passName, List<Expr> program)
-    {
-        WritePassOutputToFile(passName, ShowProgram(program));
-    }
-
     public static void WritePassOutputToFile(string passName, string output)
     {
-        WriteDebugFile(string.Format("pass{0}-{1}.txt", NextPassNumber, passName), output);
-        NextPassNumber += 1;
-    }
-
-    static string ShowProgram(List<Expr> program)
-    {
-        StringBuilder sb = new StringBuilder();
-        foreach (Expr decl in program)
-        {
-            sb.Append(decl.ShowMultiline());
-            sb.AppendLine();
-            sb.AppendLine();
-        }
-        return sb.ToString();
+        WriteDebugFile(string.Format("{0}.txt", passName), output);
     }
 
     static string ShowAssembly(IReadOnlyList<Expr> assembly)
