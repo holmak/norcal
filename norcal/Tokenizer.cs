@@ -17,7 +17,7 @@ class Tokenizer
     {
         Tokenizer tokenizer = new Tokenizer();
         tokenizer.Input = File.ReadAllText(filename);
-        tokenizer.InputPos.Filename = filename;
+        tokenizer.InputPos = new FilePosition(filename, 0, 0);
         return tokenizer.Tokenize();
     }
 
@@ -305,12 +305,11 @@ class Tokenizer
         char c = GetNextChar();
         if (c == '\n')
         {
-            InputPos.Line++;
-            InputPos.Column = 0;
+            InputPos = new FilePosition(InputPos.Filename, InputPos.Line + 1, 0);
         }
         else
         {
-            InputPos.Column++;
+            InputPos = new FilePosition(InputPos.Filename, InputPos.Line, InputPos.Column + 1);
         }
     }
 
@@ -493,6 +492,13 @@ static class TokenInfo
 
 struct FilePosition
 {
-    public string Filename;
-    public int Line, Column;
+    public readonly string Filename;
+    public readonly int Line, Column;
+
+    public FilePosition(string filename, int line, int column)
+    {
+        Filename = filename;
+        Line = line;
+        Column = column;
+    }
 }
