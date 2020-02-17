@@ -7,6 +7,14 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
+/// <summary>
+/// Global compile-time configuration options.
+/// </summary>
+public static class Config
+{
+    public static readonly bool ShowSourcePositionInDebugOutput = false;
+}
+
 static class Program
 {
     public static bool EnableDebugOutput { get; private set; } = false;
@@ -112,6 +120,11 @@ static class Program
             bool isTopLevel = e.MatchTag(Tag.Function) || e.MatchTag(Tag.Constant);
             if (isTopLevel) sb.AppendLine();
             if (!isTopLevel && !e.MatchTag(Tag.Label)) line = "\t";
+
+            if (Config.ShowSourcePositionInDebugOutput)
+            {
+                sb.AppendLine(line + "\t<" + e.Source + ">");
+            }
 
             if (e.Match(Tag.Comment, out text)) line += "; " + text;
             else if (e.Match(Tag.Label, out text)) line += text + ":";

@@ -12,6 +12,7 @@ partial class Parser
     List<LexicalScope> Scopes = new List<LexicalScope>();
     LoopScope Loop = null;
     List<string> UndefinedLabels = new List<string>();
+    FilePosition SourcePosition = FilePosition.Unknown;
 
     List<Expr> Output => OutputStack.Last();
 
@@ -46,7 +47,7 @@ partial class Parser
 
     void Emit(Expr e)
     {
-        Output.Add(e);
+        Output.Add(e.WithSource(SourcePosition));
     }
 
     void EmitRange(IEnumerable<Expr> items)
@@ -934,6 +935,8 @@ partial class Parser
 
     void ConsumeToken()
     {
+        SourcePosition = Input[0].Position;
+
         // The final "end of file" token is never removed.
         if (Input[0].Tag != TokenType.EOF)
         {
@@ -1168,8 +1171,7 @@ partial class Parser
 
     void ParserError(string message)
     {
-        Token token = PeekToken();
-        FilePosition pos = token.Position;
+        FilePosition pos = SourcePosition;
         Program.Error("syntax error (\"{0}\", line {1}, column {2}): {3}", pos.Filename, pos.Line + 1, pos.Column + 1, message);
     }
 }

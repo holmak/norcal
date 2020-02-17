@@ -501,4 +501,11 @@ struct FilePosition
         Line = line;
         Column = column;
     }
+
+    public static readonly FilePosition Unknown = new FilePosition("<unknown>", 0, 0);
+
+    public override string ToString()
+    {
+        return string.Format("{0}, line {1}, column {2}", Filename, Line + 1, Column + 1);
+    }
 }

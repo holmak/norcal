@@ -17,6 +17,7 @@ class CodeGenerator
     string NameOfCurrentFunction = null;
     CType ReturnTypeOfCurrentFunction = null;
     int NextTemporary = 0;
+    FilePosition SourcePosition = FilePosition.Unknown;
 
     static readonly string TempPointer = "$ptr";
 
@@ -777,6 +778,7 @@ class CodeGenerator
 
     void ConsumeInput(int count)
     {
+        SourcePosition = Input[0].Source;
         count = Math.Min(count, Input.Count);
         Input.RemoveRange(0, count);
     }
@@ -788,7 +790,7 @@ class CodeGenerator
 
     void Emit(Expr e)
     {
-        Output.Add(e);
+        Output.Add(e.WithSource(SourcePosition));
     }
 
     void EmitAsm(string mnemonic) => Emit(Expr.MakeAsm(mnemonic));

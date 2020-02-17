@@ -12,6 +12,13 @@ using System.Threading.Tasks;
 class Expr
 {
     private readonly object[] Args;
+    public readonly FilePosition Source = FilePosition.Unknown;
+
+    Expr(object[] args, FilePosition source)
+    {
+        Args = args;
+        Source = source;
+    }
 
     Expr(object[] args)
     {
@@ -37,7 +44,10 @@ class Expr
         return Make(Tag.Asm, mnemonic, operand);
     }
 
-    public IEnumerable<object> GetArgs() => Args;
+    public Expr WithSource(FilePosition newSource)
+    {
+        return new Expr(Args, newSource);
+    }
 
     public bool MatchTag(string tag)
     {
