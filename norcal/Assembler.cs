@@ -280,7 +280,7 @@ class Assembler
         else if (mode == AddressMode.Relative) return AsmInfo.REL;
         else
         {
-            Program.Panic("unknown assembly modifier: {0}", mode);
+            Program.UnhandledCase();
             return AsmInfo.INV;
         }
     }

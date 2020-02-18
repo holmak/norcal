@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -79,7 +80,7 @@ partial class Parser
     {
         while (TryParseName("static"))
         {
-            Program.Warning("warning: all input is treated as a single translation unit, so 'static' has no effect");
+            Program.Warning(SourcePosition, "warning: all input is treated as a single translation unit, so 'static' has no effect");
         }
 
         if (TryParseName("define"))
@@ -1092,7 +1093,7 @@ partial class Parser
 
     void EndScope()
     {
-        if (Scopes.Count <= 1) Program.Panic("cannot end global scope");
+        if (Scopes.Count <= 1) Program.Panic(SourcePosition, "cannot end global scope");
         Scopes.RemoveAt(Scopes.Count - 1);
     }
 
@@ -1126,7 +1127,7 @@ partial class Parser
         }
         else if (functionScope.QualifiedNames.ContainsKey(name))
         {
-            Program.Error("symbol already defined: {0}", name);
+            ParserError("symbol already defined: {0}", name);
         }
         else
         {
@@ -1139,7 +1140,7 @@ partial class Parser
     string DefineQualifiedVariableName(string name)
     {
         var table = Scopes.Last().QualifiedNames;
-        if (table.ContainsKey(name)) Program.Error("symbol already defined: {0}", name);
+        if (table.ContainsKey(name)) ParserError("symbol already defined: {0}", name);
         string qualifiers = string.Join(Program.NamespaceSeparator, Scopes.Skip(1).Select(x => x.Name));
         string qualifiedName = (qualifiers.Length > 0) ? (qualifiers + Program.NamespaceSeparator + name) : name;
         table.Add(name, qualifiedName);
@@ -1167,11 +1168,9 @@ partial class Parser
         return DefineQualifiedLabelName(name);
     }
 
-    void ParserError(string format, params object[] args) => ParserError(string.Format(format, args));
-
-    void ParserError(string message)
+    [DebuggerStepThrough]
+    void ParserError(string format, params object[] args)
     {
-        FilePosition pos = SourcePosition;
-        Program.Error("syntax error (\"{0}\", line {1}, column {2}): {3}", pos.Filename, pos.Line + 1, pos.Column + 1, message);
+        Program.Error(SourcePosition, format, args);
     }
 }

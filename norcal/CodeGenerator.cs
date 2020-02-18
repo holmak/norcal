@@ -115,13 +115,15 @@ class CodeGenerator
 
                     if (values.Length > type.Dimension)
                     {
-                        Error("Declared size of array ({0}) is too small for the number of specified values ({1}).",
+                        Program.Error(
+                            op.Source,
+                            "declared size of array ({0}) is too small for the number of specified values ({1})",
                             type.Dimension, values.Length);
                     }
                 }
                 else if (values.Length != 1)
                 {
-                    Program.Panic("Non-array initializers must contain exactly one value.");
+                    Program.Panic(op.Source, "non-array initializers must contain exactly one value");
                 }
 
                 // Convert the data to raw bytes:
@@ -1104,14 +1106,16 @@ class CodeGenerator
         return !name.Contains(Program.NamespaceSeparator);
     }
 
-    static void Warning(string format, params object[] args)
+    [DebuggerStepThrough]
+    void Warning(string format, params object[] args)
     {
-        Program.Warning("warning: " + format, args);
+        Program.Warning(SourcePosition, format, args);
     }
 
-    static void Error(string format, params object[] args)
+    [DebuggerStepThrough]
+    void Error(string format, params object[] args)
     {
-        Program.Error("error: " + format, args);
+        Program.Error(SourcePosition, format, args);
     }
 
     static readonly Dictionary<string, string> UnaryRuntimeOperators = new Dictionary<string, string>

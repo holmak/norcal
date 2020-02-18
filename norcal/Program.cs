@@ -63,7 +63,8 @@ static class Program
 
         if (help)
         {
-            Error("usage: norcal first.c second.c ... [-o out.nes] [--debug-output]");
+            Console.Error.WriteLine("usage: norcal first.c second.c ... [-o out.nes] [--debug-output]");
+            Exit(1);
         }
 
         if (sourceFilenames.Count == 0)
@@ -150,27 +151,71 @@ static class Program
         else return string.Format("${0:X}", n);
     }
 
+    public static void GeneralError(Severity severity, string format, params object[] args)
+    {
+        GeneralError(severity, Maybe.Nothing, format, args);
+    }
+
     [DebuggerStepThrough]
     public static void Warning(string format, params object[] args)
     {
-        string message = string.Format(format, args);
-        Console.Error.WriteLine(message);
+        GeneralError(Severity.Warning, Maybe.Nothing, format, args);
+    }
+
+    [DebuggerStepThrough]
+    public static void Warning(Maybe<FilePosition> position, string format, params object[] args)
+    {
+        GeneralError(Severity.Warning, position, format, args);
     }
 
     [DebuggerStepThrough]
     public static void Error(string format, params object[] args)
     {
-        string message = string.Format(format, args);
-        Console.Error.WriteLine(message);
-        Exit(1);
+        GeneralError(Severity.Error, Maybe.Nothing, format, args);
+    }
+
+    [DebuggerStepThrough]
+    public static void Error(Maybe<FilePosition> position, string format, params object[] args)
+    {
+        GeneralError(Severity.Error, position, format, args);
     }
 
     [DebuggerStepThrough]
     public static void Panic(string format, params object[] args)
     {
+        GeneralError(Severity.InternalError, Maybe.Nothing, format, args);
+    }
+
+    [DebuggerStepThrough]
+    public static void Panic(Maybe<FilePosition> position, string format, params object[] args)
+    {
+        GeneralError(Severity.InternalError, position, format, args);
+    }
+
+    [DebuggerStepThrough]
+    public static void GeneralError(Severity severity, Maybe<FilePosition> position, string format, params object[] args)
+    {
+        string prefix;
+        if (position.HasValue)
+        {
+            prefix = string.Format("{0} {1}: ", position.Value.ToString(), SeverityText[severity]);
+        }
+        else
+        {
+            prefix = string.Format("{0}: ", SeverityText[severity]);
+        }
+
         string message = string.Format(format, args);
-        Console.Error.WriteLine(message);
-        Exit(2);
+        Console.Error.WriteLine(prefix + message);
+
+        if (severity == Severity.Error)
+        {
+            Exit(1);
+        }
+        else if (severity == Severity.InternalError)
+        {
+            Exit(2);
+        }
     }
 
     [DebuggerStepThrough]
@@ -193,10 +238,17 @@ static class Program
     }
 
     [DebuggerStepThrough]
-    public static void NYI() => Panic("not yet implemented");
+    public static void NYI() => GeneralError(Severity.InternalError, Maybe.Nothing, "not yet implemented");
 
     [DebuggerStepThrough]
-    public static void UnhandledCase() => Panic("unhandled case");
+    public static void UnhandledCase() => GeneralError(Severity.InternalError, Maybe.Nothing, "unhandled case");
+
+    static readonly Dictionary<Severity, string> SeverityText = new Dictionary<Severity, string>
+    {
+        { Severity.Warning, "warning" },
+        { Severity.Error, "error" },
+        { Severity.InternalError, "internal error" },
+    };
 }
 
 class FieldInfo
@@ -279,4 +331,11 @@ static class Tag
     public static readonly string Comment = "$comment";
     public static readonly string SkipTo = "$skip_to";
     public static readonly string Word = "$word";
+}
+
+enum Severity
+{
+    Warning,
+    Error,
+    InternalError,
 }

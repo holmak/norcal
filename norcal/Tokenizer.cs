@@ -56,8 +56,8 @@ class Tokenizer
                 while (true)
                 {
                     char c = GetNextChar();
-                    if (c == '\0') Error(InputPos, "unexpected end of file in string");
-                    if (c == '\n') Error(InputPos, "unexpected end of line in string");
+                    if (c == '\0') Program.Error(InputPos, "unexpected end of file in string");
+                    if (c == '\n') Program.Error(InputPos, "unexpected end of line in string");
                     if (c == '"')
                     {
                         FetchChar();
@@ -75,7 +75,7 @@ class Tokenizer
                 }
                 else
                 {
-                    Warning(InputPos, "preprocessor directives are ignored");
+                    Program.Warning(InputPos, "preprocessor directives are ignored");
                     SkipToNextLine();
                     continue;
                 }
@@ -195,7 +195,7 @@ class Tokenizer
             else
             {
                 // HACK: Show the input that could not be tokenized:
-                Error(pos, "invalid token: " + new string(Input.Skip(Next).Take(15).ToArray()));
+                Program.Error(pos, "invalid token: " + new string(Input.Skip(Next).Take(15).ToArray()));
             }
 
             tokens.Add(new Token
@@ -249,7 +249,7 @@ class Tokenizer
         string decimalDigits = "0123456789";
         string hexDigits = "0123456789ABCDEF";
 
-        if (original.Length == 0) Program.Panic("names must not be empty");
+        if (original.Length == 0) Program.Panic(pos, "names must not be empty");
         string literal = original.ToUpperInvariant();
 
         // If the token doesn't start with a digit, it isn't a number.
@@ -276,13 +276,13 @@ class Tokenizer
 
         if (literal.Length == 0)
         {
-            Error(pos, "number contains no digits: " + original);
+            Program.Error(pos, "number contains no digits: " + original);
         }
 
         string allowedDigits = hexDigits.Substring(0, numberBase);
         if (!literal.All(x => allowedDigits.Contains(x)))
         {
-            Error(pos, "number contains invalid characters: " + original);
+            Program.Error(pos, "number contains invalid characters: " + original);
         }
 
         integer = 0;
@@ -341,16 +341,6 @@ class Tokenizer
         int maxLength = s.Length - start;
         if (length > maxLength) length = maxLength;
         return s.Substring(start, length);
-    }
-
-    static void Warning(FilePosition pos, string message)
-    {
-        Program.Warning("syntax warning (\"{0}\", line {1}, column {2}): {3}", pos.Filename, pos.Line, pos.Column, message);
-    }
-
-    static void Error(FilePosition pos, string message)
-    {
-        Program.Error("syntax error (\"{0}\", line {1}, column {2}): {3}", pos.Filename, pos.Line, pos.Column, message);
     }
 }
 
@@ -506,6 +496,6 @@ struct FilePosition
 
     public override string ToString()
     {
-        return string.Format("{0}, line {1}, column {2}", Filename, Line + 1, Column + 1);
+        return string.Format("{0} (line {1}, column {2})", Filename, Line + 1, Column + 1);
     }
 }
