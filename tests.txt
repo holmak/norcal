@@ -1828,6 +1828,15 @@ void reset()
     }
 }
 
+@out 70
+// Constants
+define uint8_t RESULT = 70;
+void reset()
+{
+    OUTB = RESULT;
+    STOP = 0;
+}
+
 @out 0xAB 0xCD
 // High/low bytes
 void reset()

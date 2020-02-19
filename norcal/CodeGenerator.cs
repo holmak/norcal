@@ -218,7 +218,29 @@ class CodeGenerator
                     }
                 }
 
-                Push(OperandInfo.MakeVariableAddress(name, CType.MakePointer(valueType)));
+                if (sym.Tag == SymbolTag.Variable)
+                {
+                    Push(OperandInfo.MakeVariableAddress(name, CType.MakePointer(valueType)));
+                }
+                else if (sym.Tag == SymbolTag.Constant)
+                {
+                    Push(OperandInfo.MakeImmediate(sym.Value, sym.Type));
+
+                    // Ignore the subsequent load op:
+                    if (Next().Match(Tag.Load))
+                    {
+                        ConsumeInput(1);
+                    }
+                    else
+                    {
+                        // Variable references should always be followed by a load.
+                        Program.UnhandledCase();
+                    }
+                }
+                else
+                {
+                    Program.UnhandledCase();
+                }
             }
             else if (Next().Match(Tag.DropFinal))
             {
