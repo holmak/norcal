@@ -112,6 +112,7 @@ partial class Parser
                     region = MemoryRegion.Ram;
                     CType fieldType = ExpectType();
                     string fieldName = ExpectAnyName();
+                    ParseArrayDeclaration(ref fieldType);
                     fields.Add(new FieldInfo(region, fieldType, fieldName));
                     while (TryParse(TokenType.COMMA))
                     {
@@ -122,7 +123,7 @@ partial class Parser
                 }
                 Expect(TokenType.SEMICOLON);
 
-                string tag = type.Tag == CTypeTag.Struct ? Tag.Struct : Tag.Union;
+                string tag = (type.Tag == CTypeTag.Struct) ? Tag.Struct : Tag.Union;
                 Emit(tag, type.Name, fields.ToArray());
             }
             else
