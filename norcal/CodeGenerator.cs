@@ -10,7 +10,7 @@ class CodeGenerator
     List<Expr> Input;
     List<Expr> Output = new List<Expr>();
     Dictionary<string, CFunctionInfo> Functions = new Dictionary<string, CFunctionInfo>();
-    Dictionary<string, CStructInfo> Structs = new Dictionary<string, CStructInfo>();
+    Dictionary<string, CAggregateInfo> AggregateTypes = new Dictionary<string, CAggregateInfo>();
     Dictionary<string, Symbol> Symbols = new Dictionary<string, Symbol>();
     List<OperandInfo> Stack = new List<OperandInfo>();
     long StackEpoch = 100;
@@ -38,27 +38,40 @@ class CodeGenerator
         foreach (Expr op in Input)
         {
             string name;
-            FieldInfo[] fields;
-            if (op.Match(Tag.Struct, out name, out fields))
+            FieldInfo[] parsedFields;
+            if (op.Match(Tag.Struct, out name, out parsedFields) ||
+                op.Match(Tag.Union, out name, out parsedFields))
             {
-                CField[] structFields = new CField[fields.Length];
+                bool union = op.MatchTag(Tag.Union);
+
+                CField[] fields = new CField[parsedFields.Length];
                 int offset = 0;
-                for (int i = 0; i < fields.Length; i++)
+                int maxSize = 1;
+                for (int i = 0; i < parsedFields.Length; i++)
                 {
-                    structFields[i] = new CField
+                    fields[i] = new CField
                     {
-                        Type = fields[i].Type,
-                        Name = fields[i].Name,
+                        Type = parsedFields[i].Type,
+                        Name = parsedFields[i].Name,
                         Offset = offset,
                     };
-                    offset += SizeOf(fields[i].Type);
+
+                    int fieldSize = SizeOf(parsedFields[i].Type);
+                    if (!union) offset += fieldSize;
+                    maxSize = Math.Max(maxSize, fieldSize);
                 }
 
-                Structs.Add(name, new CStructInfo
+                CAggregateInfo info;
+                if (union)
                 {
-                    TotalSize = offset,
-                    Fields = structFields,
-                });
+                    info = new CAggregateInfo(AggregateLayout.Union, maxSize, fields);
+                }
+                else
+                {
+                    info = new CAggregateInfo(AggregateLayout.Struct, offset, fields);
+                }
+
+                AggregateTypes.Add(name, info);
             }
         }
 
@@ -169,7 +182,8 @@ class CodeGenerator
                 NameOfCurrentFunction = functionName;
                 ReturnTypeOfCurrentFunction = returnType;
             }
-            else if (Next().MatchTag(Tag.Constant) || Next().MatchTag(Tag.ReadonlyData) || Next().MatchTag(Tag.Struct))
+            else if (Next().MatchTag(Tag.Constant) || Next().MatchTag(Tag.ReadonlyData) ||
+                Next().MatchTag(Tag.Struct) || Next().MatchTag(Tag.Union))
             {
                 ConsumeInput(1);
 
@@ -457,17 +471,17 @@ class CodeGenerator
                 OperandReference structAddress = Peek(0);
 
                 // Check types:
-                CType structType = DereferencePointerType(structAddress.Type);
-                if (!structType.IsStruct)
+                CType aggregateType = DereferencePointerType(structAddress.Type);
+                if (!aggregateType.IsStructOrUnion)
                 {
-                    Error("expression must be a struct");
+                    Error("expression must be a struct or union");
                 }
-                CStructInfo structInfo = GetStructInfo(structType.Name);
+                CAggregateInfo aggregateInfo = GetAggregateInfo(aggregateType.Name);
 
-                CField fieldInfo = structInfo.Fields.FirstOrDefault(x => x.Name == name);
+                CField fieldInfo = aggregateInfo.Fields.FirstOrDefault(x => x.Name == name);
                 if (fieldInfo == null)
                 {
-                    Error("struct type '{0}' does not contain a field named '{1}'", structType.Name, name);
+                    Error("struct type '{0}' does not contain a field named '{1}'", aggregateType.Name, name);
                 }
 
                 // Replace with simpler stack code:
@@ -867,7 +881,9 @@ class CodeGenerator
     {
         CType originalType = r.Type;
 
-        if (originalType != desiredType)
+        // Leave a comment whenever a type conversion occurs.
+        // (Except when the operand is an immediate; converting immediates doesn't emit any code.)
+        if (originalType != desiredType && r.Tag != OperandTag.Immediate)
         {
             Emit(Tag.Comment, string.Format("convert type from '{0}' to '{1}':", originalType.Show(), desiredType.Show()));
         }
@@ -929,11 +945,20 @@ class CodeGenerator
         return pointer.Subtype;
     }
 
-    CStructInfo GetStructInfo(string name)
+    CAggregateInfo GetAggregateInfo(string name)
     {
-        CStructInfo info;
-        if (!Structs.TryGetValue(name, out info)) Error("struct not defined: {0}", name);
+        CAggregateInfo info;
+        if (!AggregateTypes.TryGetValue(name, out info)) Error("struct or union not defined: {0}", name);
         return info;
+    }
+
+    static string AggregateLayoutToString(AggregateLayout layout)
+    {
+        if (layout == AggregateLayout.Struct) return "struct";
+        else if (layout == AggregateLayout.Union) return "union";
+
+        Program.UnhandledCase();
+        return null;
     }
 
     int SizeOf(CType type)
@@ -953,9 +978,9 @@ class CodeGenerator
         {
             return 2;
         }
-        else if (type.IsStruct)
+        else if (type.IsStructOrUnion)
         {
-            CStructInfo info = GetStructInfo(type.Name);
+            CAggregateInfo info = GetAggregateInfo(type.Name);
             return info.TotalSize;
         }
         else if (type.IsArray)

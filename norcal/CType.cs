@@ -10,6 +10,7 @@ enum CTypeTag
     Simple,
     Pointer,
     Struct,
+    Union,
     Array,
 }
 
@@ -64,6 +65,15 @@ class CType : IEquatable<CType>
         };
     }
 
+    public static CType MakeUnion(string name)
+    {
+        return new CType
+        {
+            Tag = CTypeTag.Union,
+            Name = name,
+        };
+    }
+
     public static CType MakeArray(CType elementType, int dimension)
     {
         return new CType
@@ -76,7 +86,7 @@ class CType : IEquatable<CType>
 
     public bool IsSimple => Tag == CTypeTag.Simple;
     public bool IsPointer => Tag == CTypeTag.Pointer;
-    public bool IsStruct => Tag == CTypeTag.Struct;
+    public bool IsStructOrUnion => Tag == CTypeTag.Struct || Tag == CTypeTag.Union;
     public bool IsArray => Tag == CTypeTag.Array;
     public bool IsInteger => IsSimple && (SimpleType == CSimpleType.UInt8 || SimpleType == CSimpleType.UInt16);
 
@@ -112,6 +122,7 @@ class CType : IEquatable<CType>
         if (Tag == CTypeTag.Simple) return SimpleType.ToString();
         else if (Tag == CTypeTag.Pointer) return "pointer to " + Subtype.Show();
         else if (Tag == CTypeTag.Struct) return "struct " + Name;
+        else if (Tag == CTypeTag.Union) return "union " + Name;
         else if (Tag == CTypeTag.Array) return string.Format("array[{1}] of {0}", Subtype.Show(), Dimension);
         else throw new NotImplementedException();
     }

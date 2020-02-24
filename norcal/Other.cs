@@ -6,10 +6,24 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-class CStructInfo
+class CAggregateInfo
 {
-    public int TotalSize;
-    public CField[] Fields;
+    public readonly AggregateLayout Layout;
+    public readonly int TotalSize;
+    public readonly CField[] Fields;
+
+    public CAggregateInfo(AggregateLayout layout, int totalSize, CField[] fields)
+    {
+        Layout = layout;
+        TotalSize = totalSize;
+        Fields = fields;
+    }
+}
+
+enum AggregateLayout
+{
+    Struct,
+    Union,
 }
 
 class CField

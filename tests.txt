@@ -779,6 +779,32 @@ void reset()
     STOP = 0;
 }
 
+@ unions
+@out 0x1234 0x34 0x12 0x5634
+
+struct HighLow
+{
+    u8 Low, High;
+};
+
+union Parts
+{
+    u16 Word;
+    struct HighLow Bytes;
+};
+
+void reset()
+{
+    union Parts p;
+    p.Word = 0x1234;
+    OUT = p.Word;
+    OUTB = p.Bytes.Low;
+    OUTB = p.Bytes.High;
+    p.Bytes.High = 0x56;
+    OUT = p.Word;
+    STOP = 0;
+}
+
 @ arrays
 @out 42
 
@@ -1834,6 +1860,15 @@ define uint8_t RESULT = 70;
 void reset()
 {
     OUTB = RESULT;
+    STOP = 0;
+}
+
+@error
+// Constants
+define u8 SMALL = 0x1234;
+void reset()
+{
+    OUTB = SMALL;
     STOP = 0;
 }
 

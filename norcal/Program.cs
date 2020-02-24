@@ -284,6 +284,7 @@ static class Tag
     public static readonly string Variable = "$variable";
     public static readonly string ReadonlyData = "$readonly_data";
     public static readonly string Struct = "$struct";
+    public static readonly string Union = "$union";
 
     // Special nodes:
     public static readonly string NoOperation = "$nop";

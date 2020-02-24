@@ -103,7 +103,7 @@ partial class Parser
 
             CType type = ExpectType();
 
-            if (type.IsStruct && TryParse(TokenType.LBRACE))
+            if (type.IsStructOrUnion && TryParse(TokenType.LBRACE))
             {
                 List<FieldInfo> fields = new List<FieldInfo>();
                 while (!TryParse(TokenType.RBRACE))
@@ -122,7 +122,8 @@ partial class Parser
                 }
                 Expect(TokenType.SEMICOLON);
 
-                Emit(Tag.Struct, type.Name, fields.ToArray());
+                string tag = type.Tag == CTypeTag.Struct ? Tag.Struct : Tag.Union;
+                Emit(tag, type.Name, fields.ToArray());
             }
             else
             {
@@ -1045,9 +1046,13 @@ partial class Parser
         }
         else if (TryParseName("struct"))
         {
-            string name;
-            name = ExpectAnyName();
+            string name = ExpectAnyName();
             type = CType.MakeStruct(name);
+        }
+        else if (TryParseName("union"))
+        {
+            string name = ExpectAnyName();
+            type = CType.MakeUnion(name);
         }
         else
         {
