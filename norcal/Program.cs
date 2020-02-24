@@ -110,8 +110,16 @@ static class Program
     static string ShowAssembly(IReadOnlyList<Expr> assembly)
     {
         StringBuilder sb = new StringBuilder();
-        foreach (Expr e in assembly)
+        for (int i = 0; i < assembly.Count; i++)
         {
+            // Skip load/address-of pairs, which cancel each other out.
+            while (i + 1 < assembly.Count && assembly[i].Match(Tag.Load) && assembly[i + 1].Match(Tag.AddressOf))
+            {
+                i += 2;
+            }
+
+            Expr e = assembly[i];
+
             string line = "";
             string mnemonic, text;
             AsmOperand operand;
