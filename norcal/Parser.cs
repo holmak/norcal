@@ -1037,7 +1037,7 @@ partial class Parser
         {
             type = CType.Void;
         }
-        else if (TryParseName("uint8_t") || TryParseName("u8"))
+        else if (TryParseName("uint8_t") || TryParseName("u8") || TryParseName("char") || TryParseName("bool"))
         {
             type = CType.UInt8;
         }
