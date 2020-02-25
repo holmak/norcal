@@ -828,6 +828,38 @@ void reset()
     STOP = 0;
 }
 
+@ arrays
+@error
+
+void reset()
+{
+    u8 data[4];
+    u8 *p = &data[2];
+    data = p;
+    STOP = 0;
+}
+
+@ arrays in structs
+@out 0x1234 0x34 0x12 0x7834
+
+union Parts
+{
+    u16 Word;
+    u8 Bytes[2];
+};
+
+void reset()
+{
+    union Parts p;
+    p.Word = 0x1234;
+    OUT = p.Word;
+    OUTB = p.Bytes[0];
+    OUTB = p.Bytes[1];
+    p.Bytes[1] = 0x78;
+    OUT = p.Word;
+    STOP = 0;
+}
+
 @ comparison: equal
 @out 0
 void reset()

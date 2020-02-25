@@ -215,23 +215,6 @@ class CodeGenerator
                 }
                 CType valueType = sym.Type;
 
-                if (valueType.IsArray)
-                {
-                    // Arrays are treated like a pointer to their first element:
-                    valueType = valueType.Subtype;
-
-                    // Arrays can only be used as rvalues.
-                    // (In VSM terms, this means that every array operand must be "loaded".)
-                    if (Next().Match(Tag.Load))
-                    {
-                        ConsumeInput(1);
-                    }
-                    else
-                    {
-                        Error("arrays cannot be used as the target of an assignment");
-                    }
-                }
-
                 if (sym.Tag == SymbolTag.Variable)
                 {
                     Push(OperandInfo.MakeVariableAddress(name, CType.MakePointer(valueType)));
@@ -419,14 +402,21 @@ class CodeGenerator
 
                 // Check types:
                 CType loadedType = DereferencePointerType(address.Type);
-                int size = SizeOf(loadedType);
 
-                if (address.Tag == OperandTag.Immediate)
+                if (loadedType.IsArray)
+                {
+                    // The result of loading an array is a pointer to the first element of the array.
+                    // (This is the automatic "decay" of arrays to pointers.)
+                    ConvertType(Conversion.Explicit, address, CType.MakePointer(loadedType.Subtype));
+                }
+                else if (address.Tag == OperandTag.Immediate)
                 {
                     Program.Panic("the load operation should never be applied to an immediate");
                 }
                 else if (address.Tag == OperandTag.Variable || address.IsAccumulator)
                 {
+                    int size = SizeOf(loadedType);
+
                     // Copy the pointer to zero page so that it can be used:
                     Store(address, TempPointer);
 
