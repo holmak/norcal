@@ -552,6 +552,7 @@ void reset()
 @out
 @error
 
+// Cannot return value from void function.
 void v()
 {
     return 56;
@@ -566,6 +567,7 @@ void reset()
 @out
 @error
 
+// Cannot return without value.
 u8 f()
 {
     return;
@@ -1896,11 +1898,10 @@ void reset()
 }
 
 @error
-// Constants
+// Constant value is too large.
 define u8 SMALL = 0x1234;
 void reset()
 {
-    OUTB = SMALL;
     STOP = 0;
 }
 
