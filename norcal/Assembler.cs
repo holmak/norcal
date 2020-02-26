@@ -11,11 +11,14 @@ class Assembler
     Dictionary<string, int> Symbols = new Dictionary<string, int>();
     List<Fixup> Fixups = new List<Fixup>();
     int ZeroPageNext = ZeroPageStart;
+    int OamNext = OamStart;
     int RamNext = RamStart;
     DebugExporter Debug = new DebugExporter();
 
     static readonly int ZeroPageStart = 0x000;
     static readonly int ZeroPageEnd = 0x100;
+    static readonly int OamStart = 0x200;
+    static readonly int OamEnd = 0x300;
     static readonly int RamStart = 0x300;
     static readonly int RamEnd = 0x800;
 
@@ -308,6 +311,12 @@ class Assembler
             if (ZeroPageNext + size > ZeroPageEnd) Program.Error("Not enough zero page RAM to allocate global.");
             address = ZeroPageNext;
             ZeroPageNext += size;
+        }
+        else if (region.Tag == MemoryRegionTag.Oam)
+        {
+            if (OamNext + size > OamEnd) Program.Error("Not enough OAM to allocate global.");
+            address = OamNext;
+            OamNext += size;
         }
         else if (region.Tag == MemoryRegionTag.Ram)
         {

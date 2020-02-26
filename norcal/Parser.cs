@@ -230,6 +230,11 @@ partial class Parser
             region = MemoryRegion.ZeroPage;
             return true;
         }
+        else if (TryParseName("__oam"))
+        {
+            region = MemoryRegion.Oam;
+            return true;
+        }
         else if (TryParseName("__ram"))
         {
             region = MemoryRegion.Ram;
