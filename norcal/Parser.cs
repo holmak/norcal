@@ -362,11 +362,11 @@ partial class Parser
             string topLabel = MakeUniqueLabel("for_top");
 
             Expect(TokenType.LPAREN);
-            
+
             // Initialization:
             ParseStatement(false);
             Emit(Tag.Label, topLabel);
-            
+
             // Test:
             ParseExpr();
             Emit(Tag.JumpIfFalse, Loop.BreakLabel);
