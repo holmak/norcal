@@ -1145,6 +1145,9 @@ partial class Parser
 
     string MakeUniqueLabel(string prefix)
     {
+        // Start the name with a special symbol that will never appear in user-specified label names.
+        prefix = "$" + prefix;
+
         var table = Scopes[1].QualifiedNames;
 
         // Find a unique name:
