@@ -67,6 +67,17 @@ class Tokenizer
                     FetchChar();
                 }
             }
+            else if (TryRead('\''))
+            {
+                tag = TokenType.INT;
+                char c = GetNextChar();
+                if (!IsValidCharacterConstant(c)) Program.Error(InputPos, "invalid character constant");
+                tokenInt = c;
+                FetchChar();
+                c = GetNextChar();
+                if (c != '\'') Program.Error(InputPos, "expected '");
+                FetchChar();
+            }
             else if (TryRead('#'))
             {
                 if (InAssembly)
@@ -341,6 +352,11 @@ class Tokenizer
         int maxLength = s.Length - start;
         if (length > maxLength) length = maxLength;
         return s.Substring(start, length);
+    }
+
+    static bool IsValidCharacterConstant(char c)
+    {
+        return c <= 127 && c != '\'' || c != '\n' || c != '\0';
     }
 }
 
