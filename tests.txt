@@ -182,6 +182,34 @@ void reset()
     STOP = 0;
 }
 
+@ scope of local names
+@out 20 10
+
+void reset()
+{
+    OUTB = f(0);
+    OUTB = f(1);
+    STOP = 0;
+}
+
+u8 f(u8 x)
+{
+    // This one gets shadowed:
+    u8 tmp = 99;
+
+    if (x)
+    {
+        u8 tmp = 10;
+        return tmp;
+    }
+    else
+    {
+        // Same name, different scope.
+        u8 tmp = 20;
+        return tmp;
+    }
+}
+
 @ If statement
 @out 1 2 4
 void reset()

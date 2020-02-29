@@ -314,7 +314,9 @@ partial class Parser
             Emit(Tag.JumpIfFalse, elseLabel);
 
             // Parse the body:
+            BeginScope("if");
             ParseStatementBlock();
+            EndScope();
             Emit(Tag.Jump, endLabel);
 
             // Parse additional else statements:
@@ -332,14 +334,18 @@ partial class Parser
                     Emit(Tag.JumpIfFalse, elseLabel);
 
                     // Parse the body:
+                    BeginScope("if_else");
                     ParseStatementBlock();
+                    EndScope();
                     Emit(Tag.Jump, endLabel);
 
                     Emit(Tag.Label, elseLabel);
                 }
                 else
                 {
+                    BeginScope("else");
                     ParseStatementBlock();
+                    EndScope();
 
                     // An "else" that is not an "else if" means it's time to stop:
                     break;
