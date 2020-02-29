@@ -206,7 +206,8 @@ class Tokenizer
             else
             {
                 // HACK: Show the input that could not be tokenized:
-                Program.Error(pos, "invalid token: " + new string(Input.Skip(Next).Take(15).ToArray()));
+                // (Specify "{0}" as the format string in case the output contains curly braces.)
+                Program.Error(pos, "{0}", "invalid token: " + new string(Input.Skip(Next).Take(15).ToArray()));
             }
 
             tokens.Add(new Token
