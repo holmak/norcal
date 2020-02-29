@@ -2064,3 +2064,24 @@ void reset()
     OUTB = s[11];
     STOP = 0;
 }
+
+@ goto
+@out 23 99 25 99
+
+void reset()
+{
+    OUTB = f(3);
+    OUTB = f(14);
+    skip:  // a decoy label
+    OUTB = f(5);
+    OUTB = f(16);
+    STOP = 0;
+}
+
+u8 f(u8 x)
+{
+    if (x > 9) goto skip;
+    return x + 20;
+    skip:
+    return 99;
+}

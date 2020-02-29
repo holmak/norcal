@@ -443,6 +443,12 @@ partial class Parser
                 Expect(TokenType.SEMICOLON);
             }
         }
+        else if (TryParseName("goto"))
+        {
+            string label = ExpectAnyName();
+            Emit(Tag.Jump, FindQualifiedLabelName(label));
+            Expect(TokenType.SEMICOLON);
+        }
         else if (TryParseName("__asm"))
         {
             if (!allowLong) Error_NotAllowedInFor();
@@ -498,6 +504,12 @@ partial class Parser
                     }
                 }
             }
+        }
+        else if (Input.Count >= 2 && Input[0].Tag == TokenType.NAME && Input[1].Tag == TokenType.COLON)
+        {
+            string label = ExpectAnyName();
+            Expect(TokenType.COLON);
+            Emit(Tag.Label, DefineQualifiedLabelName(label));
         }
         else
         {
