@@ -1131,6 +1131,9 @@ class CodeGenerator
             Store(arg, paramName);
         }
 
+        // The return value goes in the accumulator:
+        UnloadAccumulator();
+
         EmitAsm("JSR", new AsmOperand(functionName, AddressMode.Absolute));
 
         // Use the return value:
