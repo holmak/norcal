@@ -2113,3 +2113,15 @@ u8 f(u8 x)
     skip:
     return 99;
 }
+
+@ comma operator
+@out 24 15
+
+void reset()
+{
+    u8 x = 10;
+    u8 y = 20;
+    OUTB = (x + 4, y + 4);
+    OUTB = ((y, x) + 5);
+    STOP = 0;
+}
