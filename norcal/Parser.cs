@@ -14,6 +14,7 @@ partial class Parser
     LoopScope Loop = null;
     List<string> UndefinedLabels = new List<string>();
     FilePosition SourcePosition = FilePosition.Unknown;
+    int NextStringID = 0;
 
     List<Expr> Output => OutputStack.Last();
 
@@ -903,10 +904,28 @@ partial class Parser
     void ParsePrimaryExpr()
     {
         int n;
-        string name;
+        string name, s;
         if (TryParseInt(out n))
         {
             Emit(Tag.PushImmediate, n);
+        }
+        else if (TryParseString(out s))
+        {
+            // Generate a readonly array of data and use it immediately.
+            name = string.Format("$string{0}", NextStringID++);
+
+            int[] values = new int[s.Length + 1];
+            for (int i = 0; i < s.Length; i++)
+            {
+                int c = s[i];
+                if (c > 127) ParserError("strings can only contain ASCII characters");
+                values[i] = c;
+            }
+            values[s.Length] = '\0';
+
+            Emit(Tag.ReadonlyData, CType.MakeArray(CType.UInt8, s.Length + 1), name, values);
+            Emit(Tag.PushVariableAddress, name);
+            Emit(Tag.Load);
         }
         else if (TryParseAnyName(out name))
         {
@@ -992,6 +1011,22 @@ partial class Parser
         int n;
         if (!TryParseInt(out n)) ParserError("expected an integer literal");
         return n;
+    }
+
+    bool TryParseString(out string s)
+    {
+        Token token = PeekToken();
+        if (token.Tag == TokenType.STRING)
+        {
+            s = token.Name;
+            ConsumeToken();
+            return true;
+        }
+        else
+        {
+            s = null;
+            return false;
+        }
     }
 
     bool TryParseAnyName(out string name)

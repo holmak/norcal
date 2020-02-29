@@ -2051,3 +2051,16 @@ void reset()
     OUT = b + w;
     STOP = 0;
 }
+
+@ strings
+@out 66 97 76 0
+
+void reset()
+{
+    char *s = "Basic Label";
+    OUTB = *s;
+    OUTB = s[1];
+    OUTB = s[6];
+    OUTB = s[11];
+    STOP = 0;
+}
