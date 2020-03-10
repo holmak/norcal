@@ -92,7 +92,8 @@ class DebugExporter
             }
         }
 
-        throw new Exception(string.Format("Address not in known segment: ${0:X4}", address));
+        Program.Panic("Address not in known segment: ${0:X4}", address);
+        return null;
     }
 
     public void Save(string path)
