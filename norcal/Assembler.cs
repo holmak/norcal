@@ -138,7 +138,13 @@ class Assembler
 
                 if (candidates.Count == 1)
                 {
-                    Debug.TagInstruction(PrgRomBase + prg.Count, formalSize + 1);
+                    int instructionSize = 1 + formalSize;
+                    if (prg.Count + instructionSize > PrgRomSize)
+                    {
+                        Program.Error("not enough PRG-ROM for code");
+                    }
+
+                    Debug.TagInstruction(PrgRomBase + prg.Count, instructionSize);
                     prg.Add(candidates[0]);
                 }
                 else if (candidates.Count == 0)
