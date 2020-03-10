@@ -16,7 +16,7 @@ class CodeGenerator
     long StackEpoch = 100;
     string NameOfCurrentFunction = null;
     CType ReturnTypeOfCurrentFunction = null;
-    int NextTemporary = 0;
+    List<Temporary> Temporaries = new List<Temporary>();
     FilePosition SourcePosition = FilePosition.Unknown;
 
     static readonly string TempPointer = "$ptr";
@@ -181,6 +181,8 @@ class CodeGenerator
                 Emit(Tag.Function, functionName);
                 NameOfCurrentFunction = functionName;
                 ReturnTypeOfCurrentFunction = returnType;
+                // Temporaries can't be reused across functions:
+                Temporaries.Clear();
             }
             else if (Next().MatchTag(Tag.Constant) || Next().MatchTag(Tag.ReadonlyData) ||
                 Next().MatchTag(Tag.Struct) || Next().MatchTag(Tag.Union))
@@ -984,10 +986,31 @@ class CodeGenerator
 
     string DeclareTemporary(CType type)
     {
-        string name = NameOfCurrentFunction + ":$" + NextTemporary;
-        NextTemporary += 1;
+        int size = SizeOf(type);
+
+        string[] allocated = Stack
+            .Where(x => x.Tag == OperandTag.Variable || x.Tag == OperandTag.VariableAddress)
+            .Select(x => x.Name)
+            .ToArray();
+
+        // Reuse a suitable temporary:
+        foreach (Temporary temp in Temporaries)
+        {
+            if (temp.Size == size && !allocated.Contains(temp.Name))
+            {
+                return temp.Name;
+            }
+        }
+
+        // Create a new temporary:
+        string name = NameOfCurrentFunction + ":$temp" + Temporaries.Count;
         DeclareSymbol(SymbolTag.Variable, name, type, 0);
-        Emit(Expr.Make(Tag.Variable, MemoryRegion.Ram, SizeOf(type), name));
+        Emit(Expr.Make(Tag.Variable, MemoryRegion.Ram, size, name));
+        Temporaries.Add(new Temporary
+        {
+            Name = name,
+            Size = size,
+        });
         return name;
     }
 
@@ -1216,6 +1239,12 @@ class CodeGenerator
     {
         Constant,
         Variable,
+    }
+
+    class Temporary
+    {
+        public string Name;
+        public int Size;
     }
 }
 
