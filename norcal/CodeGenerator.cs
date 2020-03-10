@@ -1003,7 +1003,7 @@ class CodeGenerator
         }
 
         // Create a new temporary:
-        string name = NameOfCurrentFunction + ":$temp" + Temporaries.Count;
+        string name = NameOfCurrentFunction + Program.NamespaceSeparator + "$temp" + Temporaries.Count;
         DeclareSymbol(SymbolTag.Variable, name, type, 0);
         Emit(Expr.Make(Tag.Variable, MemoryRegion.Ram, size, name));
         Temporaries.Add(new Temporary
