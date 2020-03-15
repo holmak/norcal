@@ -126,7 +126,7 @@ static class Program
 
             // Put a blank line before top-level constructs.
             // Indent most other things.
-            bool isTopLevel = e.MatchTag(Tag.Function) || e.MatchTag(Tag.Constant);
+            bool isTopLevel = e.MatchTag(Tag.Function);
             if (isTopLevel) sb.AppendLine();
             if (!isTopLevel && !e.MatchTag(Tag.Label)) line = "\t";
 
