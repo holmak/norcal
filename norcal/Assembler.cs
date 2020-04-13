@@ -282,6 +282,8 @@ class Assembler
     static int ParseAddressMode(AddressMode mode)
     {
         if (mode == AddressMode.Implicit) return AsmInfo.IMP;
+        else if (mode == AddressMode.ZeroPage) return AsmInfo.ZPG;
+        else if (mode == AddressMode.ZeroPageX) return AsmInfo.ZPX;
         else if (mode == AddressMode.Absolute) return AsmInfo.ABS;
         else if (mode == AddressMode.AbsoluteX) return AsmInfo.ABX;
         else if (mode == AddressMode.Immediate) return AsmInfo.IMM;
@@ -416,6 +418,7 @@ class AsmOperand
         if (Mode == AddressMode.Implicit) format = "<implicit>";
         else if (Mode == AddressMode.Immediate) format = "#{0}";
         else if (Mode == AddressMode.ZeroPage) format = "{0}";
+        else if (Mode == AddressMode.ZeroPageX) format = "{0},X";
         else if (Mode == AddressMode.Absolute) format = "{0}";
         else if (Mode == AddressMode.AbsoluteX) format = "{0},X";
         else if (Mode == AddressMode.IndirectY) format = "({0}),Y";
@@ -432,6 +435,7 @@ enum AddressMode
     Implicit,
     Immediate,
     ZeroPage,
+    ZeroPageX,
     Absolute,
     AbsoluteX,
     IndirectY,
