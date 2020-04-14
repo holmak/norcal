@@ -850,7 +850,7 @@ partial class Parser
         {
             if (TryParse(TokenType.LPAREN))
             {
-                // We only support calling functions by name, so stack instruction immediately before
+                // We only support calling functions by name, so the stack instruction immediately before
                 // a call is required to be a "push var <name>", from which we can extract the function name.
                 string functionName = null;
                 if (Output.Count >= 2 &&
