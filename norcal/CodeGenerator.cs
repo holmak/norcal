@@ -7,116 +7,113 @@ using System.Threading.Tasks;
 
 class CodeGenerator
 {
-    List<Expr> Input;
+    FilePosition SourcePosition = FilePosition.Unknown;
     List<Expr> Output = new List<Expr>();
+    Operand TempPointer;
     Dictionary<string, CFunctionInfo> Functions = new Dictionary<string, CFunctionInfo>();
-    Dictionary<string, CAggregateInfo> AggregateTypes = new Dictionary<string, CAggregateInfo>();
-    Dictionary<string, Symbol> Symbols = new Dictionary<string, Symbol>();
-    List<OperandInfo> Stack = new List<OperandInfo>();
-    long StackEpoch = 100;
+    Dictionary<string, AggregateInfo> AggregateTypes = new Dictionary<string, AggregateInfo>();
     string NameOfCurrentFunction = null;
     CType ReturnTypeOfCurrentFunction = null;
-    List<Temporary> Temporaries = new List<Temporary>();
-    FilePosition SourcePosition = FilePosition.Unknown;
+    int FrameSize = 0;
+    LexicalScope CurrentScope;
+    LoopScope Loop;
 
-    static readonly string TempPointer = "$ptr";
-
-    /// <summary>
-    /// Convert stack machine code to 6502 assembly code.
-    /// </summary>
-    public static List<Expr> Convert(IReadOnlyList<Expr> input)
+    public static List<Expr> Compile(Expr program)
     {
         CodeGenerator converter = new CodeGenerator();
-        converter.Input = input.ToList();
-        converter.Run();
+        converter.CompileProgram(program);
         return converter.Output;
     }
 
-    void Run()
+    void CompileProgram(Expr program)
     {
-        // Process struct declarations first so we know how much space to allocate for variables.
-        foreach (Expr op in Input)
-        {
-            string name;
-            FieldInfo[] parsedFields;
-            if (op.Match(Tag.Struct, out name, out parsedFields) ||
-                op.Match(Tag.Union, out name, out parsedFields))
-            {
-                bool union = op.MatchTag(Tag.Union);
+        CurrentScope = new LexicalScope(null);
 
-                CField[] fields = new CField[parsedFields.Length];
+        TempPointer = DeclareGlobal(MemoryRegion.ZeroPage, CType.UInt8Ptr, "$temp_ptr");
+
+        Expr[] declarations;
+        if (!program.MatchAny(Tag.Sequence, out declarations))
+        {
+            Program.Panic("The top level of the syntax tree must be a sequence.");
+        }
+
+        string name, functionName;
+        int number;
+        CType type, returnType;
+        MemoryRegion region;
+        int[] values;
+        Expr body;
+
+        // Pass: Process all struct and union declarations.
+        foreach (Expr decl in declarations)
+        {
+            FieldInfo[] parsedFields;
+            if (decl.Match(Tag.Struct, out name, out parsedFields) || decl.Match(Tag.Union, out name, out parsedFields))
+            {
+                bool union = decl.MatchTag(Tag.Union);
+
+                // Calculate the offset of each field:
+                FieldInfo[] fields = new FieldInfo[parsedFields.Length];
                 int offset = 0;
                 int maxSize = 1;
                 for (int i = 0; i < parsedFields.Length; i++)
                 {
-                    fields[i] = new CField
-                    {
-                        Type = parsedFields[i].Type,
-                        Name = parsedFields[i].Name,
-                        Offset = offset,
-                    };
-
+                    fields[i] = new FieldInfo(parsedFields[i].Type, parsedFields[i].Name, offset);
                     int fieldSize = SizeOf(parsedFields[i].Type);
                     if (!union) offset += fieldSize;
                     maxSize = Math.Max(maxSize, fieldSize);
                 }
 
-                CAggregateInfo info;
+                AggregateInfo info;
                 if (union)
                 {
-                    info = new CAggregateInfo(AggregateLayout.Union, maxSize, fields);
+                    info = new AggregateInfo(AggregateLayout.Union, maxSize, fields);
                 }
                 else
                 {
-                    info = new CAggregateInfo(AggregateLayout.Struct, offset, fields);
+                    info = new AggregateInfo(AggregateLayout.Struct, offset, fields);
                 }
 
                 AggregateTypes.Add(name, info);
             }
         }
 
-        // Process all other declarations.
-        foreach (Expr op in Input)
+        // Pass: Process all other global declarations.
+        foreach (Expr decl in declarations)
         {
-            string name, functionName;
-            MemoryRegion region;
-            CType type, returnType;
-            FieldInfo[] fields;
-            int number;
-            int[] values;
-            if (op.Match(Tag.Function, out returnType, out functionName, out fields))
+            FieldInfo[] parsedFields;
+            if (decl.Match(Tag.Function, out returnType, out functionName, out parsedFields))
             {
                 if (Functions.ContainsKey(functionName)) Error("function is already defined: " + functionName);
 
-                // Allocate a global variable for each parameter:
-                foreach (FieldInfo field in fields)
+                // Calculate the offset of each parameter:
+                FieldInfo[] fields = new FieldInfo[parsedFields.Length];
+                int offset = 0;
+                for (int i = 0; i < parsedFields.Length; i++)
                 {
-                    string qualifiedName = string.Format("{0}{1}{2}", functionName, Program.NamespaceSeparator, field.Name);
-                    DeclareSymbol(SymbolTag.Variable, qualifiedName, field.Type, 0);
-                    Emit(Tag.Variable, field.Region, SizeOf(field.Type), qualifiedName);
+                    fields[i] = new FieldInfo(parsedFields[i].Type, parsedFields[i].Name, offset);
+                    int fieldSize = SizeOf(parsedFields[i].Type);
+                    offset += fieldSize;
                 }
 
                 CFunctionInfo function = new CFunctionInfo
                 {
-                    Parameters = fields.Select(x => new CParameter(x.Type, x.Name)).ToArray(),
+                    Parameters = fields,
                     ReturnType = returnType,
                 };
                 Functions.Add(functionName, function);
             }
-            else if (op.Match(Tag.Constant, out type, out name, out number))
+            else if (decl.Match(Tag.Constant, out type, out name, out number))
             {
                 // TODO: Make sure the value fits in the specified type.
-                DeclareSymbol(SymbolTag.Constant, name, type, number);
+                DeclareSymbol(new Operand(AddressMode.Absolute, number, type, name));
                 Emit(Tag.Constant, name, number);
             }
-            else if (op.Match(Tag.Variable, out region, out type, out name))
+            else if (decl.Match(Tag.Variable, out region, out type, out name))
             {
-                if (IsVariableGlobal(name))
-                {
-                    DeclareVariable(region, type, name);
-                }
+                DeclareGlobal(region, type, name);
             }
-            else if (op.Match(Tag.ReadonlyData, out type, out name, out values))
+            else if (decl.Match(Tag.ReadonlyData, out type, out name, out values))
             {
                 if (type.IsArray)
                 {
@@ -129,14 +126,14 @@ class CodeGenerator
                     if (values.Length > type.Dimension)
                     {
                         Program.Error(
-                            op.Source,
+                            decl.Source,
                             "declared size of array ({0}) is too small for the number of specified values ({1})",
                             type.Dimension, values.Length);
                     }
                 }
                 else if (values.Length != 1)
                 {
-                    Program.Panic(op.Source, "non-array initializers must contain exactly one value");
+                    Program.Panic(decl.Source, "non-array initializers must contain exactly one value");
                 }
 
                 // Convert the data to raw bytes:
@@ -154,638 +151,44 @@ class CodeGenerator
                     Program.NYI();
                 }
 
-                DeclareSymbol(SymbolTag.Variable, name, type, 0);
+                DeclareSymbol(new Operand(AddressMode.Absolute, 0, type, name));
                 Emit(Tag.ReadonlyData, name, bytes);
             }
         }
 
-        Emit(Tag.Variable, MemoryRegion.ZeroPage, SizeOf(CType.UInt8Ptr), TempPointer);
-
-        while (Input.Count > 0)
+        // Pass: Generate code for function bodies.
+        foreach (Expr decl in declarations)
         {
-            string name, functionName, target;
-            MemoryRegion region;
-            CType type, newType, returnType;
             FieldInfo[] fields;
-            int number, argCount;
-            if (Next().Match(Tag.NoOperation))
+            if (decl.Match(Tag.Function, out returnType, out name, out fields, out body))
             {
-                ConsumeInput(1);
+                Emit(Tag.Function, name);
+                BeginScope();
 
-                // This does nothing.
-            }
-            else if (Next().Match(Tag.Function, out returnType, out functionName, out fields))
-            {
-                ConsumeInput(1);
-
-                Emit(Tag.Function, functionName);
-                NameOfCurrentFunction = functionName;
+                NameOfCurrentFunction = name;
                 ReturnTypeOfCurrentFunction = returnType;
-                // Temporaries can't be reused across functions:
-                Temporaries.Clear();
-            }
-            else if (Next().MatchTag(Tag.Constant) || Next().MatchTag(Tag.ReadonlyData) ||
-                Next().MatchTag(Tag.Struct) || Next().MatchTag(Tag.Union))
-            {
-                ConsumeInput(1);
+                FrameSize = 0;
 
-                // All the necessary work was handled in the declaration pre-passes.
-            }
-            else if (Next().Match(Tag.Variable, out region, out type, out name))
-            {
-                ConsumeInput(1);
-
-                if (!IsVariableGlobal(name))
+                foreach (FieldInfo field in fields)
                 {
-                    DeclareVariable(region, type, name);
-                }
-            }
-            else if (Next().Match(Tag.PushImmediate, out number))
-            {
-                ConsumeInput(1);
-
-                Push(OperandInfo.MakeImmediate(number, (number <= byte.MaxValue) ? CType.UInt8 : CType.UInt16));
-            }
-            else if (Next().Match(Tag.PushVariableAddress, out name))
-            {
-                ConsumeInput(1);
-
-                Symbol sym;
-                if (!Symbols.TryGetValue(name, out sym))
-                {
-                    Error("reference to undefined symbol: {0}", name);
-                }
-                CType valueType = sym.Type;
-
-                if (sym.Tag == SymbolTag.Variable)
-                {
-                    Push(OperandInfo.MakeVariableAddress(name, CType.MakePointer(valueType)));
-                }
-                else if (sym.Tag == SymbolTag.Constant)
-                {
-                    Push(OperandInfo.MakeImmediate(sym.Value, sym.Type));
-
-                    // Ignore the subsequent load op:
-                    if (Next().Match(Tag.Load))
-                    {
-                        ConsumeInput(1);
-                    }
-                    else
-                    {
-                        // Variable references should always be followed by a load.
-                        Program.UnhandledCase();
-                    }
-                }
-                else
-                {
-                    Program.UnhandledCase();
-                }
-            }
-            else if (Next().Match(Tag.DropFinal))
-            {
-                ConsumeInput(1);
-
-                if (Stack.Count != 1) Program.Panic("the virtual stack should contain exactly one operand");
-                Stack.Clear();
-                Emit(Expr.Make(Tag.Comment, "drop final"));
-            }
-            else if (Next().Match(Tag.Drop))
-            {
-                ConsumeInput(1);
-
-                Drop(1);
-            }
-            else if (Next().Match(Tag.Materialize))
-            {
-                ConsumeInput(1);
-
-                // Put the top operand in the accumulator and update the stack to reflect its new location.
-                OperandReference top = Peek(0);
-                LoadAccumulator(top);
-                Replace(top, OperandInfo.MakeRegister(OperandRegister.Accumulator, top.Type));
-            }
-            else if (Next().Match(Tag.Cast, out newType))
-            {
-                ConsumeInput(1);
-
-                OperandReference r = Peek(0);
-                if (SizeOf(r.Type) != SizeOf(newType))
-                {
-                    // TODO: Perform any necessary type conversions.
-                    Program.Panic("a type conversion is required");
+                    DeclareLocal(field.Type, field.Name);
                 }
 
-                Replace(r, r.WithType(newType));
-            }
-            else if (Next().Match(Tag.Jump, out target))
-            {
-                ConsumeInput(1);
-
-                EmitAsm("JMP", new AsmOperand(target, AddressMode.Absolute));
-            }
-            else if (Next().Match(Tag.JumpIfTrue, out target))
-            {
-                ConsumeInput(1);
-
-                OperandReference cond = Peek(0);
-
-                int size = SizeOf(cond.Type);
-
-                Spill(cond);
-                UnloadAccumulator();
-                if (size >= 1) EmitAsm("LDA", cond.LowByte());
-                if (size >= 2) EmitAsm("ORA", cond.HighByte());
-                if (size > 2) Program.Panic("value is too large");
-                EmitAsm("BEQ", new AsmOperand(3, AddressMode.Relative));
-                EmitAsm("JMP", new AsmOperand(target, AddressMode.Absolute));
-
-                Drop(1);
-            }
-            else if (Next().Match(Tag.JumpIfFalse, out target))
-            {
-                ConsumeInput(1);
-
-                OperandReference cond = Peek(0);
-
-                int size = SizeOf(cond.Type);
-
-                Spill(cond);
-                UnloadAccumulator();
-                if (size >= 1) EmitAsm("LDA", cond.LowByte());
-                if (size >= 2) EmitAsm("ORA", cond.HighByte());
-                if (size > 2) Program.Panic("value is too large");
-                EmitAsm("BNE", new AsmOperand(3, AddressMode.Relative));
-                EmitAsm("JMP", new AsmOperand(target, AddressMode.Absolute));
-
-                Drop(1);
-            }
-            else if (Next().Match(Tag.AddressOf))
-            {
-                ConsumeInput(1);
-
-                Error("it is not possible to take the address of this expression");
-            }
-            else if (Next().Match(Tag.Store))
-            {
-                ConsumeInput(1);
-
-                // Get operands:
-                OperandReference value = Peek(0);
-                OperandReference address = Peek(1);
-
-                // Check types:
-                CType typeToStore = DereferencePointerType(address.Type);
-                ConvertType(Conversion.Implicit, value, typeToStore);
-                int size = SizeOf(typeToStore);
-
-                // Generate code:
-
-                // First, copy the address to zero page:
-                if (address.Tag == OperandTag.Immediate)
+                Expr[] statements;
+                if (!body.MatchAny(Tag.Sequence, out statements))
                 {
-                    LoadAccumulator(value);
-                    if (size >= 1) Emit(Expr.MakeAsm("STA", new AsmOperand(address.Value, AddressMode.Absolute)));
-                    if (size >= 2) Emit(Expr.MakeAsm("STX", new AsmOperand(address.Value + 1, AddressMode.Absolute)));
-                    if (size > 2) Program.Panic("values larger than two bytes cannot be stored via accumulator");
-                }
-                else if (address.Tag == OperandTag.VariableAddress)
-                {
-                    LoadAccumulator(value);
-                    if (size >= 1) Emit(Expr.MakeAsm("STA", new AsmOperand(address.Name, AddressMode.Absolute)));
-                    if (size >= 2) Emit(Expr.MakeAsm("STX", new AsmOperand(address.Name, 1, AddressMode.Absolute)));
-                    if (size > 2) Program.Panic("values larger than two bytes cannot be stored via accumulator");
-                }
-                else if (address.Tag == OperandTag.Variable || address.Tag == OperandTag.Register)
-                {
-                    Store(address, TempPointer);
-
-                    // Now copy the value:
-                    LoadAccumulator(value);
-
-                    if (size >= 1)
-                    {
-                        Emit(Expr.MakeAsm("LDY", new AsmOperand(0, AddressMode.Immediate)));
-                        Emit(Expr.MakeAsm("STA", new AsmOperand(TempPointer, AddressMode.IndirectY)));
-                    }
-
-                    if (size >= 2)
-                    {
-                        EmitAsm("INY");
-                        // The store operation must leave the stored value in the accumulator, so save and restore A:
-                        EmitAsm("PHA");
-                        EmitAsm("TXA");
-                        Emit(Expr.MakeAsm("STA", new AsmOperand(TempPointer, AddressMode.IndirectY)));
-                        EmitAsm("PLA");
-                    }
-
-                    if (size > 2) Program.Panic("values larger than two bytes cannot be stored via accumulator");
-                }
-                else
-                {
-                    Program.UnhandledCase();
+                    Program.Panic("The body of a function must be a sequence.");
                 }
 
-                // The store operation leaves the value in the accumulator; this matches the behavior of C assignment.
-                Drop(2);
-                PushAccumulator(typeToStore);
-            }
-            else if (Next(0).Match(Tag.Load) && Next(1).Match(Tag.AddressOf))
-            {
-                // An "address of" cancels out a preceding "load".
-                ConsumeInput(2);
-            }
-            else if (Next().Match(Tag.Load) || Next().Match(Tag.LoadNondestructive))
-            {
-                bool drop = !Next().Match(Tag.LoadNondestructive);
-                ConsumeInput(1);
-
-                // Get operands:
-                OperandReference address = Peek(0);
-
-                // Check types:
-                CType loadedType = DereferencePointerType(address.Type);
-
-                if (loadedType.IsArray)
+                foreach (Expr statement in statements)
                 {
-                    // The result of loading an array is a pointer to the first element of the array.
-                    // (This is the automatic "decay" of arrays to pointers.)
-                    ConvertType(Conversion.Explicit, address, CType.MakePointer(loadedType.Subtype));
-                }
-                else if (address.Tag == OperandTag.Immediate)
-                {
-                    Program.Panic("the load operation should never be applied to an immediate");
-                }
-                else if (address.Tag == OperandTag.Variable || address.IsAccumulator)
-                {
-                    int size = SizeOf(loadedType);
-
-                    // Copy the pointer to zero page so that it can be used:
-                    Store(address, TempPointer);
-
-                    UnloadAccumulator();
-                    if (size == 1)
-                    {
-                        Emit(Expr.MakeAsm("LDY", new AsmOperand(0, AddressMode.Immediate)));
-                        Emit(Expr.MakeAsm("LDA", new AsmOperand(TempPointer, AddressMode.IndirectY)));
-                    }
-                    else if (size == 2)
-                    {
-                        Emit(Expr.MakeAsm("LDY", new AsmOperand(1, AddressMode.Immediate)));
-                        Emit(Expr.MakeAsm("LDA", new AsmOperand(TempPointer, AddressMode.IndirectY)));
-                        EmitAsm("TAX");
-                        EmitAsm("DEY");
-                        Emit(Expr.MakeAsm("LDA", new AsmOperand(TempPointer, AddressMode.IndirectY)));
-                    }
-                    else
-                    {
-                        Program.Panic("values larger than two bytes cannot be loaded via accumulator");
-                    }
-
-                    if (drop) Drop(1);
-                    PushAccumulator(loadedType);
-                }
-                else if (address.Tag == OperandTag.VariableAddress)
-                {
-                    OperandInfo result = OperandInfo.MakeVariable(address.Name, loadedType);
-                    if (drop) Drop(1);
-                    Push(result);
-                }
-                else
-                {
-                    Program.NYI();
-                }
-            }
-            else if (Next().Match(Tag.Field, out name))
-            {
-                ConsumeInput(1);
-
-                // Get operands:
-                OperandReference structAddress = Peek(0);
-
-                // Check types:
-                CType aggregateType = DereferencePointerType(structAddress.Type);
-                if (!aggregateType.IsStructOrUnion)
-                {
-                    Error("expression must be a struct or union");
-                }
-                CAggregateInfo aggregateInfo = GetAggregateInfo(aggregateType.Name);
-
-                CField fieldInfo = aggregateInfo.Fields.FirstOrDefault(x => x.Name == name);
-                if (fieldInfo == null)
-                {
-                    Error("struct type '{0}' does not contain a field named '{1}'", aggregateType.Name, name);
+                    CompileExpression(statement, Operand.Discard);
                 }
 
-                // Replace with simpler stack code:
-                Input.InsertRange(0, new[]
-                {
-                    Expr.Make(Tag.Cast, CType.UInt8Ptr),
-                    Expr.Make(Tag.PushImmediate, fieldInfo.Offset),
-                    Expr.Make(Tag.Add),
-                    Expr.Make(Tag.Cast, CType.MakePointer(fieldInfo.Type)),
-                });
-            }
-            else if (Next().Match(Tag.PreIncrement) || Next().Match(Tag.PreDecrement))
-            {
-                bool increment = Next().Match(Tag.PreIncrement);
-                ConsumeInput(1);
-
-                OperandReference address = Peek(0);
-                CType valueType = DereferencePointerType(address.Type);
-                int size = SizeOf(valueType);
-
-                // Pointer arithmetic must be scaled by element size:
-                int amount = 1;
-                if (valueType.IsPointer)
-                {
-                    amount = SizeOf(DereferencePointerType(valueType));
-                }
-
-                if (address.Tag == OperandTag.VariableAddress && amount == 1 && size == 1)
-                {
-                    EmitAsm(increment ? "INC" : "DEC", new AsmOperand(address.Name, AddressMode.Absolute));
-                    UnloadAccumulator();
-                    EmitAsm("LDA", new AsmOperand(address.Name, AddressMode.Absolute));
-
-                    Drop(1);
-                    PushAccumulator(valueType);
-                }
-                else
-                {
-                    CType effectiveType = CType.UInt8;
-                    if (size == 2) effectiveType = CType.UInt16;
-                    if (size > 2) Program.Panic("value is too large");
-
-                    ConvertType(Conversion.Explicit, address, CType.MakePointer(effectiveType));
-                    Push(OperandInfo.MakeImmediate(amount, effectiveType));
-                    EmitCall(GetRuntimeFunctionName(increment ? "preinc" : "predec", effectiveType), 2);
-                    ConvertType(Conversion.Explicit, Peek(0), valueType);
-                }
-            }
-            else if (Next().Match(Tag.PostIncrement) || Next().Match(Tag.PostDecrement))
-            {
-                bool increment = Next().Match(Tag.PostIncrement);
-                ConsumeInput(1);
-
-                OperandReference address = Peek(0);
-                CType valueType = DereferencePointerType(address.Type);
-                int size = SizeOf(valueType);
-
-                // Pointer arithmetic must be scaled by element size:
-                int amount = 1;
-                if (valueType.IsPointer)
-                {
-                    amount = SizeOf(DereferencePointerType(valueType));
-                }
-
-                if (address.Tag == OperandTag.VariableAddress && amount == 1 && size == 1)
-                {
-                    UnloadAccumulator();
-                    EmitAsm("LDA", new AsmOperand(address.Name, AddressMode.Absolute));
-                    EmitAsm(increment ? "INC" : "DEC", new AsmOperand(address.Name, AddressMode.Absolute));
-
-                    Drop(1);
-                    PushAccumulator(valueType);
-                }
-                else
-                {
-                    CType effectiveType = CType.UInt8;
-                    if (size == 2) effectiveType = CType.UInt16;
-                    if (size > 2) Program.Panic("value is too large");
-
-                    ConvertType(Conversion.Explicit, address, CType.MakePointer(effectiveType));
-                    Push(OperandInfo.MakeImmediate(amount, effectiveType));
-                    EmitCall(GetRuntimeFunctionName(increment ? "postinc" : "postdec", effectiveType), 2);
-                    ConvertType(Conversion.Explicit, Peek(0), valueType);
-                }
-            }
-            else if (Next().Match(Tag.Add))
-            {
-                ConsumeInput(1);
-
-                // Get operands:
-                OperandReference right = Peek(0);
-                OperandReference left = Peek(1);
-
-                // Check types:
-                CType resultType;
-                // TODO: Find a better way to scale the index by the element size.
-                int repetitions = 1;
-                if (left.Type.IsPointer && right.Type.IsPointer)
-                {
-                    Error("pointers cannot be added together");
-                }
-                if (left.Type.IsPointer && right.Type.IsInteger)
-                {
-                    resultType = left.Type;
-                    repetitions = SizeOf(DereferencePointerType(resultType));
-                    ConvertType(Conversion.Implicit, right, CType.UInt16);
-                }
-                else if (left.Type.IsInteger && right.Type.IsPointer)
-                {
-                    // Swap the roles of the operands:
-                    OperandReference temp = left;
-                    left = right;
-                    right = temp;
-
-                    resultType = left.Type;
-                    repetitions = SizeOf(DereferencePointerType(resultType));
-                    ConvertType(Conversion.Implicit, right, CType.UInt16);
-                }
-                else
-                {
-                    resultType = FindCommonType(left.Type, right.Type);
-                    ConvertType(Conversion.Implicit, right, resultType);
-                    ConvertType(Conversion.Implicit, left, resultType);
-                }
-
-                // Generate code:
-                int size = SizeOf(resultType);
-                LoadAccumulator(left);
-                for (int i = 0; i < repetitions; i++)
-                {
-                    if (size >= 1)
-                    {
-                        EmitAsm("CLC");
-                        EmitAsm("ADC", right.LowByte());
-                    }
-
-                    if (size >= 2)
-                    {
-                        EmitAsm("TAY");
-                        EmitAsm("TXA");
-                        EmitAsm("ADC", right.HighByte());
-                        EmitAsm("TAX");
-                        EmitAsm("TYA");
-                    }
-
-                    if (size > 2) Program.Panic("value is too large");
-                }
-
-                Drop(2);
-                PushAccumulator(resultType);
-            }
-            else if (Next().Match(Tag.Subtract))
-            {
-                ConsumeInput(1);
-
-                // Get operands:
-                OperandReference right = Peek(0);
-                OperandReference left = Peek(1);
-
-                // Check types:
-                CType resultType;
-                // TODO: Find a better way to scale the index by the element size.
-                int repetitions = 1;
-                if (left.Type.IsPointer && right.Type.IsPointer)
-                {
-                    resultType = CType.UInt16;
-                    Program.NYI();
-                }
-                if (left.Type.IsPointer && right.Type.IsInteger)
-                {
-                    resultType = left.Type;
-                    repetitions = SizeOf(DereferencePointerType(resultType));
-                    ConvertType(Conversion.Implicit, right, CType.UInt16);
-                }
-                else if (left.Type.IsInteger && right.Type.IsPointer)
-                {
-                    Error("cannot subtract a pointer from an integer");
-                    resultType = left.Type;
-                }
-                else
-                {
-                    resultType = FindCommonType(left.Type, right.Type);
-                    ConvertType(Conversion.Implicit, right, resultType);
-                    ConvertType(Conversion.Implicit, left, resultType);
-                }
-
-                // Generate code:
-                int size = SizeOf(resultType);
-                LoadAccumulator(left);
-
-                if (size >= 1)
-                {
-                    EmitAsm("SEC");
-                    EmitAsm("SBC", right.LowByte());
-                }
-
-                if (size >= 2)
-                {
-                    EmitAsm("TAY");
-                    EmitAsm("TXA");
-                    EmitAsm("SBC", right.HighByte());
-                    EmitAsm("TAX");
-                    EmitAsm("TYA");
-                }
-
-                if (size > 2) Program.Panic("value is too large");
-
-                Drop(2);
-                PushAccumulator(resultType);
-            }
-            else if (Next().Match(out name) && UnaryRuntimeOperators.TryGetValue(name, out functionName))
-            {
-                ConsumeInput(1);
-
-                // Get operand:
-                CType argType = Peek(0).Type;
-
-                // Check types and generate code:
-                if (argType.IsInteger)
-                {
-                    EmitCall(GetRuntimeFunctionName(functionName, argType), 1);
-                }
-                else if (argType.IsPointer)
-                {
-                    Program.NYI();
-                }
-                else
-                {
-                    Error("unary operator cannot be used with type '{0}'", argType.Show());
-                }
-            }
-            else if (Next().Match(out name) && BinaryRuntimeOperators.TryGetValue(name, out functionName))
-            {
-                ConsumeInput(1);
-
-                bool pointersAllowed = BinaryOperatorsThatAllowPointers.Contains(name);
-
-                // Get operands:
-                OperandReference right = Peek(0);
-                OperandReference left = Peek(1);
-
-                // Check types:
-                CType resultType = CType.Void;
-                if (left.Type.IsInteger && right.Type.IsInteger)
-                {
-                    // All of these operators work on integers.
-                    resultType = FindCommonType(left.Type, right.Type);
-                    ConvertType(Conversion.Implicit, right, resultType);
-                    ConvertType(Conversion.Implicit, left, resultType);
-                }
-                else if (left.Type.IsPointer || right.Type.IsPointer)
-                {
-                    if (!pointersAllowed)
-                    {
-                        Error("operation does not support pointers");
-                    }
-                    else if (left.Type != right.Type)
-                    {
-                        Error("these pointer operands must have the same type");
-                    }
-                    else
-                    {
-                        // Treat the pointer operands as unsigned integers of the same size.
-                        resultType = CType.UInt16;
-                        ConvertType(Conversion.Explicit, left, resultType);
-                        ConvertType(Conversion.Explicit, right, resultType);
-                    }
-                }
-                else
-                {
-                    // TODO: Make this error message more specific.
-                    Error("operation does not allow these types");
-                }
-
-                // Generate code:
-                EmitCall(GetRuntimeFunctionName(functionName, resultType), 2);
-            }
-            else if (Next().Match(Tag.Return))
-            {
-                ConsumeInput(1);
-
-                OperandReference top = Peek(0);
-
-                ConvertType(Conversion.Implicit, top, ReturnTypeOfCurrentFunction);
-                LoadAccumulator(top);
-                Drop(1);
+                // TODO: Emit the stack cleanup code.
                 EmitAsm("RTS");
-            }
-            else if (Next().Match(Tag.ReturnVoid))
-            {
-                ConsumeInput(1);
 
-                EmitAsm("RTS");
-            }
-            else if (Next().Match(Tag.Call, out functionName, out argCount))
-            {
-                ConsumeInput(1);
-
-                // This is a general-purpose call.
-                EmitCall(functionName, argCount);
-            }
-            else if (Next().MatchTag(Tag.Asm) || Next().MatchTag(Tag.Label) || Next().MatchTag(Tag.Comment))
-            {
-                Expr op = Next();
-                ConsumeInput(1);
-
-                // Pass certain instructions through unchanged.
-                Emit(op);
-            }
-            else
-            {
-                Program.UnhandledCase();
+                EndScope();
             }
         }
 
@@ -796,22 +199,800 @@ class CodeGenerator
         Emit(Tag.Word, "brk");
     }
 
-    Expr Next() => Next(0);
-
-    /// <summary>
-    /// Return the Nth item in the input queue.
-    /// </summary>
-    Expr Next(int offset)
+    // TODO: Figure out how to thread continuation info through the compiler.
+    void CompileExpression(Expr expr, Operand dest)
     {
-        return (offset < Input.Count) ? Input[offset] : Expr.Make(Tag.NoOperation);
+        CompileExpression(expr, dest, Continuation.Fallthrough, Continuation.Fallthrough);
     }
 
-    void ConsumeInput(int count)
+    void CompileExpression(Expr expr, Operand dest, Continuation whenTrue, Continuation whenFalse)
     {
-        SourcePosition = Input[0].Source;
-        count = Math.Min(count, Input.Count);
-        Input.RemoveRange(0, count);
+        CType type;
+        int number;
+        string name, op;
+        Expr left, right, subexpr;
+        Expr[] block;
+        if (expr.Match(Tag.Integer, out number))
+        {
+            // TODO: Convert the type appropriately.
+
+            int size = SizeOf(dest.Type);
+            if (size > 2) Program.Panic("value is too large");
+
+            EmitAsm("LDA", new AsmOperand(LowByte(number), AddressMode.Immediate));
+
+            // TODO
+
+        }
+        else if (expr.Match(Tag.Name, out name))
+        {
+            Operand sym = FindSymbol(name);
+
+            // TODO: Convert type if necessary.
+
+            int size = SizeOf(dest.Type);
+            if (size > 2) Program.Panic("value is too large");
+
+            // TODO
+        }
+        else if (expr.Match(Tag.Assign, out left, out right))
+        {
+            // TODO: Check types.
+
+            Operand address = CompileAddressOf(left);
+            Operand value = CompileExpressionToOperand(right);
+            int size = SizeOf(value.Type);
+
+            EmitAsm("LDA", LowByte(address));
+            EmitAsm("STA", LowByte(TempPointer));
+            EmitAsm("LDA", HighByte(address));
+            EmitAsm("STA", HighByte(TempPointer));
+            EmitAsm("LDY", new AsmOperand(0, AddressMode.Immediate));
+            EmitAsm("LDA", LowByte(value));
+            EmitAsm("STA", new AsmOperand(TempPointer.Offset, AddressMode.IndirectY));
+
+            if (size == 2)
+            {
+                EmitAsm("INY");
+                EmitAsm("LDA", HighByte(value));
+                EmitAsm("STA", new AsmOperand(TempPointer.Offset, AddressMode.IndirectY));
+            }
+
+            if (size > 2) Error("cannot handle data larger than two bytes");
+        }
+        else if (expr.MatchAny(Tag.Sequence, out block))
+        {
+            foreach (Expr stmt in block)
+            {
+                CompileExpression(stmt, Operand.Discard);
+            }
+        }
+        else if (expr.Match(Tag.Variable, out type, out name))
+        {
+            DeclareLocal(type, name);
+        }
+        else if (expr.Match(Tag.AssignModify, out op, out left, out right))
+        {
+            Emit(Tag.Comment, "NYI: assign-modify");
+        }
+        else if (expr.Match(Tag.Return, out subexpr))
+        {
+            Emit(Tag.Comment, "NYI: return");
+        }
+        else if (expr.MatchTag(Tag.Asm) || expr.MatchTag(Tag.Label))
+        {
+            // Pass assembly through unchanged:
+            Emit(expr);
+        }
+        else if (expr.Match(Tag.Add, out left, out right))
+        {
+            Operand a = CompileExpressionToOperand(left);
+            Operand b = CompileExpressionToOperand(right);
+        }
+        else
+        {
+            Emit(Tag.Comment, "NYI: expression: " + expr.Show());
+        }
     }
+
+    Operand CompileExpressionToOperand(Expr expr)
+    {
+        int number;
+        string name;
+        if (expr.Match(Tag.Integer, out number))
+        {
+            return new Operand(AddressMode.Immediate, number, number < 256 ? CType.UInt8 : CType.UInt16);
+        }
+        else if (expr.Match(Tag.Name, out name))
+        {
+            return FindSymbol(name);
+        }
+        else
+        {
+            Operand temp = DeclareTemporary(TypeOf(expr));
+            CompileExpression(expr, temp);
+            return temp;
+        }
+    }
+
+    Operand CompileAddressOf(Expr expr)
+    {
+        string name;
+        Expr subexpr;
+        if (expr.Match(Tag.Name, out name))
+        {
+            Operand sym = FindSymbol(name);
+            return new Operand(AddressMode.Immediate, sym.Offset, CType.MakePointer(sym.Type));
+        }
+        else if (expr.Match(Tag.Load, out subexpr))
+        {
+            return CompileAddressOf(subexpr);
+        }
+        else
+        {
+            Program.NYI();
+            return null;
+        }
+    }
+
+    AsmOperand LowByte(Operand r)
+    {
+        if (r.Tag == AddressMode.Immediate)
+        {
+            return new AsmOperand(LowByte(r.Offset), AddressMode.Immediate);
+        }
+        else if (r.Tag == AddressMode.Absolute)
+        {
+            return new AsmOperand(r.Offset, AddressMode.Absolute);
+        }
+        else if (r.Tag == AddressMode.ZeroPageX)
+        {
+            return new AsmOperand(0, AddressMode.Absolute);
+        }
+        else
+        {
+            Program.UnhandledCase();
+            return null;
+        }
+    }
+
+    AsmOperand HighByte(Operand r)
+    {
+        if (r.Tag == AddressMode.Immediate)
+        {
+            return new AsmOperand(HighByte(r.Offset), AddressMode.Immediate);
+        }
+        else if (r.Tag == AddressMode.Absolute)
+        {
+            return new AsmOperand(r.Offset + 1, AddressMode.Absolute);
+        }
+        else if (r.Tag == AddressMode.ZeroPageX)
+        {
+            return new AsmOperand(1, AddressMode.ZeroPageX);
+        }
+        else
+        {
+            Program.UnhandledCase();
+            return null;
+        }
+    }
+
+    static int LowByte(int n)
+    {
+        return n & 0xFF;
+    }
+
+    static int HighByte(int n)
+    {
+        return (n >> 8) & 0xFF;
+    }
+
+    CType TypeOf(Expr expr)
+    {
+        string name;
+        Expr left, right, subexpr;
+        if (expr.Match(Tag.Name, out name))
+        {
+            return FindSymbol(name).Type;
+        }
+        else if (expr.Match(Tag.Load, out subexpr))
+        {
+            return DereferencePointerType(TypeOf(subexpr));
+        }
+        else if (expr.Match(Tag.Add, out left, out right) ||
+            expr.Match(Tag.Subtract, out left, out right))
+        {
+            return FindCommonType(TypeOf(left), TypeOf(right));
+        }
+        else
+        {
+            Program.UnhandledCase();
+            return null;
+        }
+    }
+
+    //        else if (Next().Match(Tag.PushVariableAddress, out name))
+    //        {
+    //            ConsumeInput(1);
+
+    //            Symbol sym;
+    //            if (!Symbols.TryGetValue(name, out sym))
+    //            {
+    //                Error("reference to undefined symbol: {0}", name);
+    //            }
+    //            CType valueType = sym.Type;
+
+    //            if (sym.Tag == SymbolTag.Variable)
+    //            {
+    //                Push(OperandInfo.MakeVariableAddress(name, CType.MakePointer(valueType)));
+    //            }
+    //            else if (sym.Tag == SymbolTag.Constant)
+    //            {
+    //                Push(OperandInfo.MakeImmediate(sym.Value, sym.Type));
+
+    //                // Ignore the subsequent load op:
+    //                if (Next().Match(Tag.Load))
+    //                {
+    //                    ConsumeInput(1);
+    //                }
+    //                else
+    //                {
+    //                    // Variable references should always be followed by a load.
+    //                    Program.UnhandledCase();
+    //                }
+    //            }
+    //            else
+    //            {
+    //                Program.UnhandledCase();
+    //            }
+    //        }
+    //        else if (Next().Match(Tag.DropFinal))
+    //        {
+    //            ConsumeInput(1);
+
+    //            if (Stack.Count != 1) Program.Panic("the virtual stack should contain exactly one operand");
+    //            Stack.Clear();
+    //            Emit(Expr.Make(Tag.Comment, "drop final"));
+    //        }
+    //        else if (Next().Match(Tag.Drop))
+    //        {
+    //            ConsumeInput(1);
+
+    //            Drop(1);
+    //        }
+    //        else if (Next().Match(Tag.Materialize))
+    //        {
+    //            ConsumeInput(1);
+
+    //            // Put the top operand in the accumulator and update the stack to reflect its new location.
+    //            OperandReference top = Peek(0);
+    //            LoadAccumulator(top);
+    //            Replace(top, OperandInfo.MakeRegister(OperandRegister.Accumulator, top.Type));
+    //        }
+    //        else if (Next().Match(Tag.Cast, out newType))
+    //        {
+    //            ConsumeInput(1);
+
+    //            OperandReference r = Peek(0);
+    //            if (SizeOf(r.Type) != SizeOf(newType))
+    //            {
+    //                // TODO: Perform any necessary type conversions.
+    //                Program.Panic("a type conversion is required");
+    //            }
+
+    //            Replace(r, r.WithType(newType));
+    //        }
+    //        else if (Next().Match(Tag.Jump, out target))
+    //        {
+    //            ConsumeInput(1);
+
+    //            EmitAsm("JMP", new AsmOperand(target, AddressMode.Absolute));
+    //        }
+    //        else if (Next().Match(Tag.JumpIfTrue, out target))
+    //        {
+    //            ConsumeInput(1);
+
+    //            OperandReference cond = Peek(0);
+
+    //            int size = SizeOf(cond.Type);
+
+    //            Spill(cond);
+    //            UnloadAccumulator();
+    //            if (size >= 1) EmitAsm("LDA", cond.LowByte());
+    //            if (size >= 2) EmitAsm("ORA", cond.HighByte());
+    //            if (size > 2) Program.Panic("value is too large");
+    //            EmitAsm("BEQ", new AsmOperand(3, AddressMode.Relative));
+    //            EmitAsm("JMP", new AsmOperand(target, AddressMode.Absolute));
+
+    //            Drop(1);
+    //        }
+    //        else if (Next().Match(Tag.JumpIfFalse, out target))
+    //        {
+    //            ConsumeInput(1);
+
+    //            OperandReference cond = Peek(0);
+
+    //            int size = SizeOf(cond.Type);
+
+    //            Spill(cond);
+    //            UnloadAccumulator();
+    //            if (size >= 1) EmitAsm("LDA", cond.LowByte());
+    //            if (size >= 2) EmitAsm("ORA", cond.HighByte());
+    //            if (size > 2) Program.Panic("value is too large");
+    //            EmitAsm("BNE", new AsmOperand(3, AddressMode.Relative));
+    //            EmitAsm("JMP", new AsmOperand(target, AddressMode.Absolute));
+
+    //            Drop(1);
+    //        }
+    //        else if (Next().Match(Tag.AddressOf))
+    //        {
+    //            ConsumeInput(1);
+
+    //            Error("it is not possible to take the address of this expression");
+    //        }
+    //        else if (Next().Match(Tag.Store))
+    //        {
+    //            ConsumeInput(1);
+
+    //            // Get operands:
+    //            OperandReference value = Peek(0);
+    //            OperandReference address = Peek(1);
+
+    //            // Check types:
+    //            CType typeToStore = DereferencePointerType(address.Type);
+    //            ConvertType(Conversion.Implicit, value, typeToStore);
+    //            int size = SizeOf(typeToStore);
+
+    //            // Generate code:
+
+    //            // First, copy the address to zero page:
+    //            if (address.Tag == OperandTag.Immediate)
+    //            {
+    //                LoadAccumulator(value);
+    //                if (size >= 1) Emit(Expr.MakeAsm("STA", new AsmOperand(address.Value, AddressMode.Absolute)));
+    //                if (size >= 2) Emit(Expr.MakeAsm("STX", new AsmOperand(address.Value + 1, AddressMode.Absolute)));
+    //                if (size > 2) Program.Panic("values larger than two bytes cannot be stored via accumulator");
+    //            }
+    //            else if (address.Tag == OperandTag.VariableAddress)
+    //            {
+    //                LoadAccumulator(value);
+    //                if (size >= 1) Emit(Expr.MakeAsm("STA", new AsmOperand(address.Name, AddressMode.Absolute)));
+    //                if (size >= 2) Emit(Expr.MakeAsm("STX", new AsmOperand(address.Name, 1, AddressMode.Absolute)));
+    //                if (size > 2) Program.Panic("values larger than two bytes cannot be stored via accumulator");
+    //            }
+    //            else if (address.Tag == OperandTag.Variable || address.Tag == OperandTag.Register)
+    //            {
+    //                Store(address, TempPointer);
+
+    //                // Now copy the value:
+    //                LoadAccumulator(value);
+
+    //                if (size >= 1)
+    //                {
+    //                    Emit(Expr.MakeAsm("LDY", new AsmOperand(0, AddressMode.Immediate)));
+    //                    Emit(Expr.MakeAsm("STA", new AsmOperand(TempPointer, AddressMode.IndirectY)));
+    //                }
+
+    //                if (size >= 2)
+    //                {
+    //                    EmitAsm("INY");
+    //                    // The store operation must leave the stored value in the accumulator, so save and restore A:
+    //                    EmitAsm("PHA");
+    //                    EmitAsm("TXA");
+    //                    Emit(Expr.MakeAsm("STA", new AsmOperand(TempPointer, AddressMode.IndirectY)));
+    //                    EmitAsm("PLA");
+    //                }
+
+    //                if (size > 2) Program.Panic("values larger than two bytes cannot be stored via accumulator");
+    //            }
+    //            else
+    //            {
+    //                Program.UnhandledCase();
+    //            }
+
+    //            // The store operation leaves the value in the accumulator; this matches the behavior of C assignment.
+    //            Drop(2);
+    //            PushAccumulator(typeToStore);
+    //        }
+    //        else if (Next(0).Match(Tag.Load) && Next(1).Match(Tag.AddressOf))
+    //        {
+    //            // An "address of" cancels out a preceding "load".
+    //            ConsumeInput(2);
+    //        }
+    //        else if (Next().Match(Tag.Load) || Next().Match(Tag.LoadNondestructive))
+    //        {
+    //            bool drop = !Next().Match(Tag.LoadNondestructive);
+    //            ConsumeInput(1);
+
+    //            // Get operands:
+    //            OperandReference address = Peek(0);
+
+    //            // Check types:
+    //            CType loadedType = DereferencePointerType(address.Type);
+
+    //            if (loadedType.IsArray)
+    //            {
+    //                // The result of loading an array is a pointer to the first element of the array.
+    //                // (This is the automatic "decay" of arrays to pointers.)
+    //                ConvertType(Conversion.Explicit, address, CType.MakePointer(loadedType.Subtype));
+    //            }
+    //            else if (address.Tag == OperandTag.Immediate)
+    //            {
+    //                Program.Panic("the load operation should never be applied to an immediate");
+    //            }
+    //            else if (address.Tag == OperandTag.Variable || address.IsAccumulator)
+    //            {
+    //                int size = SizeOf(loadedType);
+
+    //                // Copy the pointer to zero page so that it can be used:
+    //                Store(address, TempPointer);
+
+    //                UnloadAccumulator();
+    //                if (size == 1)
+    //                {
+    //                    Emit(Expr.MakeAsm("LDY", new AsmOperand(0, AddressMode.Immediate)));
+    //                    Emit(Expr.MakeAsm("LDA", new AsmOperand(TempPointer, AddressMode.IndirectY)));
+    //                }
+    //                else if (size == 2)
+    //                {
+    //                    Emit(Expr.MakeAsm("LDY", new AsmOperand(1, AddressMode.Immediate)));
+    //                    Emit(Expr.MakeAsm("LDA", new AsmOperand(TempPointer, AddressMode.IndirectY)));
+    //                    EmitAsm("TAX");
+    //                    EmitAsm("DEY");
+    //                    Emit(Expr.MakeAsm("LDA", new AsmOperand(TempPointer, AddressMode.IndirectY)));
+    //                }
+    //                else
+    //                {
+    //                    Program.Panic("values larger than two bytes cannot be loaded via accumulator");
+    //                }
+
+    //                if (drop) Drop(1);
+    //                PushAccumulator(loadedType);
+    //            }
+    //            else if (address.Tag == OperandTag.VariableAddress)
+    //            {
+    //                OperandInfo result = OperandInfo.MakeVariable(address.Name, loadedType);
+    //                if (drop) Drop(1);
+    //                Push(result);
+    //            }
+    //            else
+    //            {
+    //                Program.NYI();
+    //            }
+    //        }
+    //        else if (Next().Match(Tag.Field, out name))
+    //        {
+    //            ConsumeInput(1);
+
+    //            // Get operands:
+    //            OperandReference structAddress = Peek(0);
+
+    //            // Check types:
+    //            CType aggregateType = DereferencePointerType(structAddress.Type);
+    //            if (!aggregateType.IsStructOrUnion)
+    //            {
+    //                Error("expression must be a struct or union");
+    //            }
+    //            CAggregateInfo aggregateInfo = GetAggregateInfo(aggregateType.Name);
+
+    //            CField fieldInfo = aggregateInfo.Fields.FirstOrDefault(x => x.Name == name);
+    //            if (fieldInfo == null)
+    //            {
+    //                Error("struct type '{0}' does not contain a field named '{1}'", aggregateType.Name, name);
+    //            }
+
+    //            // Replace with simpler stack code:
+    //            Input.InsertRange(0, new[]
+    //            {
+    //                Expr.Make(Tag.Cast, CType.UInt8Ptr),
+    //                Expr.Make(Tag.PushImmediate, fieldInfo.Offset),
+    //                Expr.Make(Tag.Add),
+    //                Expr.Make(Tag.Cast, CType.MakePointer(fieldInfo.Type)),
+    //            });
+    //        }
+    //        else if (Next().Match(Tag.PreIncrement) || Next().Match(Tag.PreDecrement))
+    //        {
+    //            bool increment = Next().Match(Tag.PreIncrement);
+    //            ConsumeInput(1);
+
+    //            OperandReference address = Peek(0);
+    //            CType valueType = DereferencePointerType(address.Type);
+    //            int size = SizeOf(valueType);
+
+    //            // Pointer arithmetic must be scaled by element size:
+    //            int amount = 1;
+    //            if (valueType.IsPointer)
+    //            {
+    //                amount = SizeOf(DereferencePointerType(valueType));
+    //            }
+
+    //            if (address.Tag == OperandTag.VariableAddress && amount == 1 && size == 1)
+    //            {
+    //                EmitAsm(increment ? "INC" : "DEC", new AsmOperand(address.Name, AddressMode.Absolute));
+    //                UnloadAccumulator();
+    //                EmitAsm("LDA", new AsmOperand(address.Name, AddressMode.Absolute));
+
+    //                Drop(1);
+    //                PushAccumulator(valueType);
+    //            }
+    //            else
+    //            {
+    //                CType effectiveType = CType.UInt8;
+    //                if (size == 2) effectiveType = CType.UInt16;
+    //                if (size > 2) Program.Panic("value is too large");
+
+    //                ConvertType(Conversion.Explicit, address, CType.MakePointer(effectiveType));
+    //                Push(OperandInfo.MakeImmediate(amount, effectiveType));
+    //                EmitCall(GetRuntimeFunctionName(increment ? "preinc" : "predec", effectiveType), 2);
+    //                ConvertType(Conversion.Explicit, Peek(0), valueType);
+    //            }
+    //        }
+    //        else if (Next().Match(Tag.PostIncrement) || Next().Match(Tag.PostDecrement))
+    //        {
+    //            bool increment = Next().Match(Tag.PostIncrement);
+    //            ConsumeInput(1);
+
+    //            OperandReference address = Peek(0);
+    //            CType valueType = DereferencePointerType(address.Type);
+    //            int size = SizeOf(valueType);
+
+    //            // Pointer arithmetic must be scaled by element size:
+    //            int amount = 1;
+    //            if (valueType.IsPointer)
+    //            {
+    //                amount = SizeOf(DereferencePointerType(valueType));
+    //            }
+
+    //            if (address.Tag == OperandTag.VariableAddress && amount == 1 && size == 1)
+    //            {
+    //                UnloadAccumulator();
+    //                EmitAsm("LDA", new AsmOperand(address.Name, AddressMode.Absolute));
+    //                EmitAsm(increment ? "INC" : "DEC", new AsmOperand(address.Name, AddressMode.Absolute));
+
+    //                Drop(1);
+    //                PushAccumulator(valueType);
+    //            }
+    //            else
+    //            {
+    //                CType effectiveType = CType.UInt8;
+    //                if (size == 2) effectiveType = CType.UInt16;
+    //                if (size > 2) Program.Panic("value is too large");
+
+    //                ConvertType(Conversion.Explicit, address, CType.MakePointer(effectiveType));
+    //                Push(OperandInfo.MakeImmediate(amount, effectiveType));
+    //                EmitCall(GetRuntimeFunctionName(increment ? "postinc" : "postdec", effectiveType), 2);
+    //                ConvertType(Conversion.Explicit, Peek(0), valueType);
+    //            }
+    //        }
+    //        else if (Next().Match(Tag.Add))
+    //        {
+    //            ConsumeInput(1);
+
+    //            // Get operands:
+    //            OperandReference right = Peek(0);
+    //            OperandReference left = Peek(1);
+
+    //            // Check types:
+    //            CType resultType;
+    //            // TODO: Find a better way to scale the index by the element size.
+    //            int repetitions = 1;
+    //            if (left.Type.IsPointer && right.Type.IsPointer)
+    //            {
+    //                Error("pointers cannot be added together");
+    //            }
+    //            if (left.Type.IsPointer && right.Type.IsInteger)
+    //            {
+    //                resultType = left.Type;
+    //                repetitions = SizeOf(DereferencePointerType(resultType));
+    //                ConvertType(Conversion.Implicit, right, CType.UInt16);
+    //            }
+    //            else if (left.Type.IsInteger && right.Type.IsPointer)
+    //            {
+    //                // Swap the roles of the operands:
+    //                OperandReference temp = left;
+    //                left = right;
+    //                right = temp;
+
+    //                resultType = left.Type;
+    //                repetitions = SizeOf(DereferencePointerType(resultType));
+    //                ConvertType(Conversion.Implicit, right, CType.UInt16);
+    //            }
+    //            else
+    //            {
+    //                resultType = FindCommonType(left.Type, right.Type);
+    //                ConvertType(Conversion.Implicit, right, resultType);
+    //                ConvertType(Conversion.Implicit, left, resultType);
+    //            }
+
+    //            // Generate code:
+    //            int size = SizeOf(resultType);
+    //            LoadAccumulator(left);
+    //            for (int i = 0; i < repetitions; i++)
+    //            {
+    //                if (size >= 1)
+    //                {
+    //                    EmitAsm("CLC");
+    //                    EmitAsm("ADC", right.LowByte());
+    //                }
+
+    //                if (size >= 2)
+    //                {
+    //                    EmitAsm("TAY");
+    //                    EmitAsm("TXA");
+    //                    EmitAsm("ADC", right.HighByte());
+    //                    EmitAsm("TAX");
+    //                    EmitAsm("TYA");
+    //                }
+
+    //                if (size > 2) Program.Panic("value is too large");
+    //            }
+
+    //            Drop(2);
+    //            PushAccumulator(resultType);
+    //        }
+    //        else if (Next().Match(Tag.Subtract))
+    //        {
+    //            ConsumeInput(1);
+
+    //            // Get operands:
+    //            OperandReference right = Peek(0);
+    //            OperandReference left = Peek(1);
+
+    //            // Check types:
+    //            CType resultType;
+    //            // TODO: Find a better way to scale the index by the element size.
+    //            int repetitions = 1;
+    //            if (left.Type.IsPointer && right.Type.IsPointer)
+    //            {
+    //                resultType = CType.UInt16;
+    //                Program.NYI();
+    //            }
+    //            if (left.Type.IsPointer && right.Type.IsInteger)
+    //            {
+    //                resultType = left.Type;
+    //                repetitions = SizeOf(DereferencePointerType(resultType));
+    //                ConvertType(Conversion.Implicit, right, CType.UInt16);
+    //            }
+    //            else if (left.Type.IsInteger && right.Type.IsPointer)
+    //            {
+    //                Error("cannot subtract a pointer from an integer");
+    //                resultType = left.Type;
+    //            }
+    //            else
+    //            {
+    //                resultType = FindCommonType(left.Type, right.Type);
+    //                ConvertType(Conversion.Implicit, right, resultType);
+    //                ConvertType(Conversion.Implicit, left, resultType);
+    //            }
+
+    //            // Generate code:
+    //            int size = SizeOf(resultType);
+    //            LoadAccumulator(left);
+
+    //            if (size >= 1)
+    //            {
+    //                EmitAsm("SEC");
+    //                EmitAsm("SBC", right.LowByte());
+    //            }
+
+    //            if (size >= 2)
+    //            {
+    //                EmitAsm("TAY");
+    //                EmitAsm("TXA");
+    //                EmitAsm("SBC", right.HighByte());
+    //                EmitAsm("TAX");
+    //                EmitAsm("TYA");
+    //            }
+
+    //            if (size > 2) Program.Panic("value is too large");
+
+    //            Drop(2);
+    //            PushAccumulator(resultType);
+    //        }
+    //        else if (Next().Match(out name) && UnaryRuntimeOperators.TryGetValue(name, out functionName))
+    //        {
+    //            ConsumeInput(1);
+
+    //            // Get operand:
+    //            CType argType = Peek(0).Type;
+
+    //            // Check types and generate code:
+    //            if (argType.IsInteger)
+    //            {
+    //                EmitCall(GetRuntimeFunctionName(functionName, argType), 1);
+    //            }
+    //            else if (argType.IsPointer)
+    //            {
+    //                Program.NYI();
+    //            }
+    //            else
+    //            {
+    //                Error("unary operator cannot be used with type '{0}'", argType.Show());
+    //            }
+    //        }
+    //        else if (Next().Match(out name) && BinaryRuntimeOperators.TryGetValue(name, out functionName))
+    //        {
+    //            ConsumeInput(1);
+
+    //            bool pointersAllowed = BinaryOperatorsThatAllowPointers.Contains(name);
+
+    //            // Get operands:
+    //            OperandReference right = Peek(0);
+    //            OperandReference left = Peek(1);
+
+    //            // Check types:
+    //            CType resultType = CType.Void;
+    //            if (left.Type.IsInteger && right.Type.IsInteger)
+    //            {
+    //                // All of these operators work on integers.
+    //                resultType = FindCommonType(left.Type, right.Type);
+    //                ConvertType(Conversion.Implicit, right, resultType);
+    //                ConvertType(Conversion.Implicit, left, resultType);
+    //            }
+    //            else if (left.Type.IsPointer || right.Type.IsPointer)
+    //            {
+    //                if (!pointersAllowed)
+    //                {
+    //                    Error("operation does not support pointers");
+    //                }
+    //                else if (left.Type != right.Type)
+    //                {
+    //                    Error("these pointer operands must have the same type");
+    //                }
+    //                else
+    //                {
+    //                    // Treat the pointer operands as unsigned integers of the same size.
+    //                    resultType = CType.UInt16;
+    //                    ConvertType(Conversion.Explicit, left, resultType);
+    //                    ConvertType(Conversion.Explicit, right, resultType);
+    //                }
+    //            }
+    //            else
+    //            {
+    //                // TODO: Make this error message more specific.
+    //                Error("operation does not allow these types");
+    //            }
+
+    //            // Generate code:
+    //            EmitCall(GetRuntimeFunctionName(functionName, resultType), 2);
+    //        }
+    //        else if (Next().Match(Tag.Return))
+    //        {
+    //            ConsumeInput(1);
+
+    //            OperandReference top = Peek(0);
+
+    //            ConvertType(Conversion.Implicit, top, ReturnTypeOfCurrentFunction);
+    //            LoadAccumulator(top);
+    //            Drop(1);
+    //            EmitAsm("RTS");
+    //        }
+    //        else if (Next().Match(Tag.ReturnVoid))
+    //        {
+    //            ConsumeInput(1);
+
+    //            EmitAsm("RTS");
+    //        }
+    //        else if (Next().Match(Tag.Call, out functionName, out argCount))
+    //        {
+    //            ConsumeInput(1);
+
+    //            // This is a general-purpose call.
+    //            EmitCall(functionName, argCount);
+    //        }
+    //        else if (Next().MatchTag(Tag.Asm) || Next().MatchTag(Tag.Label) || Next().MatchTag(Tag.Comment))
+    //        {
+    //            Expr op = Next();
+    //            ConsumeInput(1);
+
+    //            // Pass certain instructions through unchanged.
+    //            Emit(op);
+    //        }
+    //        else
+    //        {
+    //            Program.UnhandledCase();
+    //        }
+    //    }
 
     void Emit(params object[] args)
     {
@@ -827,28 +1008,72 @@ class CodeGenerator
 
     void EmitAsm(string mnemonic, AsmOperand operand) => Emit(Expr.MakeAsm(mnemonic, operand));
 
-    void DeclareVariable(MemoryRegion region, CType type, string name)
+    void BeginScope()
     {
-        DeclareSymbol(SymbolTag.Variable, name, type, 0);
-        // Replace the type information with just a size:
-        Emit(Tag.Variable, region, SizeOf(type), name);
+        CurrentScope = new LexicalScope(CurrentScope);
     }
 
-    void DeclareSymbol(SymbolTag tag, string name, CType type, int value)
+    void EndScope()
     {
-        // It is an error to define two things with the same name in the same scope.
-        if (Symbols.ContainsKey(name))
+        CurrentScope = CurrentScope.Outer;
+    }
+
+    Operand FindSymbol(string name)
+    {
+        Operand sym;
+
+        for (LexicalScope scope = CurrentScope; scope != null; scope = scope.Outer)
         {
-            Error("symbols cannot be redefined: {0}", name);
+            if (scope.Locals.TryGetValue(name, out sym))
+            {
+                return sym;
+            }
         }
 
-        Symbols.Add(name, new Symbol
+        Error("reference to undefined symbol: {0}", name);
+        return null;
+    }
+
+    Operand DeclareGlobal(MemoryRegion region, CType type, string name)
+    {
+        // TODO: Allocate an address from the appropriate region.
+
+        return DeclareSymbol(new Operand(AddressMode.Absolute, 0x80, type, name));
+    }
+
+    Operand DeclareLocal(CType type, string name)
+    {
+        int size = SizeOf(type);
+        int offset = FrameSize;
+        FrameSize += size;
+        return DeclareSymbol(new Operand(AddressMode.ZeroPageX, offset, type, name));
+    }
+
+    Operand DeclareTemporary(CType type)
+    {
+        int i = 0;
+        while (true)
         {
-            Tag = tag,
-            Name = name,
-            Type = type,
-            Value = value,
-        });
+            string name = string.Format("$temp{0}", i);
+            if (!CurrentScope.Locals.ContainsKey(name))
+            {
+                return DeclareLocal(type, name);
+            }
+            i += 1;
+        }
+    }
+
+    Operand DeclareSymbol(Operand r)
+    {
+        // It is an error to define two things with the same name in the same scope.
+        if (CurrentScope.Locals.ContainsKey(r.Name))
+        {
+            Error("symbols cannot be redefined: {0}", r.Name);
+        }
+
+        CurrentScope.Locals.Add(r.Name, r);
+        Emit(Tag.Comment, string.Format("symbol: {0} @ {1}", r.Name, r));
+        return r;
     }
 
     static CType FindCommonType(CType left, CType right)
@@ -869,77 +1094,15 @@ class CodeGenerator
         }
     }
 
-    void ConvertType(Conversion kind, OperandReference r, CType desiredType)
-    {
-        CType originalType = r.Type;
-
-        // Leave a comment whenever a type conversion occurs.
-        // (Except when the operand is an immediate; converting immediates doesn't emit any code.)
-        if (originalType != desiredType && r.Tag != OperandTag.Immediate)
-        {
-            Emit(Tag.Comment, string.Format("convert type from '{0}' to '{1}':", originalType.Show(), desiredType.Show()));
-        }
-
-        bool narrowed = false;
-
-        if (originalType == desiredType)
-        {
-            // NOP
-        }
-        else if (originalType == CType.UInt8 && desiredType == CType.UInt16)
-        {
-            if (r.Tag == OperandTag.Immediate)
-            {
-                // The type and value of immediates can be changed directly:
-                Replace(r, OperandInfo.MakeImmediate(r.Value, desiredType));
-            }
-            else
-            {
-                // Zero-extend the value:
-                LoadAccumulator(r);
-                EmitAsm("LDX", new AsmOperand(0, AddressMode.Immediate));
-                Replace(r, OperandInfo.MakeRegister(OperandRegister.Accumulator, desiredType));
-            }
-        }
-        else if (originalType == CType.UInt16 && desiredType == CType.UInt8)
-        {
-            if (r.Tag == OperandTag.Immediate)
-            {
-                narrowed = r.Value > 0xFF;
-                Replace(r, OperandInfo.MakeImmediate(r.Value & 0xFF, desiredType));
-            }
-            else
-            {
-                narrowed = true;
-                // The actual type doesn't need to be modified; just change the operand's type to exclude the high byte.
-                Replace(r, r.WithType(desiredType));
-            }
-        }
-        else if (kind == Conversion.Explicit && SizeOf(originalType) == SizeOf(desiredType))
-        {
-            Replace(r, r.WithType(desiredType));
-        }
-        else
-        {
-            Error("expected type '{1}' does not match actual type '{0}'", originalType.Show(), desiredType.Show());
-        }
-
-        // The value was truncated, so display a warning.
-        if (narrowed)
-        {
-            Warning("implicit conversion from '{0}' to '{1}' may lose information", originalType.Show(), desiredType.Show());
-        }
-    }
-
     CType DereferencePointerType(CType pointer)
     {
         if (!pointer.IsPointer) Error("a pointer type is required");
         return pointer.Subtype;
     }
 
-    CAggregateInfo GetAggregateInfo(string name)
+    AggregateInfo GetAggregateInfo(string name)
     {
-        CAggregateInfo info;
+        AggregateInfo info;
         if (!AggregateTypes.TryGetValue(name, out info)) Error("struct or union not defined: {0}", name);
         return info;
     }
@@ -972,7 +1135,7 @@ class CodeGenerator
         }
         else if (type.IsStructOrUnion)
         {
-            CAggregateInfo info = GetAggregateInfo(type.Name);
+            AggregateInfo info = GetAggregateInfo(type.Name);
             return info.TotalSize;
         }
         else if (type.IsArray)
@@ -982,152 +1145,6 @@ class CodeGenerator
 
         Program.NYI();
         return 1;
-    }
-
-    string DeclareTemporary(CType type)
-    {
-        int size = SizeOf(type);
-
-        string[] allocated = Stack
-            .Where(x => x.Tag == OperandTag.Variable || x.Tag == OperandTag.VariableAddress)
-            .Select(x => x.Name)
-            .ToArray();
-
-        // Reuse a suitable temporary:
-        foreach (Temporary temp in Temporaries)
-        {
-            if (temp.Size == size && !allocated.Contains(temp.Name))
-            {
-                return temp.Name;
-            }
-        }
-
-        // Create a new temporary:
-        string name = NameOfCurrentFunction + Program.NamespaceSeparator + "$temp" + Temporaries.Count;
-        DeclareSymbol(SymbolTag.Variable, name, type, 0);
-        Emit(Expr.Make(Tag.Variable, MemoryRegion.Ram, size, name));
-        Temporaries.Add(new Temporary
-        {
-            Name = name,
-            Size = size,
-        });
-        return name;
-    }
-
-    void Push(OperandInfo r)
-    {
-        Stack.Add(r);
-        StackWasResized();
-    }
-
-    void PushAccumulator(CType type)
-    {
-        Push(OperandInfo.MakeRegister(OperandRegister.Accumulator, type));
-    }
-
-    void Drop(int count)
-    {
-        Stack.RemoveRange(Stack.Count - count, count);
-        StackWasResized();
-    }
-
-    OperandReference Peek(int offset)
-    {
-        if (offset < 0 || offset >= Stack.Count) throw new IndexOutOfRangeException("Operand offset is out of range.");
-        return new OperandReference(this, Stack.Count - 1 - offset, StackEpoch);
-    }
-
-    public OperandInfo GetOperandInfo(OperandReference r) => GetOperandInfo(r.Index, r.StackEpoch);
-
-    public OperandInfo GetOperandInfo(int index, long epoch)
-    {
-        CheckStackEpoch(epoch);
-        return Stack[index];
-    }
-
-    void Replace(OperandReference original, OperandInfo replacement)
-    {
-        CheckStackEpoch(original.StackEpoch);
-        Stack[original.Index] = replacement;
-    }
-
-    void StackWasResized()
-    {
-        // Invalidate any existing OperandReferences.
-        StackEpoch += 1;
-    }
-
-    void CheckStackEpoch(long submission)
-    {
-        if (submission != StackEpoch) Program.Panic("This operand reference is out of date; the stack has changed.");
-    }
-
-    void Spill(OperandReference r)
-    {
-        if (r.Tag == OperandTag.Register)
-        {
-            string temp = DeclareTemporary(r.Type);
-            Store(r, temp);
-            Replace(r, OperandInfo.MakeVariable(temp, r.Type));
-        }
-    }
-
-    /// <summary>
-    /// Spill all registers so that they can be used for something else.
-    /// </summary>
-    void UnloadAccumulator()
-    {
-        for (int i = 0; i < Stack.Count; i++)
-        {
-            OperandReference r = new OperandReference(this, i, StackEpoch);
-            Spill(r);
-        }
-    }
-
-    void LoadAccumulator(OperandReference source)
-    {
-        CheckStackEpoch(source.StackEpoch);
-
-        // If any other operands are in registers, spill them to memory and remember their new location.
-        for (int i = 0; i < Stack.Count; i++)
-        {
-            if (i != source.Index)
-            {
-                OperandReference r = new OperandReference(this, i, StackEpoch);
-                Spill(r);
-            }
-        }
-
-        if (source.Tag == OperandTag.Register)
-        {
-            if (source.Register == OperandRegister.Accumulator)
-            {
-                // NOP
-            }
-            else
-            {
-                Program.NYI();
-            }
-        }
-        else
-        {
-            int size = SizeOf(source.Type);
-            if (size >= 1) EmitAsm("LDA", source.LowByte());
-            if (size >= 2) EmitAsm("LDX", source.HighByte());
-            if (size > 2) Program.Panic("value is too large");
-        }
-    }
-
-    /// <summary>
-    /// Store an operand on the stack into memory.
-    /// </summary>
-    void Store(OperandReference source, string destination)
-    {
-        LoadAccumulator(source);
-        int size = SizeOf(source.Type);
-        if (size >= 1) EmitAsm("STA", new AsmOperand(destination, 0, AddressMode.Absolute));
-        if (size >= 2) EmitAsm("STX", new AsmOperand(destination, 1, AddressMode.Absolute));
-        if (size > 2) Program.Panic("value is too large");
     }
 
     void EmitCall(string functionName, int argCount)
@@ -1147,26 +1164,15 @@ class CodeGenerator
 
         for (int i = 0; i < function.Parameters.Length; i++)
         {
-            OperandReference arg = Peek(i);
-            CParameter param = function.Parameters[function.Parameters.Length - 1 - i];
-            ConvertType(Conversion.Implicit, arg, param.Type);
-            string paramName = functionName + Program.NamespaceSeparator + param.Name;
-            Store(arg, paramName);
+            //OperandReference arg = Peek(i);
+            FieldInfo param = function.Parameters[function.Parameters.Length - 1 - i];
+            //ConvertType(Conversion.Implicit, arg, param.Type);
+            //Store(arg, paramName);
         }
 
-        // The return value goes in the accumulator:
-        UnloadAccumulator();
+        // TODO: The return value goes... somewhere.
 
         EmitAsm("JSR", new AsmOperand(functionName, AddressMode.Absolute));
-
-        // Use the return value:
-        Drop(argCount);
-        PushAccumulator(function.ReturnType);
-    }
-
-    static bool IsVariableGlobal(string name)
-    {
-        return !name.Contains(Program.NamespaceSeparator);
     }
 
     [DebuggerStepThrough]
@@ -1225,138 +1231,58 @@ class CodeGenerator
 
         return "_rt_" + operation + "_" + typeSuffix;
     }
-
-    [DebuggerDisplay("{Tag} {Name} = 0x{Value,h} ({Type.Show(),nq})")]
-    class Symbol
-    {
-        public SymbolTag Tag;
-        public string Name;
-        public CType Type;
-        public int Value;
-    }
-
-    enum SymbolTag
-    {
-        Constant,
-        Variable,
-    }
-
-    class Temporary
-    {
-        public string Name;
-        public int Size;
-    }
 }
 
-class OperandReference
+class Operand
 {
-    private readonly CodeGenerator Generator;
-    public readonly int Index;
-    public readonly long StackEpoch;
-
-    public OperandReference(CodeGenerator generator, int index, long epoch)
-    {
-        Generator = generator;
-        Index = index;
-        StackEpoch = epoch;
-    }
-
-    public override string ToString() => Get().Show();
-
-    OperandInfo Get() => Generator.GetOperandInfo(Index, StackEpoch);
-
-    public OperandTag Tag => Get().Tag;
-    public int Value => Get().Value;
-    public string Name => Get().Name;
-    public OperandRegister Register => Get().Register;
-    public CType Type => Get().Type;
-
-    public bool IsAccumulator => Tag == OperandTag.Register && Register == OperandRegister.Accumulator;
-    public OperandInfo WithType(CType newType) => new OperandInfo(Tag, Value, Name, Register, newType);
-
-    public AsmOperand LowByte()
-    {
-        if (Tag == OperandTag.Immediate) return new AsmOperand(Value & 0xFF, AddressMode.Immediate);
-        else if (Tag == OperandTag.Variable) return new AsmOperand(Name, AddressMode.Absolute);
-        else if (Tag == OperandTag.VariableAddress) return new AsmOperand(Name, ImmediateModifier.LowByte);
-        else
-        {
-            Program.Panic("not possible with register operands");
-            return null;
-        }
-    }
-
-    public AsmOperand HighByte()
-    {
-        if (Tag == OperandTag.Immediate) return new AsmOperand((Value >> 8) & 0xFF, AddressMode.Immediate);
-        else if (Tag == OperandTag.Variable) return new AsmOperand(Name, 1, AddressMode.Absolute);
-        else if (Tag == OperandTag.VariableAddress) return new AsmOperand(Name, ImmediateModifier.HighByte);
-        else
-        {
-            Program.Panic("not possible with register operands");
-            return null;
-        }
-    }
-}
-
-[DebuggerDisplay("{Show(),nq}")]
-class OperandInfo
-{
-    public readonly OperandTag Tag;
-    public readonly int Value;
-    public readonly string Name;
-    public readonly OperandRegister Register;
+    public readonly AddressMode Tag;
+    public readonly int Offset;
     public readonly CType Type;
+    public readonly string Name;
 
-    public OperandInfo(OperandTag tag, int value, string name, OperandRegister register, CType type)
+    public Operand(AddressMode tag, int offset, CType type)
+        : this(tag, offset, type, "<unnamed>")
+    {
+    }
+
+    public Operand(AddressMode tag, int offset, CType type, string name)
     {
         Tag = tag;
-        Value = value;
-        Name = name;
-        Register = register;
+        Offset = offset;
         Type = type;
+        Name = name;
     }
 
-    public static OperandInfo MakeImmediate(int value, CType type) => new OperandInfo(OperandTag.Immediate, value, null, OperandRegister.Invalid, type);
-    public static OperandInfo MakeVariable(string name, CType type) => new OperandInfo(OperandTag.Variable, 0, name, OperandRegister.Invalid, type);
-    public static OperandInfo MakeVariableAddress(string name, CType type) => new OperandInfo(OperandTag.VariableAddress, 0, name, OperandRegister.Invalid, type);
-    public static OperandInfo MakeRegister(OperandRegister register, CType type) => new OperandInfo(OperandTag.Register, 0, null, register, type);
+    public static readonly Operand Discard = null;
 
-    public string Show()
+    public override string ToString()
     {
-        if (Tag == OperandTag.Immediate) return "#" + Value;
-        else if (Tag == OperandTag.Variable) return Name;
-        else if (Tag == OperandTag.VariableAddress) return "&" + Name;
-        else if (Tag == OperandTag.Register)
-        {
-            if (Register == OperandRegister.Accumulator) return "A";
-            else if (Register == OperandRegister.FlagZero) return "ZF";
-            else if (Register == OperandRegister.FlagNotZero) return "!ZF";
-            else if (Register == OperandRegister.FlagCarry) return "CF";
-            else if (Register == OperandRegister.FlagNotCarry) return "!CF";
-        }
-
-        Program.NYI();
-        return null;
+        return string.Format("Location({0}, {1}, {2}, {3})", Tag, Offset, Type.Show(), Name);
     }
 }
 
-enum OperandTag
+class Continuation
 {
-    Immediate,
-    Variable,
-    VariableAddress,
-    Register,
+
+    public static readonly Continuation Fallthrough = null;
 }
 
-enum OperandRegister
+class LoopScope
 {
-    Invalid = 0,
-    Accumulator,
-    FlagZero,
-    FlagNotZero,
-    FlagCarry,
-    FlagNotCarry,
+    public LoopScope Outer;
+    public string ContinueLabel;
+    public string BreakLabel;
+}
+
+class LexicalScope
+{
+    public readonly LexicalScope Outer;
+    public readonly Dictionary<string, Operand> Locals = new Dictionary<string, Operand>();
+
+    public LexicalScope(LexicalScope outer)
+    {
+        Outer = outer;
+    }
 }
 
 enum Conversion

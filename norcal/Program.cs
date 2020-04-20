@@ -21,7 +21,6 @@ static class Program
     private static bool AttachDebuggerOnError = false;
 
     public static readonly string DebugOutputPath = "debug_output";
-    public static readonly string NamespaceSeparator = ":";
 
     static void Main(string[] argsArray)
     {
@@ -74,9 +73,9 @@ static class Program
 
         try
         {
-            IReadOnlyList<Expr> stackCode = Parser.ParseFiles(sourceFilenames);
-            if (EnableDebugOutput) WritePassOutputToFile("virtual_stack_code", ShowAssembly(stackCode));
-            IReadOnlyList<Expr> assembly = CodeGenerator.Convert(stackCode);
+            Expr syntaxTree = Parser.ParseFiles(sourceFilenames);
+            if (EnableDebugOutput) WritePassOutputToFile("syntax_tree", syntaxTree.ShowMultiline());
+            IReadOnlyList<Expr> assembly = CodeGenerator.Compile(syntaxTree);
             if (EnableDebugOutput) WritePassOutputToFile("assembly_code", ShowAssembly(assembly));
             Assembler.Assemble(assembly, outputFilename);
 
@@ -110,16 +109,8 @@ static class Program
     static string ShowAssembly(IReadOnlyList<Expr> assembly)
     {
         StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < assembly.Count; i++)
+        foreach (Expr e in assembly)
         {
-            // Skip load/address-of pairs, which cancel each other out.
-            while (i + 1 < assembly.Count && assembly[i].Match(Tag.Load) && assembly[i + 1].Match(Tag.AddressOf))
-            {
-                i += 2;
-            }
-
-            Expr e = assembly[i];
-
             string line = "";
             string mnemonic, text;
             AsmOperand operand;
@@ -259,25 +250,33 @@ static class Program
     };
 }
 
-class FieldInfo
-{
-    public readonly MemoryRegion Region;
-    public readonly CType Type;
-    public readonly string Name;
-
-    public FieldInfo(MemoryRegion region, CType type, string name)
-    {
-        Region = region;
-        Type = type;
-        Name = name;
-    }
-}
-
 /// <summary>
-/// Names of AST nodes.
+/// Symbolic constants used in Exprs.
 /// </summary>
 static class Tag
 {
+    // Statements:
+    public static readonly string Sequence = "$sequence";
+    public static readonly string Empty = "$empty";
+    public static readonly string If = "$if";
+    public static readonly string For = "$for";
+    public static readonly string Continue = "$continue";
+    public static readonly string Break = "$break";
+
+    // Operators:
+    public static readonly string Assign = "$assign";
+    public static readonly string AssignModify = "$assign_modify";
+    public static readonly string Conditional = "$conditional";
+    public static readonly string LogicalOr = "$logical_or";
+    public static readonly string LogicalAnd = "$logical_and";
+    public static readonly string Index = "$index";
+
+    // Leaf expressions:
+    public static readonly string Integer = "$integer";
+    public static readonly string Name = "$name";
+
+    // ------------------------------------------------------------------------
+
     // Top-level declarations:
     public static readonly string Function = "$function";
     public static readonly string Constant = "$constant";
@@ -290,11 +289,8 @@ static class Tag
     public static readonly string NoOperation = "$nop";
     public static readonly string AddressOf = "$address_of";
     public static readonly string Return = "$return";
-    public static readonly string ReturnVoid = "$return_void";
     public static readonly string Cast = "$cast";
     public static readonly string Field = "$field";
-    public static readonly string Continue = "$continue";
-    public static readonly string Break = "$break";
     public static readonly string Call = "$call";
 
     // Intrinsic functions:

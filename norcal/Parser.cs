@@ -9,20 +9,14 @@ using System.Threading.Tasks;
 partial class Parser
 {
     List<Token> Input;
-    List<List<Expr>> OutputStack = new List<List<Expr>>();
-    List<LexicalScope> Scopes = new List<LexicalScope>();
-    LoopScope Loop = null;
     List<string> UndefinedLabels = new List<string>();
     FilePosition SourcePosition = FilePosition.Unknown;
     int NextStringID = 0;
 
-    List<Expr> Output => OutputStack.Last();
-
-    public static IReadOnlyList<Expr> ParseFiles(IEnumerable<string> filenames)
+    public static Expr ParseFiles(IEnumerable<string> filenames)
     {
         Parser p = new Parser(filenames);
-        p.ParseAll();
-        return p.OutputStack[0];
+        return p.ParseAll();
     }
 
     Parser(IEnumerable<string> filenames)
@@ -37,47 +31,37 @@ partial class Parser
         {
             Tag = TokenType.EOF,
         });
-
-        OutputStack.Add(new List<Expr>());
-        Scopes.Add(new LexicalScope("<global>"));
     }
 
-    void Emit(params object[] args)
+    Expr Make(params object[] args)
     {
-        Emit(Expr.Make(args));
+        return Make(Expr.Make(args));
     }
 
-    void Emit(Expr e)
+    Expr Make(Expr e)
     {
-        Output.Add(e.WithSource(SourcePosition));
+        return e.WithSource(SourcePosition);
     }
 
-    void EmitRange(IEnumerable<Expr> items)
+    Expr MakeSequence(IEnumerable<object> items)
     {
-        Output.AddRange(items);
+        List<object> list = new List<object>();
+        list.Add(Tag.Sequence);
+        list.AddRange(items);
+        return Expr.Make(list.ToArray()).WithSource(SourcePosition);
     }
 
-    void BeginDivertingOutput()
+    Expr ParseAll()
     {
-        OutputStack.Add(new List<Expr>());
-    }
-
-    List<Expr> EndDivertingOutput()
-    {
-        List<Expr> code = OutputStack.Last();
-        OutputStack.RemoveAt(OutputStack.Count - 1);
-        return code;
-    }
-
-    void ParseAll()
-    {
+        List<Expr> declarations = new List<Expr>();
         while (!TryParse(TokenType.EOF))
         {
-            ParseDeclaration();
+            declarations.Add(ParseDeclaration());
         }
+        return MakeSequence(declarations);
     }
 
-    void ParseDeclaration()
+    Expr ParseDeclaration()
     {
         while (TryParseName("static"))
         {
@@ -91,7 +75,7 @@ partial class Parser
             Expect(TokenType.EQUAL);
             int value = ExpectInt();
             Expect(TokenType.SEMICOLON);
-            Emit(Tag.Constant, type, DefineQualifiedVariableName(name), value);
+            return Make(Tag.Constant, type, name, value);
         }
         else
         {
@@ -109,23 +93,21 @@ partial class Parser
                 List<FieldInfo> fields = new List<FieldInfo>();
                 while (!TryParse(TokenType.RBRACE))
                 {
-                    // Individual fields can't be assigned to a region of memory.
-                    region = MemoryRegion.Ram;
                     CType fieldType = ExpectType();
                     string fieldName = ExpectAnyName();
                     ParseArrayDeclaration(ref fieldType);
-                    fields.Add(new FieldInfo(region, fieldType, fieldName));
+                    fields.Add(new FieldInfo(fieldType, fieldName, 0));
                     while (TryParse(TokenType.COMMA))
                     {
                         fieldName = ExpectAnyName();
-                        fields.Add(new FieldInfo(region, fieldType, fieldName));
+                        fields.Add(new FieldInfo(fieldType, fieldName, 0));
                     }
                     Expect(TokenType.SEMICOLON);
                 }
                 Expect(TokenType.SEMICOLON);
 
                 string tag = (type.Tag == CTypeTag.Struct) ? Tag.Struct : Tag.Union;
-                Emit(tag, type.Name, fields.ToArray());
+                return Make(tag, type.Name, fields.ToArray());
             }
             else
             {
@@ -145,32 +127,22 @@ partial class Parser
                     {
                         while (true)
                         {
-                            region = ParseMemoryRegionQualifier();
                             CType fieldType = ExpectType();
                             string fieldName = ExpectAnyName();
-                            fields.Add(new FieldInfo(region, fieldType, fieldName));
+                            fields.Add(new FieldInfo(fieldType, fieldName, 0));
                             if (TryParse(TokenType.RPAREN)) break;
                             Expect(TokenType.COMMA);
                         }
                     }
 
-                    Emit(Tag.Function, type, DefineQualifiedVariableName(name), fields.ToArray());
-
-                    BeginScope(name);
-
-                    foreach (FieldInfo f in fields)
-                    {
-                        DefineQualifiedVariableName(f.Name);
-                    }
-
+                    List<Expr> statements = new List<Expr>();
                     Expect(TokenType.LBRACE);
                     while (!TryParse(TokenType.RBRACE))
                     {
-                        ParseStatement(true);
+                        statements.Add(ParseStatement(true));
                     }
 
-                    Emit(Tag.ReturnVoid);
-                    EndScope();
+                    return Make(Tag.Function, type, name, fields.ToArray(), MakeSequence(statements));
                 }
                 else
                 {
@@ -207,18 +179,20 @@ partial class Parser
                                 values.Add(ExpectInt());
                             }
 
-                            Emit(Tag.ReadonlyData, type, DefineQualifiedVariableName(name), values.ToArray());
+                            Expect(TokenType.SEMICOLON);
+                            return Make(Tag.ReadonlyData, type, name, values.ToArray());
                         }
                         else
                         {
                             ParserError("global variables cannot be initialized");
+                            return null;
                         }
                     }
                     else
                     {
-                        Emit(Tag.Variable, region, type, DefineQualifiedVariableName(name));
+                        Expect(TokenType.SEMICOLON);
+                        return Make(Tag.Variable, region, type, name);
                     }
-                    Expect(TokenType.SEMICOLON);
                 }
             }
         }
@@ -283,156 +257,82 @@ partial class Parser
     /// <summary>
     /// If false, only allow statements that would fit in a "for" initializer.
     /// </summary>
-    void ParseStatement(bool allowLong)
+    Expr ParseStatement(bool allowLong)
     {
-        MemoryRegion region;
         CType type;
-        if (TryParseMemoryRegionQualifier(out region))
+        if (TryParseType(out type))
         {
             // Declare a local variable:
-            type = ExpectType();
-            ParseRestOfLocalDeclaration(region, type);
-        }
-        else if (TryParseType(out type))
-        {
-            // Declare a local variable:
-            region = MemoryRegion.Ram;
-            ParseRestOfLocalDeclaration(region, type);
+            return ParseRestOfLocalDeclaration(type);
         }
         else if (TryParseName("if"))
         {
             if (!allowLong) Error_NotAllowedInFor();
 
-            // Create a switch expression with one or more test/body pairs:
-            string elseLabel = MakeUniqueLabel("else");
-            string endLabel = MakeUniqueLabel("end");
+            List<object> parts = new List<object>();
+            parts.Add(Tag.If);
 
-            // Parse the test:
             Expect(TokenType.LPAREN);
-            ParseExpr();
+            parts.Add(ParseExpr());
             Expect(TokenType.RPAREN);
-            Emit(Tag.JumpIfFalse, elseLabel);
-
-            // Parse the body:
-            BeginScope("if");
-            ParseStatementBlock();
-            EndScope();
-            Emit(Tag.Jump, endLabel);
+            parts.Add(ParseStatementBlock());
 
             // Parse additional else statements:
-            Emit(Tag.Label, elseLabel);
             while (TryParseName("else"))
             {
                 if (TryParseName("if"))
                 {
-                    elseLabel = MakeUniqueLabel("else");
-
-                    // Parse the test:
                     Expect(TokenType.LPAREN);
-                    ParseExpr();
+                    parts.Add(ParseExpr());
                     Expect(TokenType.RPAREN);
-                    Emit(Tag.JumpIfFalse, elseLabel);
-
-                    // Parse the body:
-                    BeginScope("if_else");
-                    ParseStatementBlock();
-                    EndScope();
-                    Emit(Tag.Jump, endLabel);
-
-                    Emit(Tag.Label, elseLabel);
+                    parts.Add(ParseStatementBlock());
                 }
                 else
                 {
-                    BeginScope("else");
-                    ParseStatementBlock();
-                    EndScope();
+                    parts.Add(Make(Tag.Integer, 1));
+                    parts.Add(ParseStatementBlock());
 
                     // An "else" that is not an "else if" means it's time to stop:
                     break;
                 }
             }
 
-            Emit(Tag.Label, endLabel);
+            return Make(parts.ToArray());
         }
         else if (TryParseName("for"))
         {
             if (!allowLong) Error_NotAllowedInFor();
 
-            BeginScope("for");
-            Loop = new LoopScope
-            {
-                Outer = Loop,
-                ContinueLabel = MakeUniqueLabel("for_continue"),
-                BreakLabel = MakeUniqueLabel("for_break"),
-            };
-            string topLabel = MakeUniqueLabel("for_top");
-
             Expect(TokenType.LPAREN);
-
-            // Initialization:
-            ParseStatement(false);
-            Emit(Tag.Label, topLabel);
-
-            // Test:
-            ParseExpr();
-            Emit(Tag.JumpIfFalse, Loop.BreakLabel);
+            Expr init = ParseStatement(false);
+            Expr test = ParseExpr();
             Expect(TokenType.SEMICOLON);
-
-            // Induction; this code actually must be inserted after the body:
-            BeginDivertingOutput();
-            ParseExpr();
-            List<Expr> inductionCode = EndDivertingOutput();
-
+            Expr induct = ParseExpr();
             Expect(TokenType.RPAREN);
-
-            // Body:
-            ParseStatementBlock();
-
-            Emit(Tag.Label, Loop.ContinueLabel);
-            EmitRange(inductionCode);
-            Emit(Tag.DropFinal);
-            Emit(Tag.Jump, topLabel);
-            Emit(Tag.Label, Loop.BreakLabel);
-
-            Loop = Loop.Outer;
-            EndScope();
+            Expr body = ParseStatementBlock();
+            return Make(Tag.For, init, test, induct, body);
         }
         else if (TryParseName("while"))
         {
             if (!allowLong) Error_NotAllowedInFor();
 
-            BeginScope("while");
-            Loop = new LoopScope
-            {
-                Outer = Loop,
-                ContinueLabel = MakeUniqueLabel("while_continue"),
-                BreakLabel = MakeUniqueLabel("while_break"),
-            };
-
             Expect(TokenType.LPAREN);
-            Emit(Tag.Label, Loop.ContinueLabel);
-            // Test:
-            ParseExpr();
-            Emit(Tag.JumpIfFalse, Loop.BreakLabel);
+            Expr test = ParseExpr();
             Expect(TokenType.RPAREN);
-            ParseStatementBlock();
-            Emit(Tag.Jump, Loop.ContinueLabel);
-            Emit(Tag.Label, Loop.BreakLabel);
-
-            Loop = Loop.Outer;
-            EndScope();
+            Expr body = ParseStatementBlock();
+            return Make(Tag.For, Make(Tag.Empty), test, Make(Tag.Empty), body);
         }
         else if (TryParseName("continue"))
         {
             if (!allowLong) Error_NotAllowedInFor();
-            Emit(Tag.Jump, Loop.ContinueLabel);
             Expect(TokenType.SEMICOLON);
+            return Make(Tag.Continue);
         }
         else if (TryParseName("break"))
         {
             if (!allowLong) Error_NotAllowedInFor();
-            Emit(Tag.Jump, Loop.BreakLabel);
             Expect(TokenType.SEMICOLON);
+            return Make(Tag.Break);
         }
         else if (TryParseName("return"))
         {
@@ -440,26 +340,28 @@ partial class Parser
 
             if (TryParse(TokenType.SEMICOLON))
             {
-                Emit(Tag.ReturnVoid);
+                return Make(Tag.Return);
             }
             else
             {
-                ParseExpr();
-                Emit(Tag.Return);
+                Expr result = ParseExpr();
                 Expect(TokenType.SEMICOLON);
+                return Make(Tag.Return, result);
             }
         }
         else if (TryParseName("goto"))
         {
             string label = ExpectAnyName();
-            Emit(Tag.Jump, FindQualifiedLabelName(label));
             Expect(TokenType.SEMICOLON);
+            return Make(Tag.Jump, label);
         }
         else if (TryParseName("__asm"))
         {
             if (!allowLong) Error_NotAllowedInFor();
+
             while (TryParse(TokenType.NEWLINE)) { /* Skip any number of newlines. */ }
             Expect(TokenType.LBRACE);
+            List<object> parts = new List<object>();
             while (!TryParse(TokenType.RBRACE))
             {
                 if (TryParse(TokenType.NEWLINE))
@@ -470,82 +372,76 @@ partial class Parser
                 {
                     string symbol = ExpectAnyName();
 
-                    // Determine whether this instruction will refer to labels, or ordinary symbols:
-                    bool isJump = AsmInfo.ShortJumpInstructions.Contains(symbol) || symbol == "JMP";
-
                     if (TryParse(TokenType.NEWLINE))
                     {
-                        Emit(Expr.MakeAsm(symbol));
+                        parts.Add(Expr.MakeAsm(symbol));
                     }
                     else if (TryParse(TokenType.COLON))
                     {
                         Expect(TokenType.NEWLINE);
-                        Emit(Expr.Make(Tag.Label, FindQualifiedLabelName(symbol)));
+                        parts.Add(Expr.Make(Tag.Label, symbol));
                     }
                     else if (TryParse(TokenType.NUMBER_SIGN))
                     {
-                        AsmOperand operand = ParseAssemblyOperand(AddressMode.Immediate, isJump);
+                        AsmOperand operand = ParseAssemblyOperand(AddressMode.Immediate);
                         Expect(TokenType.NEWLINE);
-                        Emit(Expr.MakeAsm(symbol, operand));
+                        parts.Add(Expr.MakeAsm(symbol, operand));
                     }
                     else if (TryParse(TokenType.LPAREN))
                     {
-                        AsmOperand operand = ParseAssemblyOperand(AddressMode.IndirectY, isJump);
+                        AsmOperand operand = ParseAssemblyOperand(AddressMode.IndirectY);
                         Expect(TokenType.RPAREN);
                         Expect(TokenType.COMMA);
                         ExpectKeyword("Y");
                         Expect(TokenType.NEWLINE);
-                        Emit(Expr.MakeAsm(symbol, operand));
+                        parts.Add(Expr.MakeAsm(symbol, operand));
                     }
                     else
                     {
-                        AsmOperand operand = ParseAssemblyOperand(AddressMode.Absolute, isJump);
+                        AsmOperand operand = ParseAssemblyOperand(AddressMode.Absolute);
                         if (TryParse(TokenType.COMMA))
                         {
                             ExpectKeyword("X");
                             operand = operand.WithMode(AddressMode.AbsoluteX);
                         }
                         Expect(TokenType.NEWLINE);
-                        Emit(Expr.MakeAsm(symbol, operand));
+                        parts.Add(Expr.MakeAsm(symbol, operand));
                     }
                 }
             }
+            return MakeSequence(parts);
         }
         else if (Input.Count >= 2 && Input[0].Tag == TokenType.NAME && Input[1].Tag == TokenType.COLON)
         {
             string label = ExpectAnyName();
             Expect(TokenType.COLON);
-            Emit(Tag.Label, DefineQualifiedLabelName(label));
+            return Make(Tag.Label, label);
         }
         else
         {
             // An expression-statement:
-            // (Indicate that the resulting value must be discarded.)
-            ParseExpr();
-            Emit(Tag.DropFinal);
+            Expr e = ParseExpr();
             Expect(TokenType.SEMICOLON);
+            return e;
         }
     }
 
-    void ParseRestOfLocalDeclaration(MemoryRegion region, CType type)
+    Expr ParseRestOfLocalDeclaration(CType type)
     {
         string name = ExpectAnyName();
         ParseArrayDeclaration(ref type);
-        Emit(Tag.Variable, region, type, DefineQualifiedVariableName(name));
-
-        // Optionally, an initial value can be assigned:
+        Expr e = Make(Tag.Variable, type, name);
+        // Optionally, assign an initial value:
         if (TryParse(TokenType.EQUAL))
         {
-            Emit(Tag.PushVariableAddress, FindQualifiedName(name));
-            ParseExpr();
-            Emit(Tag.Store);
-            Emit(Tag.DropFinal);
+            Expr init = ParseExpr();
+            e = Make(Tag.Sequence, e, Make(Tag.Assign, Expr.Make(Tag.Name, name), init));
         }
-
         Expect(TokenType.SEMICOLON);
+        return e;
     }
 
-    AsmOperand ParseAssemblyOperand(AddressMode mode, bool isJump)
+    AsmOperand ParseAssemblyOperand(AddressMode mode)
     {
         ImmediateModifier modifier = ImmediateModifier.None;
         if (TryParse(TokenType.LESS_THAN)) modifier = ImmediateModifier.LowByte;
@@ -564,10 +460,7 @@ partial class Parser
             {
                 number = ExpectInt();
             }
-
-            // Figure out whether to treat this as a label or a variable name.
-            string qualifiedName = isJump ? FindQualifiedLabelName(name) : FindQualifiedName(name);
-            return new AsmOperand(qualifiedName, number, mode, modifier);
+            return new AsmOperand(name, number, mode, modifier);
         }
         else
         {
@@ -581,35 +474,37 @@ partial class Parser
         ParserError("complex statements are not allowed in for initializers");
     }
 
-    void ParseStatementBlock()
+    Expr ParseStatementBlock()
     {
         // A block can be a single statement, or a series of statements surrounded by braces:
         if (TryParse(TokenType.LBRACE))
         {
+            List<Expr> parts = new List<Expr>();
             while (!TryParse(TokenType.RBRACE))
             {
-                ParseStatement(true);
+                parts.Add(ParseStatement(true));
             }
+            return MakeSequence(parts);
         }
         else
         {
-            ParseStatement(true);
+            return ParseStatement(true);
         }
     }
 
-    void ParseExpr()
+    Expr ParseExpr()
     {
-        ParseCommaExpr();
+        return ParseCommaExpr();
     }
 
     // ,
-    void ParseCommaExpr()
+    Expr ParseCommaExpr()
     {
-        ParseAssignExpr();
+        return ParseAssignExpr();
     }
 
     // = *= /= %= += -= <<= >>= &= ^= |=
-    void ParseAssignExpr()
+    Expr ParseAssignExpr()
     {
         Dictionary<TokenType, string> modifyAssignOperators = new Dictionary<TokenType, string>
         {
@@ -625,123 +520,99 @@ partial class Parser
             { TokenType.CARET_EQUALS, Tag.BitwiseXor },
         };
 
-        ParseConditionalExpr();
+        Expr left = ParseConditionalExpr();
         string op;
         if (TryParse(TokenType.EQUAL))
         {
-            Emit(Tag.AddressOf);
-            ParseAssignExpr();
-            Emit(Tag.Store);
+            return Make(Tag.Assign, left, ParseAssignExpr());
         }
         else if (modifyAssignOperators.TryGetValue(PeekToken().Tag, out op))
         {
             ConsumeToken();
-            Emit(Tag.AddressOf);
-            Emit(Tag.LoadNondestructive);
-            ParseAssignExpr();
-            Emit(op);
-            Emit(Tag.Store);
+            return Make(Tag.AssignModify, op, left, ParseAssignExpr());
+        }
+        else
+        {
+            return left;
         }
     }
 
     // ? :
-    void ParseConditionalExpr()
+    Expr ParseConditionalExpr()
     {
-        ParseLogicalOrExpr();
+        Expr e = ParseLogicalOrExpr();
         if (TryParse(TokenType.QUESTION_MARK))
         {
-            // Conditional expressions generate uniquely tricky stack code; only one
-            // of the two result expressions is executed. Each code path leaves its
-            // result in the accumulator -- this is a rare case where the stack is not
-            // empty when control flow occurs.
-            //
-            // Since the virtual stack ignores control flow, the operand pushed by one
-            // of the execution paths must be discarded; if it was kept, it would seem
-            // that the conditional expression produces two results, when it really
-            // only produces one.
-            //
-            // Since both paths produce exactly the same result (in the accumulator),
-            // it doesn't matter which result is dropped.
-
-            string otherwise = MakeUniqueLabel("cond_else");
-            string end = MakeUniqueLabel("cond_end");
-            Emit(Tag.Comment, "conditional expression");
-            Emit(Tag.JumpIfFalse, otherwise);
-            ParseExpr();
-            Emit(Tag.Materialize);
-            Emit(Tag.Drop);
-            Emit(Tag.Jump, end);
-            Emit(Tag.Label, otherwise);
+            Expr trueCase = ParseExpr();
             Expect(TokenType.COLON);
-            ParseConditionalExpr();
-            Emit(Tag.Materialize);
-            Emit(Tag.Label, end);
+            Expr falseCase = ParseConditionalExpr();
+            e = Make(Tag.Conditional, e, trueCase, falseCase);
         }
+        return e;
     }
 
     // ||
-    void ParseLogicalOrExpr()
+    Expr ParseLogicalOrExpr()
     {
-        ParseLogicalAndExpr();
+        Expr e = ParseLogicalAndExpr();
         while (TryParse(TokenType.LOGICAL_OR))
         {
-            string shortCircuit = MakeUniqueLabel("logical_or_short_circuit");
-            Emit(Tag.JumpIfTrue, shortCircuit);
-            ParseLogicalAndExpr();
-            Emit(Tag.Materialize);
-            Emit(Tag.Label, shortCircuit);
+            Expr right = ParseLogicalAndExpr();
+            e = Make(Tag.LogicalOr, e, right);
         }
+        return e;
     }
 
     // &&
-    void ParseLogicalAndExpr()
+    Expr ParseLogicalAndExpr()
     {
-        ParseBitwiseOrExpr();
+        Expr e = ParseBitwiseOrExpr();
         while (TryParse(TokenType.LOGICAL_AND))
         {
-            string shortCircuit = MakeUniqueLabel("logical_and_short_circuit");
-            Emit(Tag.JumpIfFalse, shortCircuit);
-            ParseBitwiseOrExpr();
-            Emit(Tag.Materialize);
-            Emit(Tag.Label, shortCircuit);
+            Expr right = ParseBitwiseOrExpr();
+            e = Make(Tag.LogicalAnd, e, right);
         }
+        return e;
     }
 
     // |
-    void ParseBitwiseOrExpr()
+    Expr ParseBitwiseOrExpr()
     {
-        ParseBitwiseXorExpr();
+        Expr e = ParseBitwiseXorExpr();
         while (TryParse(TokenType.PIPE))
         {
-            ParseBitwiseXorExpr();
-            Emit(Tag.BitwiseOr);
+            Expr right = ParseBitwiseXorExpr();
+            e = Make(Tag.BitwiseOr, right);
         }
+        return e;
     }
 
     // ^
-    void ParseBitwiseXorExpr()
+    Expr ParseBitwiseXorExpr()
     {
-        ParseBitwiseAndExpr();
+        Expr e = ParseBitwiseAndExpr();
         while (TryParse(TokenType.CARET))
         {
-            ParseBitwiseAndExpr();
-            Emit(Tag.BitwiseXor);
+            Expr right = ParseBitwiseAndExpr();
+            e = Make(Tag.BitwiseXor, e, right);
         }
+        return e;
     }
 
     // &
-    void ParseBitwiseAndExpr()
+    Expr ParseBitwiseAndExpr()
     {
-        ParseEqualityExpr();
+        Expr e = ParseEqualityExpr();
         while (TryParse(TokenType.AMPERSAND))
         {
-            ParseEqualityExpr();
-            Emit(Tag.BitwiseAnd);
+            Expr right = ParseEqualityExpr();
+            e = Make(Tag.BitwiseAnd, e, right);
         }
+        return e;
     }
 
     // == !=
-    void ParseEqualityExpr()
+    Expr ParseEqualityExpr()
     {
         Dictionary<TokenType, string> operators = new Dictionary<TokenType, string>
         {
@@ -749,11 +620,11 @@ partial class Parser
             { TokenType.NOT_EQUAL, Tag.NotEqual },
         };
 
-        ParseInfixOperators(ParseCompareExpr, operators);
+        return ParseInfixOperators(ParseCompareExpr, operators);
     }
 
     // < > <= >=
-    void ParseCompareExpr()
+    Expr ParseCompareExpr()
     {
         Dictionary<TokenType, string> operators = new Dictionary<TokenType, string>
         {
@@ -763,11 +634,11 @@ partial class Parser
             { TokenType.GREATER_THAN_OR_EQUAL, Tag.GreaterThanOrEqual },
         };
 
-        ParseInfixOperators(ParseShiftExpr, operators);
+        return ParseInfixOperators(ParseShiftExpr, operators);
     }
 
     // << >>
-    void ParseShiftExpr()
+    Expr ParseShiftExpr()
     {
         Dictionary<TokenType, string> operators = new Dictionary<TokenType, string>
         {
@@ -775,11 +646,11 @@ partial class Parser
             { TokenType.SHIFT_RIGHT, Tag.ShiftRight },
         };
 
-        ParseInfixOperators(ParseAddExpr, operators);
+        return ParseInfixOperators(ParseAddExpr, operators);
     }
 
     // + -
-    void ParseAddExpr()
+    Expr ParseAddExpr()
     {
         Dictionary<TokenType, string> operators = new Dictionary<TokenType, string>
         {
@@ -787,11 +658,11 @@ partial class Parser
             { TokenType.MINUS, Tag.Subtract },
         };
 
-        ParseInfixOperators(ParseMultiplyExpr, operators);
+        return ParseInfixOperators(ParseMultiplyExpr, operators);
     }
 
     // * / %
-    void ParseMultiplyExpr()
+    Expr ParseMultiplyExpr()
     {
         Dictionary<TokenType, string> operators = new Dictionary<TokenType, string>
         {
@@ -800,17 +671,17 @@ partial class Parser
             { TokenType.PERCENT, Tag.Modulus },
         };
 
-        ParseInfixOperators(ParseCastExpr, operators);
+        return ParseInfixOperators(ParseCastExpr, operators);
     }
 
     // (casts)
-    void ParseCastExpr()
+    Expr ParseCastExpr()
     {
-        ParseUnaryPrefixExpr();
+        return ParseUnaryPrefixExpr();
     }
 
     // Unary prefix operators
-    void ParseUnaryPrefixExpr()
+    Expr ParseUnaryPrefixExpr()
     {
         Dictionary<TokenType, string> prefixes = new Dictionary<TokenType, string>
         {
@@ -818,6 +689,8 @@ partial class Parser
             { TokenType.AMPERSAND, Tag.AddressOf },
             { TokenType.TILDE, Tag.BitwiseNot },
             { TokenType.LOGICAL_NOT, Tag.LogicalNot },
+            { TokenType.INCREMENT, Tag.PreIncrement },
+            { TokenType.DECREMENT, Tag.PreDecrement },
         };
 
         TokenType nextToken = PeekToken().Tag;
@@ -825,90 +698,62 @@ partial class Parser
         if (prefixes.TryGetValue(nextToken, out op))
         {
             ConsumeToken();
-            ParseUnaryPrefixExpr();
-            Emit(op);
-        }
-        else if (nextToken == TokenType.INCREMENT || nextToken == TokenType.DECREMENT)
-        {
-            ConsumeToken();
-            bool increment = (nextToken == TokenType.INCREMENT);
-            ParseUnaryPrefixExpr();
-            Emit(Tag.AddressOf);
-            Emit(increment ? Tag.PreIncrement : Tag.PreDecrement);
+            Expr e = ParseUnaryPrefixExpr();
+            return Make(op, e);
         }
         else
         {
-            ParseSuffixExpr();
+            return ParseSuffixExpr();
         }
     }
 
     // Suffix operators
-    void ParseSuffixExpr()
+    Expr ParseSuffixExpr()
     {
-        ParsePrimaryExpr();
+        Expr e = ParsePrimaryExpr();
         while (true)
         {
             if (TryParse(TokenType.LPAREN))
             {
-                // We only support calling functions by name, so the stack instruction immediately before
-                // a call is required to be a "push var <name>", from which we can extract the function name.
-                string functionName = null;
-                if (Output.Count >= 2 &&
-                    Output[Output.Count - 2].Match(Tag.PushVariableAddress, out functionName) &&
-                    Output[Output.Count - 1].Match(Tag.Load))
-                {
-                    Output.RemoveRange(Output.Count - 2, 2);
-                }
-                else
-                {
-                    ParserError("functions may only be called by name");
-                }
+                List<object> parts = new List<object>();
+                parts.Add(Tag.Call);
+                parts.Add(e);
 
-                int argCount = 0;
                 if (!TryParse(TokenType.RPAREN))
                 {
                     while (true)
                     {
-                        ParseExpr();
-                        argCount += 1;
+                        parts.Add(ParseExpr());
                         if (TryParse(TokenType.RPAREN)) break;
                         Expect(TokenType.COMMA);
                     }
                 }
 
-                Emit(Tag.Call, functionName, argCount);
+                e = MakeSequence(parts);
             }
             else if (TryParse(TokenType.PERIOD))
             {
-                Emit(Tag.AddressOf);
                 string fieldName = ExpectAnyName();
-                Emit(Tag.Field, fieldName);
-                Emit(Tag.Load);
+                e = Make(Tag.Field, e, fieldName);
             }
             else if (TryParse(TokenType.ARROW))
             {
-                Emit(Tag.AddressOf);
                 string fieldName = ExpectAnyName();
-                Emit(Tag.Load);
-                Emit(Tag.Field, fieldName);
-                Emit(Tag.Load);
+                e = Make(Tag.Field, Make(Tag.Load, e), fieldName);
             }
             else if (TryParse(TokenType.INCREMENT))
             {
-                Emit(Tag.AddressOf);
-                Emit(Tag.PostIncrement);
+                e = Make(Tag.PostIncrement, e);
             }
             else if (TryParse(TokenType.DECREMENT))
             {
-                Emit(Tag.AddressOf);
-                Emit(Tag.PostDecrement);
+                e = Make(Tag.PostDecrement, e);
             }
             else if (TryParse(TokenType.LBRACKET))
             {
-                ParseExpr();
-                Emit(Tag.Add);
-                Emit(Tag.Load);
+                Expr index = ParseExpr();
                 Expect(TokenType.RBRACKET);
+                e = Make(Tag.Index, e, index);
             }
             else
             {
@@ -916,16 +761,17 @@ partial class Parser
                 break;
             }
         }
+        return e;
     }
 
     // "Primary" expressions
-    void ParsePrimaryExpr()
+    Expr ParsePrimaryExpr()
     {
         int n;
         string name, s;
         if (TryParseInt(out n))
         {
-            Emit(Tag.PushImmediate, n);
+            return Make(Tag.Integer, n);
         }
         else if (TryParseString(out s))
         {
@@ -941,36 +787,38 @@ partial class Parser
             }
             values[s.Length] = '\0';
 
-            Emit(Tag.ReadonlyData, CType.MakeArray(CType.UInt8, s.Length + 1), name, values);
-            Emit(Tag.PushVariableAddress, name);
-            Emit(Tag.Load);
+            return Make(Tag.Sequence,
+                Make(Tag.ReadonlyData, CType.MakeArray(CType.UInt8, s.Length + 1), name, values),
+                Make(Tag.Name, name));
         }
         else if (TryParseAnyName(out name))
         {
-            Emit(Tag.PushVariableAddress, FindQualifiedName(name));
-            Emit(Tag.Load);
+            return Make(Tag.Name, name);
         }
         else if (TryParse(TokenType.LPAREN))
         {
-            ParseExpr();
+            Expr e = ParseExpr();
             Expect(TokenType.RPAREN);
+            return e;
         }
         else
         {
             ParserError("expected an expression");
+            return null;
         }
     }
 
-    void ParseInfixOperators(Action parseSubexpression, Dictionary<TokenType, string> operators)
+    Expr ParseInfixOperators(Func<Expr> parseSubexpression, Dictionary<TokenType, string> operators)
     {
-        parseSubexpression();
+        Expr e = parseSubexpression();
         string op;
         while (operators.TryGetValue(PeekToken().Tag, out op))
         {
             ConsumeToken();
-            parseSubexpression();
-            Emit(op);
+            Expr right = parseSubexpression();
+            e = Make(op, e, right);
         }
+        return e;
     }
 
     Token PeekToken()
@@ -1136,103 +984,6 @@ partial class Parser
         CType type;
         if (!TryParseType(out type)) ParserError("expected a type");
         return type;
-    }
-
-    void BeginScope(string prefix)
-    {
-        LexicalScope outer = Scopes.Last();
-
-        // Find a unique name:
-        string qualifiedName = prefix;
-        int suffix = 0;
-        while (outer.SubscopeNames.Contains(qualifiedName))
-        {
-            suffix += 1;
-            qualifiedName = string.Format("{0}_{1}", prefix, suffix);
-        }
-
-        outer.SubscopeNames.Add(qualifiedName);
-        Scopes.Add(new LexicalScope(qualifiedName));
-    }
-
-    void EndScope()
-    {
-        if (Scopes.Count <= 1) Program.Panic(SourcePosition, "cannot end global scope");
-        Scopes.RemoveAt(Scopes.Count - 1);
-    }
-
-    string MakeUniqueLabel(string prefix)
-    {
-        // Start the name with a special symbol that will never appear in user-specified label names.
-        prefix = "$" + prefix;
-
-        var table = Scopes[1].QualifiedNames;
-
-        // Find a unique name:
-        string name = prefix;
-        int suffix = 0;
-        while (table.ContainsKey(name))
-        {
-            suffix += 1;
-            name = string.Format("{0}_{1}", prefix, suffix);
-        }
-
-        return DefineQualifiedLabelName(name);
-    }
-
-    string DefineQualifiedLabelName(string name)
-    {
-        // Labels have function scope, not full lexical scope.
-        LexicalScope functionScope = Scopes[1];
-
-        string qualifiedName = functionScope.Name + Program.NamespaceSeparator + name;
-
-        // If this symbol is a label that was referenced before it was defined, that's fine. Otherwise, error.
-        if (UndefinedLabels.Contains(name))
-        {
-            UndefinedLabels.Remove(name);
-        }
-        else if (functionScope.QualifiedNames.ContainsKey(name))
-        {
-            ParserError("symbol already defined: {0}", name);
-        }
-        else
-        {
-            functionScope.QualifiedNames.Add(name, qualifiedName);
-        }
-
-        return qualifiedName;
-    }
-
-    string DefineQualifiedVariableName(string name)
-    {
-        var table = Scopes.Last().QualifiedNames;
-        if (table.ContainsKey(name)) ParserError("symbol already defined: {0}", name);
-        string qualifiers = string.Join(Program.NamespaceSeparator, Scopes.Skip(1).Select(x => x.Name));
-        string qualifiedName = (qualifiers.Length > 0) ? (qualifiers + Program.NamespaceSeparator + name) : name;
-        table.Add(name, qualifiedName);
-        return qualifiedName;
-    }
-
-    string FindQualifiedName(string name)
-    {
-        // Search all scopes, starting from the innermost.
-        foreach (LexicalScope scope in Enumerable.Reverse(Scopes))
-        {
-            string qualifiedName;
-            if (scope.QualifiedNames.TryGetValue(name, out qualifiedName)) return qualifiedName;
-        }
-
-        // If the variable wasn't found, assume it is a forward reference to a global variable.
-        return name;
-    }
-
-    string FindQualifiedLabelName(string name)
-    {
-        // Labels are allowed to be forward-referenced (within a function), and so the parser
-        // treats them all as forward references, to be resolved later by the assembler.
-        UndefinedLabels.Add(name);
-        return DefineQualifiedLabelName(name);
     }
 
     [DebuggerStepThrough]

@@ -6,13 +6,13 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-class CAggregateInfo
+class AggregateInfo
 {
     public readonly AggregateLayout Layout;
     public readonly int TotalSize;
-    public readonly CField[] Fields;
+    public readonly FieldInfo[] Fields;
 
-    public CAggregateInfo(AggregateLayout layout, int totalSize, CField[] fields)
+    public AggregateInfo(AggregateLayout layout, int totalSize, FieldInfo[] fields)
     {
         Layout = layout;
         TotalSize = totalSize;
@@ -26,17 +26,24 @@ enum AggregateLayout
     Union,
 }
 
-class CField
+class FieldInfo
 {
-    public CType Type;
-    public string Name;
-    public int Offset;
+    public readonly CType Type;
+    public readonly string Name;
+    public readonly int Offset;
+
+    public FieldInfo(CType type, string name, int offset)
+    {
+        Type = type;
+        Name = name;
+        Offset = offset;
+    }
 }
 
 [DebuggerDisplay("{Show(),nq}")]
 class CFunctionInfo
 {
-    public CParameter[] Parameters;
+    public FieldInfo[] Parameters;
     public CType ReturnType;
 
     public override bool Equals(object obj)
@@ -54,37 +61,6 @@ class CFunctionInfo
         var paramTypes = Parameters.Select(x => string.Format("{0} {1}", x.Type.Show(), x.Name));
         return string.Format("function({0}) {1}", string.Join(", ", paramTypes), ReturnType.Show());
     }
-}
-
-class CParameter
-{
-    public readonly CType Type;
-    public readonly string Name;
-
-    public CParameter(CType type, string name)
-    {
-        Type = type;
-        Name = name;
-    }
-}
-
-class LexicalScope
-{
-    public readonly string Name;
-    public readonly HashSet<string> SubscopeNames = new HashSet<string>();
-    public readonly Dictionary<string, string> QualifiedNames = new Dictionary<string, string>();
-
-    public LexicalScope(string name)
-    {
-        Name = name;
-    }
-}
-
-class LoopScope
-{
-    public LoopScope Outer;
-    public string ContinueLabel;
-    public string BreakLabel;
 }
 
 struct MemoryRegion
