@@ -75,7 +75,7 @@ static class Program
         {
             Expr syntaxTree = Parser.ParseFiles(sourceFilenames);
             if (EnableDebugOutput) WritePassOutputToFile("syntax_tree", syntaxTree.ShowMultiline());
-            IReadOnlyList<Expr> assembly = CodeGenerator.Compile(syntaxTree);
+            IReadOnlyList<Expr> assembly = CodeGenerator.CompileAll(syntaxTree);
             if (EnableDebugOutput) WritePassOutputToFile("assembly_code", ShowAssembly(assembly));
             Assembler.Assemble(assembly, outputFilename);
 
@@ -319,13 +319,6 @@ static class Tag
     public static readonly string PostIncrement = "$post_increment";
     public static readonly string PreDecrement = "$pre_decrement";
     public static readonly string PostDecrement = "$post_decrement";
-
-    // Virtual stack machine instructions:
-    public static readonly string PushImmediate = "$push";
-    public static readonly string PushVariableAddress = "$pushva";
-    public static readonly string DropFinal = "$drop_final";
-    public static readonly string Drop = "$drop";
-    public static readonly string Materialize = "$materialize";
 
     // Assembly directives:
     public static readonly string Asm = "$asm";

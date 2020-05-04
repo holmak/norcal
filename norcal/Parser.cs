@@ -387,12 +387,30 @@ partial class Parser
                         Expect(TokenType.NEWLINE);
                         parts.Add(Expr.MakeAsm(symbol, operand));
                     }
+                    else if (TryParse(TokenType.PLUS))
+                    {
+                        AsmOperand operand = ParseAssemblyOperand(AddressMode.Relative);
+                        Expect(TokenType.NEWLINE);
+                        parts.Add(Expr.MakeAsm(symbol, operand));
+                    }
                     else if (TryParse(TokenType.LPAREN))
                     {
                         AsmOperand operand = ParseAssemblyOperand(AddressMode.IndirectY);
-                        Expect(TokenType.RPAREN);
-                        Expect(TokenType.COMMA);
-                        ExpectKeyword("Y");
+                        if (TryParse(TokenType.RPAREN))
+                        {
+                            Expect(TokenType.COMMA);
+                            ExpectKeyword("Y");
+                        }
+                        else if (TryParse(TokenType.COMMA))
+                        {
+                            ExpectKeyword("X");
+                            Expect(TokenType.RPAREN);
+                            operand = operand.WithMode(AddressMode.IndirectX);
+                        }
+                        else
+                        {
+                            ParserError("expected (zp,X) or (zp),Y operand");
+                        }
                         Expect(TokenType.NEWLINE);
                         parts.Add(Expr.MakeAsm(symbol, operand));
                     }

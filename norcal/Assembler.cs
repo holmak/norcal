@@ -120,6 +120,12 @@ class Assembler
                     actualMode = AddressMode.Relative;
                 }
 
+                // Use a smaller address mode when possible:
+                if (operand.Mode == AddressMode.AbsoluteX && operand.Offset < 256)
+                {
+                    actualMode = AddressMode.ZeroPageX;
+                }
+
                 // Search for a matching instruction:
                 int formalSize;
                 List<byte> candidates = new List<byte>();
@@ -363,6 +369,7 @@ class AsmOperand
     public readonly int Offset = 0;
     public readonly AddressMode Mode;
     public readonly ImmediateModifier Modifier;
+    public readonly string Comment;
 
     public static readonly AsmOperand Implicit = new AsmOperand(0, AddressMode.Implicit);
 
@@ -374,14 +381,23 @@ class AsmOperand
 
     public AsmOperand(int value, ImmediateModifier modifier) : this(Maybe.Nothing, value, AddressMode.Immediate, modifier) { }
 
-    public AsmOperand(Maybe<string> optionalBase, int offset, AddressMode mode) : this(optionalBase, offset, mode, ImmediateModifier.None) { }
+    public AsmOperand(Maybe<string> optionalBase, int offset, AddressMode mode)
+        : this(optionalBase, offset, mode, ImmediateModifier.None)
+    {
+    }
 
     public AsmOperand(Maybe<string> optionalBase, int offset, AddressMode mode, ImmediateModifier modifier)
+        : this(optionalBase, offset, mode, modifier, null)
+    {
+    }
+
+    public AsmOperand(Maybe<string> optionalBase, int offset, AddressMode mode, ImmediateModifier modifier, string comment)
     {
         Base = optionalBase;
         Offset = offset;
         Mode = mode;
         Modifier = modifier;
+        Comment = comment;
 
         if (Mode != AddressMode.Immediate && modifier != ImmediateModifier.None)
         {
@@ -392,6 +408,11 @@ class AsmOperand
     public AsmOperand WithMode(AddressMode newMode)
     {
         return new AsmOperand(Base, Offset, newMode, Modifier);
+    }
+
+    public AsmOperand WithComment(string newComment)
+    {
+        return new AsmOperand(Base, Offset, Mode, Modifier, newComment);
     }
 
     public string Show()
@@ -427,6 +448,8 @@ class AsmOperand
         else if (Mode == AddressMode.Relative) format = "+{0}";
 
         s = string.Format(format, s);
+
+        if (Comment != null) s = string.Format("{0}; {1}", s.PadRight(8), Comment);
 
         return s;
     }

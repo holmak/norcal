@@ -2,6 +2,77 @@
 define u8 FALSE = 0;
 define u8 TRUE = 1;
 
+u16 _rt_load_u16(u16 *p)
+{
+    __asm
+    {
+        LDA (0,X)
+        TAY
+        INC 0,X
+        BCC +2
+        INC 1,X
+        LDA (0,X)
+        STA 0,X
+        STY 1,X
+    }
+}
+
+// This function does something not normally allowed by C; it takes
+// one argument -- the address -- and leaves two values on the
+// stack -- the unchanged address and the loaded value.
+void _rt_load_nondestructive_u16(u16 *p, u16 result)
+{
+    __asm
+    {
+        LDA (2,X)
+        STA 0,X
+        INC 2,X
+        BCC +2
+        INC 3,X
+        LDA (2,X)
+        STA 1,X
+        // Return now without adjusting the stack:
+        RTS
+    }
+}
+
+void _rt_store_u8(u16 *p, u8 a)
+{
+    __asm
+    {
+        LDA 0,X
+        STA (2,X)
+    }
+}
+
+void _rt_store_u16(u16 *p, u16 a)
+{
+    __asm
+    {
+        LDA 0,X
+        STA (2,X)
+        INC 0,X
+        BCC +2
+        INC 1,X
+        LDA 1,X
+        STA (2,X)
+    }
+}
+
+u16 _rt_add_u16(u16 a, u16 b)
+{
+    __asm
+    {
+        CLC
+        LDA a
+        ADC b
+        STA a
+        LDA a+1
+        ADC b+1
+        STA a+1
+    }
+}
+
 uint8_t _rt_mul_u8(uint8_t a, uint8_t b)
 {
     __asm
