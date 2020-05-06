@@ -8,19 +8,9 @@ using System.Threading.Tasks;
 
 class Assembler
 {
-    Dictionary<string, int> Symbols = new Dictionary<string, int>();
+    Dictionary<string, AsmSymbol> Symbols = new Dictionary<string, AsmSymbol>();
     List<Fixup> Fixups = new List<Fixup>();
-    int ZeroPageNext = ZeroPageStart;
-    int OamNext = OamStart;
-    int RamNext = RamStart;
     DebugExporter Debug = new DebugExporter();
-
-    static readonly int ZeroPageStart = 0x000;
-    static readonly int ZeroPageEnd = 0x100;
-    static readonly int OamStart = 0x200;
-    static readonly int OamEnd = 0x300;
-    static readonly int RamStart = 0x300;
-    static readonly int RamEnd = 0x800;
 
     // PRG must be exactly 32k, and CHR must be exactly 8k.
     static readonly int ChrRomSize = 0x2000;
@@ -54,19 +44,31 @@ class Assembler
         foreach (Expr e in assembly)
         {
             string label, name, mnemonic;
-            int skipTarget, size, number;
+            int skipTarget, globalAddress, size, number;
             byte[] bytes;
-            MemoryRegion region;
             AsmOperand operand;
 
             if (e.MatchTag(Tag.Comment))
             {
                 // Ignore.
             }
-            else if (e.Match(Tag.Function, out label) || e.Match(Tag.Label, out label))
+            else if (e.Match(Tag.Function, out label))
             {
                 int address = PrgRomBase + prg.Count;
-                DefineSymbol(label, address);
+                DefineSymbol(prg, label, address, isLabel: false);
+                Debug.AddFunction(label, address);
+
+                // Delete any (local) label definitions; they are no longer in scope.
+                string[] labels = Symbols.Where(x => x.Value.IsLabel).Select(x => x.Key).ToArray();
+                foreach (string key in labels)
+                {
+                    Symbols.Remove(key);
+                }
+            }
+            else if (e.Match(Tag.Label, out label))
+            {
+                int address = PrgRomBase + prg.Count;
+                DefineSymbol(prg, label, address, isLabel: true);
                 Debug.AddFunction(label, address);
             }
             else if (e.Match(Tag.SkipTo, out skipTarget))
@@ -83,8 +85,13 @@ class Assembler
             }
             else if (e.Match(Tag.Word, out label))
             {
+                AsmSymbol sym;
                 int address;
-                if (!Symbols.TryGetValue(label, out address))
+                if (Symbols.TryGetValue(label, out sym))
+                {
+                    address = sym.Value;
+                }
+                else
                 {
                     // TODO: Figure out what to do if an entrypoint is not defined.
                     Program.Warning("assembler: warning: label not defined: {0}", label);
@@ -93,20 +100,14 @@ class Assembler
                 prg.Add(LowByte(address));
                 prg.Add(HighByte(address));
             }
-            else if (e.Match(Tag.Constant, out name, out number))
+            else if (e.Match(Tag.Variable, out globalAddress, out size, out name))
             {
-                DefineSymbol(name, number);
-            }
-            else if (e.Match(Tag.Variable, out region, out size, out name))
-            {
-                int address = AllocateGlobal(region, size);
-                DefineSymbol(name, address);
-                Debug.AddVariable(name, address, size);
+                Debug.AddVariable(name, globalAddress, size);
             }
             else if (e.Match(Tag.ReadonlyData, out name, out bytes))
             {
                 int address = PrgRomBase + prg.Count;
-                DefineSymbol(name, address);
+                DefineSymbol(prg, name, address, isLabel: false);
                 prg.AddRange(bytes);
                 Debug.AddVariable(name, address, bytes.Length);
             }
@@ -191,24 +192,10 @@ class Assembler
             }
         }
 
+        // All symbolic references should be fixed by now:
         foreach (Fixup fixup in Fixups)
         {
-            int target = 0;
-            if (!TryGetOperandValue(fixup.Operand, fixup.Mode, fixup.Location, fixup.IsRelativeBranchToAbsoluteTarget, out target))
-            {
-                Program.Panic("symbol not defined: {0}", fixup.Operand.Show());
-            }
-
-            int formalSize = GetFormalOperandSize(fixup.Mode);
-            if (formalSize == 1)
-            {
-                prg[fixup.Location] = LowByte(target);
-            }
-            else if (formalSize == 2)
-            {
-                prg[fixup.Location] = LowByte(target);
-                prg[fixup.Location + 1] = HighByte(target);
-            }
+            Program.Error("symbol not defined: {0}", fixup.Operand.Show());
         }
 
         // Make sure that the PRG ROM size limit isn't exceeded. It must not overwrite the vector table.
@@ -224,24 +211,55 @@ class Assembler
         Debug.Save(Path.ChangeExtension(outputFilename, ".dbg"));
     }
 
-    void DefineSymbol(string symbol, int address)
+    void DefineSymbol(List<byte> prg, string symbol, int address, bool isLabel)
     {
         if (Symbols.ContainsKey(symbol)) Program.Panic("duplicate symbol definitions should not reach the assembler");
-        Symbols.Add(symbol, address);
+        Symbols.Add(symbol, new AsmSymbol
+        {
+            Value = address,
+            IsLabel = isLabel,
+        });
+
+        // Fix any references to this symbol:
+        DoFixups(prg);
+    }
+
+    void DoFixups(List<byte> prg)
+    {
+        foreach (Fixup fixup in Fixups)
+        {
+            int target;
+            if (TryGetOperandValue(fixup.Operand, fixup.Mode, fixup.Location, fixup.IsRelativeBranchToAbsoluteTarget, out target))
+            {
+                int formalSize = GetFormalOperandSize(fixup.Mode);
+                if (formalSize == 1)
+                {
+                    prg[fixup.Location] = LowByte(target);
+                }
+                else if (formalSize == 2)
+                {
+                    prg[fixup.Location] = LowByte(target);
+                    prg[fixup.Location + 1] = HighByte(target);
+                }
+                fixup.Fixed = true;
+            }
+        }
+
+        Fixups.RemoveAll(x => x.Fixed);
     }
 
     bool TryGetOperandValue(AsmOperand operand, AddressMode mode, int location, bool isRelativeBranchToAbsoluteTarget, out int value)
     {
         value = 0;
 
-        int symbolAddress;
+        AsmSymbol sym;
         if (!operand.Base.HasValue)
         {
             value += operand.Offset;
         }
-        else if (Symbols.TryGetValue(operand.Base.Value, out symbolAddress))
+        else if (Symbols.TryGetValue(operand.Base.Value, out sym))
         {
-            value += symbolAddress;
+            value += sym.Value;
             value += operand.Offset;
         }
         else
@@ -293,6 +311,7 @@ class Assembler
         else if (mode == AddressMode.Absolute) return AsmInfo.ABS;
         else if (mode == AddressMode.AbsoluteX) return AsmInfo.ABX;
         else if (mode == AddressMode.Immediate) return AsmInfo.IMM;
+        else if (mode == AddressMode.Indirect) return AsmInfo.INV;
         else if (mode == AddressMode.IndirectX) return AsmInfo.ZXI;
         else if (mode == AddressMode.IndirectY) return AsmInfo.ZYI;
         else if (mode == AddressMode.Relative) return AsmInfo.REL;
@@ -317,41 +336,6 @@ class Assembler
     {
         return (byte)((n >> 8) & 0xFF);
     }
-
-    int AllocateGlobal(MemoryRegion region, int size)
-    {
-        int address;
-        if (region.Tag == MemoryRegionTag.ZeroPage)
-        {
-            if (ZeroPageNext + size > ZeroPageEnd) Program.Error("Not enough zero page RAM to allocate global.");
-            address = ZeroPageNext;
-            ZeroPageNext += size;
-        }
-        else if (region.Tag == MemoryRegionTag.Oam)
-        {
-            if (OamNext + size > OamEnd) Program.Error("Not enough OAM to allocate global.");
-            address = OamNext;
-            OamNext += size;
-        }
-        else if (region.Tag == MemoryRegionTag.Ram)
-        {
-            if (RamNext + size > RamEnd) Program.Error("Not enough RAM to allocate global.");
-            address = RamNext;
-            RamNext += size;
-        }
-        else if (region.Tag == MemoryRegionTag.Fixed)
-        {
-            if (region.FixedAddress < 0 || region.FixedAddress > ushort.MaxValue) Program.Error("Invalid address.");
-            address = region.FixedAddress;
-        }
-        else
-        {
-            Program.NYI();
-            address = -1;
-        }
-
-        return address;
-    }
 }
 
 class Fixup
@@ -360,6 +344,7 @@ class Fixup
     public int Location;
     public AddressMode Mode;
     public bool IsRelativeBranchToAbsoluteTarget;
+    public bool Fixed = false;
 }
 
 [DebuggerDisplay("{Show(),nq}")]
@@ -443,6 +428,7 @@ class AsmOperand
         else if (Mode == AddressMode.ZeroPageX) format = "{0},X";
         else if (Mode == AddressMode.Absolute) format = "{0}";
         else if (Mode == AddressMode.AbsoluteX) format = "{0},X";
+        else if (Mode == AddressMode.Indirect) format = "({0})";
         else if (Mode == AddressMode.IndirectX) format = "({0},X)";
         else if (Mode == AddressMode.IndirectY) format = "({0}),Y";
         else if (Mode == AddressMode.Relative) format = "+{0}";
@@ -463,6 +449,7 @@ enum AddressMode
     ZeroPageX,
     Absolute,
     AbsoluteX,
+    Indirect,
     IndirectX,
     IndirectY,
     Relative,
@@ -473,4 +460,10 @@ enum ImmediateModifier
     None,
     LowByte,
     HighByte,
+}
+
+class AsmSymbol
+{
+    public int Value;
+    public bool IsLabel;
 }

@@ -395,11 +395,19 @@ partial class Parser
                     }
                     else if (TryParse(TokenType.LPAREN))
                     {
-                        AsmOperand operand = ParseAssemblyOperand(AddressMode.IndirectY);
+                        AsmOperand operand = ParseAssemblyOperand(AddressMode.Indirect);
                         if (TryParse(TokenType.RPAREN))
                         {
-                            Expect(TokenType.COMMA);
-                            ExpectKeyword("Y");
+                            if (TryParse(TokenType.COMMA))
+                            {
+                                Expect(TokenType.COMMA);
+                                ExpectKeyword("Y");
+                                operand = operand.WithMode(AddressMode.IndirectY);
+                            }
+                            else
+                            {
+                                // This is the non-indexed "indirect" address mode.
+                            }
                         }
                         else if (TryParse(TokenType.COMMA))
                         {

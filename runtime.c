@@ -2,18 +2,29 @@
 define u8 FALSE = 0;
 define u8 TRUE = 1;
 
+u8 _rt_load_u8(u8 *p)
+{
+    __asm
+    {
+        LDA (p)
+        STA __result
+        LDA #0
+        STA __result+1
+    }
+}
+
 u16 _rt_load_u16(u16 *p)
 {
     __asm
     {
-        LDA (0,X)
+        LDA (p)
         TAY
-        INC 0,X
-        BCC +2
-        INC 1,X
-        LDA (0,X)
-        STA 0,X
-        STY 1,X
+        INC p
+        BNE +2
+        INC p+1
+        LDA (p)
+        STY __result
+        STA __result+1
     }
 }
 
@@ -24,13 +35,13 @@ void _rt_load_nondestructive_u16(u16 *p, u16 result)
 {
     __asm
     {
-        LDA (2,X)
-        STA 0,X
-        INC 2,X
-        BCC +2
-        INC 3,X
-        LDA (2,X)
-        STA 1,X
+        LDA (p)
+        STA result+1
+        INC p
+        BNE +2
+        INC p+1
+        LDA (p)
+        STA result+1
         // Return now without adjusting the stack:
         RTS
     }
@@ -40,8 +51,8 @@ void _rt_store_u8(u16 *p, u8 a)
 {
     __asm
     {
-        LDA 0,X
-        STA (2,X)
+        LDA a
+        STA (p)
     }
 }
 
@@ -49,13 +60,13 @@ void _rt_store_u16(u16 *p, u16 a)
 {
     __asm
     {
-        LDA 0,X
-        STA (2,X)
-        INC 0,X
-        BCC +2
-        INC 1,X
-        LDA 1,X
-        STA (2,X)
+        LDA a
+        STA (p)
+        INC p
+        BNE +2
+        INC p+1
+        LDA a+1
+        STA (p)
     }
 }
 
@@ -66,14 +77,28 @@ u16 _rt_add_u16(u16 a, u16 b)
         CLC
         LDA a
         ADC b
-        STA a
+        STA __result
         LDA a+1
         ADC b+1
-        STA a+1
+        STA __result+1
     }
 }
 
-uint8_t _rt_mul_u8(uint8_t a, uint8_t b)
+u16 _rt_sub_u16(u16 a, u16 b)
+{
+    __asm
+    {
+        SEC
+        LDA a
+        SBC b
+        STA __result
+        LDA a+1
+        SBC b+1
+        STA __result+1
+    }
+}
+
+u8 _rt_mul_u8(u8 a, u8 b)
 {
     __asm
     {
@@ -88,13 +113,12 @@ uint8_t _rt_mul_u8(uint8_t a, uint8_t b)
         skip:
         DEY         // Decrement the counter
         BNE loop    // Loop a total of 8 times
-        RTS
     }
 }
 
-uint16_t _rt_mul_u16(uint16_t a, uint16_t b)
+u16 _rt_mul_u16(u16 a, u16 b)
 {
-    uint16_t r;
+    u16 r;
     __asm
     {
         LDA #0      // Initialize r (result) to 0
@@ -120,13 +144,12 @@ uint16_t _rt_mul_u16(uint16_t a, uint16_t b)
         LDA r+1     // Copy r to AX
         TAX
         LDA r
-        RTS
     }
 }
 
-uint8_t _rt_div_u8(uint8_t a, uint8_t b)
+u8 _rt_div_u8(u8 a, u8 b)
 {
-    uint8_t r;
+    u8 r;
     __asm
     {
         // This is identical to _rt_div_u16 except
@@ -148,13 +171,12 @@ uint8_t _rt_div_u8(uint8_t a, uint8_t b)
         DEX
         BNE loop
         LDA a
-        RTS
     }
 }
 
-uint16_t _rt_div_u16(uint16_t a, uint16_t b)
+u16 _rt_div_u16(u16 a, u16 b)
 {
-    uint16_t r;
+    u16 r;
     __asm
     {
         // From http://nparker.llx.com/a2/mult.html
@@ -183,13 +205,12 @@ uint16_t _rt_div_u16(uint16_t a, uint16_t b)
         BNE loop
         LDA a           // Return the quotient
         LDX a+1                
-        RTS
     }
 }
 
-uint8_t _rt_mod_u8(uint8_t a, uint8_t b)
+u8 _rt_mod_u8(u8 a, u8 b)
 {
-    uint8_t r;
+    u8 r;
     __asm
     {
         // This is identical to _rt_div_u8 except
@@ -211,13 +232,12 @@ uint8_t _rt_mod_u8(uint8_t a, uint8_t b)
         DEX
         BNE loop
         LDA r
-        RTS
     }
 }
 
-uint16_t _rt_mod_u16(uint16_t a, uint16_t b)
+u16 _rt_mod_u16(u16 a, u16 b)
 {
-    uint16_t r;
+    u16 r;
     __asm
     {
         // This is identical to _rt_div_u16 except
@@ -247,94 +267,46 @@ uint16_t _rt_mod_u16(uint16_t a, uint16_t b)
         BNE loop
         LDA r
         LDX r+1
-        RTS
     }
 }
 
-uint8_t _rt_eq_u8(uint8_t a, uint8_t b)
+bool _rt_eq_u16(u16 a, u16 b)
 {
     __asm
     {
-        LDA #0
-        LDX a
-        CPX b
+        LDA a+1
+        CMP b+1
         BNE skip
-        LDA #1
+        LDA a
+        CMP b
+
+        LDY #1
+        STY a
+        DEY
+        STY a+1
+        JMP end
+
         skip:
-        RTS
+        LDY #0
+        STY a
+        STY a+1
+
+        end:
     }
 }
 
-uint8_t _rt_eq_u16(uint16_t a, uint16_t b)
-{
-    __asm
-    {
-        LDA #0
-        LDX a
-        CPX b
-        BNE skip
-        LDX a+1
-        CPX b+1
-        BNE skip
-        LDA #1
-        skip:
-        RTS
-    }
-}
-
-uint8_t _rt_ne_u8(uint8_t a, uint8_t b)
-{
-    __asm
-    {
-        // This is identical to _rt_eq_u8 except
-        // that the constants are flipped.
-
-        LDA #1
-        LDX a
-        CPX b
-        BNE skip
-        LDA #0
-        skip:
-        RTS
-    }
-}
-
-uint8_t _rt_ne_u16(uint16_t a, uint16_t b)
+bool _rt_ne_u16(u16 a, u16 b)
 {
     __asm
     {
         // This is identical to _rt_eq_u16 except
         // that the constants are flipped.
 
-        LDA #1
-        LDX a
-        CPX b
-        BNE skip
-        LDX a+1
-        CPX b+1
-        BNE skip
-        LDA #0
-        skip:
-        RTS
+        // TODO
     }
 }
 
-uint8_t _rt_lt_u8(uint8_t a, uint8_t b)
-{
-    __asm
-    {
-        LDA #0
-        LDX a
-        CPX b
-        // The carry flag will be *clear* if a < b.
-        BCS skip
-        LDA #1
-        skip:
-        RTS
-    }
-}
-
-uint8_t _rt_lt_u16(uint16_t a, uint16_t b)
+bool _rt_lt_u16(u16 a, u16 b)
 {
     __asm
     {
@@ -343,150 +315,44 @@ uint8_t _rt_lt_u16(uint16_t a, uint16_t b)
         // else
         //     return AH < BH;
 
-        LDA #0
-        LDX a+1
-        CPX b+1
-        BEQ test_low
-        // The carry flag will be *clear* if a+1 < b+1.
-        BCS skip
-        LDA #1
-        JMP skip
-
-        test_low:
-        LDX a
-        CPX b
-        // The carry flag will be *clear* if a < b.
-        BCS skip
-        LDA #1
-        skip:
-        RTS
+        // TODO
     }
 }
 
-uint8_t _rt_gt_u8(uint8_t a, uint8_t b)
-{
-    __asm
-    {
-        // This is identical to _rt_lt_u8 except
-        // that the arguments are swapped.
-
-        LDA #0
-        LDX b
-        CPX a
-        BCS skip
-        LDA #1
-        skip:
-        RTS
-    }
-}
-
-uint8_t _rt_gt_u16(uint16_t a, uint16_t b)
+bool _rt_gt_u16(u16 a, u16 b)
 {
     __asm
     {
         // This is identical to _rt_lt_u16 except
         // that the arguments are swapped.
 
-        LDA #0
-        LDX b+1
-        CPX a+1
-        BEQ test_low
-        BCS skip
-        LDA #1
-        JMP skip
-        test_low:
-        LDX b
-        CPX a
-        BCS skip
-        LDA #1
-        skip:
-        RTS
+        // TODO
     }
 }
 
-uint8_t _rt_ge_u8(uint8_t a, uint8_t b)
-{
-    __asm
-    {
-        // This is identical to _rt_lt_u8 except
-        // that the constants are flipped.
-
-        LDA #1
-        LDX a
-        CPX b
-        BCS skip
-        LDA #0
-        skip:
-        RTS
-    }
-}
-
-uint8_t _rt_ge_u16(uint16_t a, uint16_t b)
+bool _rt_ge_u16(u16 a, u16 b)
 {
     __asm
     {
         // This is identical to _rt_lt_u16 except
         // that the constants are flipped.
 
-        LDA #1
-        LDX a+1
-        CPX b+1
-        BEQ test_low
-        BCS skip
-        LDA #0
-        JMP skip
-        test_low:
-        LDX a
-        CPX b
-        BCS skip
-        LDA #0
-        skip:
-        RTS
+        // TODO
     }
 }
 
-uint8_t _rt_le_u8(uint8_t a, uint8_t b)
-{
-    __asm
-    {
-        // This is identical to _rt_gt_u8 except
-        // that the constants are flipped.
-
-        LDA #1
-        LDX b
-        CPX a
-        BCS skip
-        LDA #0
-        skip:
-        RTS
-    }
-}
-
-uint8_t _rt_le_u16(uint16_t a, uint16_t b)
+bool _rt_le_u16(u16 a, u16 b)
 {
     __asm
     {
         // This is identical to _rt_gt_u16 except
         // that the constants are flipped.
 
-        LDA #1
-        LDX b+1
-        CPX a+1
-        BEQ test_low
-        BCS skip
-        LDA #0
-        JMP skip
-        test_low:
-        LDX b
-        CPX a
-        BCS skip
-        LDA #0
-        skip:
-        RTS
+        // TODO
     }
 }
 
-uint8_t _rt_bitwise_and_u8(uint8_t a, uint8_t b)
+u8 _rt_bitwise_and_u8(u8 a, u8 b)
 {
     __asm
     {
@@ -496,7 +362,7 @@ uint8_t _rt_bitwise_and_u8(uint8_t a, uint8_t b)
     }
 }
 
-uint16_t _rt_bitwise_and_u16(uint16_t a, uint16_t b)
+u16 _rt_bitwise_and_u16(u16 a, u16 b)
 {
     __asm
     {
@@ -509,7 +375,7 @@ uint16_t _rt_bitwise_and_u16(uint16_t a, uint16_t b)
     }
 }
 
-uint8_t _rt_bitwise_or_u8(uint8_t a, uint8_t b)
+u8 _rt_bitwise_or_u8(u8 a, u8 b)
 {
     __asm
     {
@@ -519,7 +385,7 @@ uint8_t _rt_bitwise_or_u8(uint8_t a, uint8_t b)
     }
 }
 
-uint16_t _rt_bitwise_or_u16(uint16_t a, uint16_t b)
+u16 _rt_bitwise_or_u16(u16 a, u16 b)
 {
     __asm
     {
@@ -532,7 +398,7 @@ uint16_t _rt_bitwise_or_u16(uint16_t a, uint16_t b)
     }
 }
 
-uint8_t _rt_bitwise_xor_u8(uint8_t a, uint8_t b)
+u8 _rt_bitwise_xor_u8(u8 a, u8 b)
 {
     __asm
     {
@@ -542,7 +408,7 @@ uint8_t _rt_bitwise_xor_u8(uint8_t a, uint8_t b)
     }
 }
 
-uint16_t _rt_bitwise_xor_u16(uint16_t a, uint16_t b)
+u16 _rt_bitwise_xor_u16(u16 a, u16 b)
 {
     __asm
     {
@@ -555,7 +421,7 @@ uint16_t _rt_bitwise_xor_u16(uint16_t a, uint16_t b)
     }
 }
 
-uint8_t _rt_bitwise_not_u8(uint8_t a)
+u8 _rt_bitwise_not_u8(u8 a)
 {
     __asm
     {
@@ -565,7 +431,7 @@ uint8_t _rt_bitwise_not_u8(uint8_t a)
     }
 }
 
-uint16_t _rt_bitwise_not_u16(uint16_t a)
+u16 _rt_bitwise_not_u16(u16 a)
 {
     __asm
     {
@@ -578,7 +444,7 @@ uint16_t _rt_bitwise_not_u16(uint16_t a)
     }
 }
 
-uint8_t _rt_logical_not_u8(uint8_t a)
+u8 _rt_logical_not_u8(u8 a)
 {
     __asm
     {
@@ -591,7 +457,7 @@ uint8_t _rt_logical_not_u8(uint8_t a)
     }
 }
 
-uint8_t _rt_shift_left_u8(uint8_t a, uint8_t b)
+u8 _rt_shift_left_u8(u8 a, u8 b)
 {
     __asm
     {
@@ -607,7 +473,7 @@ uint8_t _rt_shift_left_u8(uint8_t a, uint8_t b)
     }
 }
 
-uint16_t _rt_shift_left_u16(uint16_t a, uint16_t b)
+u16 _rt_shift_left_u16(u16 a, u16 b)
 {
     __asm
     {
@@ -631,7 +497,7 @@ uint16_t _rt_shift_left_u16(uint16_t a, uint16_t b)
     }
 }
 
-uint8_t _rt_shift_right_u8(uint8_t a, uint8_t b)
+u8 _rt_shift_right_u8(u8 a, u8 b)
 {
     // This is identical to _rt_shift_left_u8 except
     // that it shifts right instead of left.
@@ -650,7 +516,7 @@ uint8_t _rt_shift_right_u8(uint8_t a, uint8_t b)
     }
 }
 
-uint16_t _rt_shift_right_u16(uint16_t a, uint16_t b)
+u16 _rt_shift_right_u16(u16 a, u16 b)
 {
     // This is identical to _rt_shift_right_u16 except
     // that it shifts right instead of left.

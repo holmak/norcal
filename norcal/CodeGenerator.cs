@@ -13,17 +13,25 @@ class CodeGenerator
     Dictionary<string, CFunctionInfo> Functions = new Dictionary<string, CFunctionInfo>();
     Dictionary<string, AggregateInfo> AggregateTypes = new Dictionary<string, AggregateInfo>();
 
+    // Global allocation:
+    // (Reserve the top half of zero page for the parameter stack.)
+    AllocationRegion ZeroPageRegion = new AllocationRegion("zero page RAM", 0, 0x80);
+    AllocationRegion OamRegion = new AllocationRegion("OAM", 0x100, 0x200);
+    AllocationRegion RamRegion = new AllocationRegion("RAM", 0x300, 0x800);
+
     // The current function:
     string CurrentFunctionName = null;
-    CType CurrentFunctionReturnType = null;
+    CType ReturnType = null;
+    // The return value always goes in the top two bytes of the call frame.
+    Symbol ReturnValue = null;
     int FrameSize = 0;
 
     // Local scope info:
     LexicalScope CurrentScope;
     LoopScope Loop;
 
-    // The return value always goes at the top of the current call frame, and is word-sized.
-    static readonly Symbol ReturnValue = new Symbol(SymbolTag.Local, 2, CType.UInt16, "$return_value");
+    // Option: Show more information.
+    static readonly bool ShowVerboseComments = false;
 
     public static List<Expr> CompileAll(Expr program)
     {
@@ -114,7 +122,6 @@ class CodeGenerator
             {
                 // TODO: Make sure the value fits in the specified type.
                 DeclareSymbol(new Symbol(SymbolTag.Constant, number, type, name));
-                Emit(Tag.Constant, name, number);
             }
             else if (decl.Match(Tag.Variable, out region, out type, out name))
             {
@@ -173,12 +180,23 @@ class CodeGenerator
                 BeginScope();
 
                 CurrentFunctionName = name;
-                CurrentFunctionReturnType = returnType;
+                ReturnType = returnType;
                 FrameSize = 0;
+
+                // Always declare a local variable to represent the return value.
+                // (This is mostly only useful for assembly code.)
+                ReturnValue = DeclareSymbol(new Symbol(SymbolTag.Local, 0, CType.UInt16, "__result"));
 
                 foreach (FieldInfo field in fields)
                 {
                     DeclareLocal(field.Type, field.Name, isParameter: true);
+                }
+
+                if (name == "reset")
+                {
+                    EmitComment("program setup");
+                    // The stack pointer begins at the top of zero page.
+                    EmitAsm("LDX", new AsmOperand(0, AddressMode.Immediate));
                 }
 
                 // Two bytes must be reserved at the top of the frame for the return value.
@@ -207,12 +225,13 @@ class CodeGenerator
         Expr subexpr, left, right;
         Expr[] block;
         CType type;
-        string name, op;
+        string name, op, mnemonic;
+        AsmOperand operand;
         if (expr.MatchAny(Tag.Sequence, out block))
         {
             foreach (Expr stmt in block)
             {
-                EmitComment("STATEMENT: " + stmt.Show());
+                EmitVerboseComment("STATEMENT: " + stmt.Show());
                 Compile(stmt);
             }
         }
@@ -244,13 +263,35 @@ class CodeGenerator
             EmitAsm("STA", LowByte(ReturnValue));
             EmitAsm("LDA", HighByte(result));
             EmitAsm("STA", HighByte(ReturnValue));
-            NaivePopTemporary();
+            NaivePop();
             ReturnFromFunction();
         }
-        else if (expr.MatchTag(Tag.Asm) || expr.MatchTag(Tag.Label))
+        else if (expr.MatchTag(Tag.Label))
         {
-            // Pass assembly through unchanged:
+            // Pass through:
             Emit(expr);
+        }
+        else if (expr.Match(Tag.Asm, out mnemonic, out operand))
+        {
+            // If the operand refers to a local variable, replace it with an appropriate stack-relative operand.
+            AsmOperand fixedOperand = operand;
+            Symbol sym;
+            if (operand.Base.HasValue && TryFindSymbol(operand.Base.Value, out sym) && sym.Tag == SymbolTag.Local)
+            {
+                // Use the offset of the local variable plus any offset specified by the assembly source code:
+                int totalOffset = OffsetOfLocal(sym) + operand.Offset;
+
+                AddressMode actualMode = operand.Mode;
+                if (operand.Mode == AddressMode.Absolute) actualMode = AddressMode.ZeroPageX;
+                else if (operand.Mode == AddressMode.Indirect) actualMode = AddressMode.IndirectX;
+                else Error("invalid address mode for local variable");
+
+                string comment = sym.Name;
+                if (operand.Offset != 0) comment += ("+" + operand.Offset);
+
+                fixedOperand = new AsmOperand(totalOffset, actualMode).WithComment(comment);
+            }
+            Emit(Tag.Asm, mnemonic, fixedOperand);
         }
         else
         {
@@ -261,7 +302,8 @@ class CodeGenerator
     void ReturnFromFunction()
     {
         EmitComment("epilogue");
-        for (int i = 0; i < FrameSize; i++)
+        // Discard all locals, except for the return value.
+        for (int i = 0; i < FrameSize - 2; i++)
         {
             EmitAsm("INX");
         }
@@ -345,25 +387,21 @@ class CodeGenerator
         }
         else if (expr.Match(Tag.Load, out subexpr))
         {
+            CType valueType = DereferencePointerType(TypeOf(subexpr));
             NaivePush(subexpr);
-
-            // TODO: Use appropriately-sized load command.
-
-            EmitAsm("JSR", new AsmOperand("_rt_load_u16", AddressMode.Absolute));
+            CallRuntimeFunction("load", valueType, 0);
         }
         else if (expr.Match(Tag.Add, out left, out right))
         {
             NaivePush(left);
             NaivePush(right);
-            EmitAsm("JSR", new AsmOperand("_rt_add_u16", AddressMode.Absolute));
-            AdjustFrameSize(-2);
+            CallRuntimeFunction("add", CType.UInt16, -2);
         }
         else if (expr.Match(Tag.Subtract, out left, out right))
         {
             NaivePush(left);
             NaivePush(right);
-            EmitAsm("JSR", new AsmOperand("_rt_sub_u16", AddressMode.Absolute));
-            AdjustFrameSize(-2);
+            CallRuntimeFunction("sub", CType.UInt16, -2);
         }
         else
         {
@@ -389,20 +427,14 @@ class CodeGenerator
     {
         // Reserve space for the result, which acts like a second, dummy argument:
         NaivePushTemporary();
-        EmitAsm("JSR", new AsmOperand("_rt_load_nondestructive_u16", AddressMode.Absolute));
+        CallRuntimeFunction("load_nondestructive", CType.UInt16, 0);
     }
 
     void NaiveStore(int size)
     {
-        EmitComment("store {0} bytes", size);
-
-        string op = null;
-        if (size == 1) op = "_rt_store_u8";
-        else if (size == 2) op = "_rt_store_u16";
-        else Program.UnhandledCase();
-
-        EmitAsm("JSR", new AsmOperand(op, AddressMode.Absolute));
-        AdjustFrameSize(-4);
+        CallRuntimeFunction("store", CType.UInt16, -2);
+        // Discard the "void" return value:
+        NaivePop();
     }
 
     void NaiveCallBinaryOperator(string op)
@@ -418,7 +450,7 @@ class CodeGenerator
         return new Symbol(SymbolTag.Local, FrameSize, CType.UInt16, "$temp");
     }
 
-    void NaivePopTemporary()
+    void NaivePop()
     {
         EmitAsm("INX");
         EmitAsm("INX");
@@ -433,8 +465,11 @@ class CodeGenerator
 
     void AdjustFrameSize(int delta)
     {
-        EmitComment("frame size {0} {1} => {2}", delta > 0 ? "+" : "-", Math.Abs(delta), FrameSize + delta);
-        FrameSize += delta;
+        if (delta != 0)
+        {
+            EmitVerboseComment("frame size {0} {1} => {2}", delta > 0 ? "+" : "-", Math.Abs(delta), FrameSize + delta);
+            FrameSize += delta;
+        }
     }
 
     AsmOperand LowByte(Symbol sym)
@@ -542,6 +577,14 @@ class CodeGenerator
         Emit(Tag.Comment, string.Format(format, args));
     }
 
+    void EmitVerboseComment(string format, params object[] args)
+    {
+        if (ShowVerboseComments)
+        {
+            Emit(Tag.Comment, string.Format(format, args));
+        }
+    }
+
     void BeginScope()
     {
         CurrentScope = new LexicalScope(CurrentScope);
@@ -555,24 +598,55 @@ class CodeGenerator
     Symbol FindSymbol(string name)
     {
         Symbol sym;
-
-        for (LexicalScope scope = CurrentScope; scope != null; scope = scope.Outer)
-        {
-            if (scope.Symbols.TryGetValue(name, out sym))
-            {
-                return sym;
-            }
-        }
-
+        if (TryFindSymbol(name, out sym)) return sym;
         Error("reference to undefined symbol: {0}", name);
         return null;
     }
 
+    bool TryFindSymbol(string name, out Symbol found)
+    {
+        for (LexicalScope scope = CurrentScope; scope != null; scope = scope.Outer)
+        {
+            if (scope.Symbols.TryGetValue(name, out found))
+            {
+                return true;
+            }
+        }
+
+        found = null;
+        return false;
+    }
+
     Symbol DeclareGlobal(MemoryRegion region, CType type, string name)
     {
-        // TODO: Allocate an address from the appropriate region.
+        int size = SizeOf(type);
 
-        return DeclareSymbol(new Symbol(SymbolTag.Global, 0x80, type, name));
+        // Reserve memory in the specified region.
+        int address;
+        if (region.Tag == MemoryRegionTag.ZeroPage) address = Allocate(ZeroPageRegion, size);
+        else if (region.Tag == MemoryRegionTag.Oam) address = Allocate(OamRegion, size);
+        else if (region.Tag == MemoryRegionTag.Ram) address = Allocate(RamRegion, size);
+        else if (region.Tag == MemoryRegionTag.Fixed)
+        {
+            if (region.FixedAddress < 0 || region.FixedAddress > ushort.MaxValue) Program.Error("Invalid address.");
+            address = region.FixedAddress;
+        }
+        else
+        {
+            Program.NYI();
+            address = -1;
+        }
+
+        Emit(Tag.Variable, address, size, name);
+        return DeclareSymbol(new Symbol(SymbolTag.Global, address, type, name));
+    }
+
+    int Allocate(AllocationRegion allocator, int size)
+    {
+        if (allocator.Next + size > allocator.Top) Program.Error("Not enough {0} to allocate global.", allocator.Name);
+        int address = allocator.Next;
+        allocator.Next += size;
+        return address;
     }
 
     Symbol DeclareLocal(CType type, string name, bool isParameter)
@@ -711,6 +785,13 @@ class CodeGenerator
         EmitAsm("JSR", new AsmOperand(functionName, AddressMode.Absolute));
     }
 
+    void CallRuntimeFunction(string operation, CType type, int stackEffect)
+    {
+        string name = GetRuntimeFunctionName(operation, type);
+        EmitAsm("JSR", new AsmOperand(name, AddressMode.Absolute));
+        AdjustFrameSize(stackEffect);
+    }
+
     [DebuggerStepThrough]
     void Warning(string format, params object[] args)
     {
@@ -824,4 +905,20 @@ enum Conversion
 {
     Implicit,
     Explicit,
+}
+
+class AllocationRegion
+{
+    public readonly string Name;
+    public readonly int Bottom;
+    public readonly int Top;
+    public int Next;
+
+    public AllocationRegion(string name, int bottom, int top)
+    {
+        Name = name;
+        Bottom = bottom;
+        Next = bottom;
+        Top = top;
+    }
 }
