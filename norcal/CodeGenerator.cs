@@ -185,7 +185,7 @@ class CodeGenerator
 
                 // Always declare a local variable to represent the return value.
                 // (This is mostly only useful for assembly code.)
-                ReturnValue = DeclareSymbol(new Symbol(SymbolTag.Local, 0, CType.UInt16, "__result"));
+                ReturnValue = DeclareSymbol(new Symbol(SymbolTag.Local, 2, CType.UInt16, "__result"));
 
                 foreach (FieldInfo field in fields)
                 {
