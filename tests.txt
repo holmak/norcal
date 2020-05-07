@@ -227,12 +227,12 @@ void reset()
 }
 
 @ Short type names
-@out 10 30 400
+@out 5 0x607 8
 void reset()
 {
-    u8 a = 10;
-    u16 b = 400;
-    u8 c = 30;
+    u8 a = 0x05;
+    u16 b = 0x0607;
+    u8 c = 0x08;
     OUTB = a;
     OUTB = c;
     OUT = b;

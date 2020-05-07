@@ -183,6 +183,13 @@ class CodeGenerator
                 ReturnType = returnType;
                 FrameSize = 0;
 
+                if (name == "reset")
+                {
+                    EmitComment("program setup");
+                    // The stack pointer begins at the top of zero page.
+                    EmitAsm("LDX", new AsmOperand(0, AddressMode.Immediate));
+                }
+
                 // Always declare a local variable to represent the return value.
                 // (This is mostly only useful for assembly code.)
                 ReturnValue = DeclareSymbol(new Symbol(SymbolTag.Local, 2, CType.UInt16, "__result"));
@@ -192,19 +199,12 @@ class CodeGenerator
                     DeclareLocal(field.Type, field.Name, isParameter: true);
                 }
 
-                if (name == "reset")
-                {
-                    EmitComment("program setup");
-                    // The stack pointer begins at the top of zero page.
-                    EmitAsm("LDX", new AsmOperand(0, AddressMode.Immediate));
-                }
-
                 // Two bytes must be reserved at the top of the frame for the return value.
                 // If the parameters didn't reserve enough space, add more now.
-                while (FrameSize < 2)
+                if (FrameSize < 2)
                 {
-                    EmitAsm("DEX");
-                    AdjustFrameSize(+1);
+                    EmitComment("reserve stack space for return value");
+                    AllocateFrameBytes(2 - FrameSize);
                 }
 
                 Compile(body);
@@ -244,7 +244,7 @@ class CodeGenerator
             CType leftType = TypeOf(left);
             NaivePushAddressOf(left);
             NaivePush(right);
-            NaiveStore(SizeOf(leftType));
+            NaiveStore(leftType);
         }
         else if (expr.Match(Tag.AssignModify, out op, out left, out right))
         {
@@ -254,7 +254,7 @@ class CodeGenerator
             NaiveLoadNondestructive();
             NaivePush(right);
             NaiveCallBinaryOperator(op);
-            NaiveStore(SizeOf(leftType));
+            NaiveStore(leftType);
         }
         else if (expr.Match(Tag.Return, out subexpr))
         {
@@ -430,11 +430,25 @@ class CodeGenerator
         CallRuntimeFunction("load_nondestructive", CType.UInt16, 0);
     }
 
-    void NaiveStore(int size)
+    void NaiveStore(CType type)
     {
-        CallRuntimeFunction("store", CType.UInt16, -2);
+        CallRuntimeFunction("store", GetTypeForSize(type), -2);
         // Discard the "void" return value:
         NaivePop();
+    }
+
+    /// <summary>
+    /// Sometimes we need to manipulate bytes without regard for their actual type.
+    /// (Mostly when moving data around.) The unsigned integer types are used
+    /// to represent "untyped" chunks of data of various sizes.
+    /// </summary>
+    CType GetTypeForSize(CType type)
+    {
+        int size = SizeOf(type);
+        if (size == 1) return CType.UInt8;
+        else if (size == 2) type = CType.UInt16;
+        else Program.Panic("invalid load/store size");
+        return CType.UInt16;
     }
 
     void NaiveCallBinaryOperator(string op)
@@ -444,17 +458,13 @@ class CodeGenerator
 
     Symbol NaivePushTemporary()
     {
-        EmitAsm("DEX");
-        EmitAsm("DEX");
-        AdjustFrameSize(+2);
+        AllocateFrameBytes(+2);
         return new Symbol(SymbolTag.Local, FrameSize, CType.UInt16, "$temp");
     }
 
     void NaivePop()
     {
-        EmitAsm("INX");
-        EmitAsm("INX");
-        AdjustFrameSize(-2);
+        AllocateFrameBytes(-2);
     }
 
     int OffsetOfLocal(Symbol sym)
@@ -470,6 +480,19 @@ class CodeGenerator
             EmitVerboseComment("frame size {0} {1} => {2}", delta > 0 ? "+" : "-", Math.Abs(delta), FrameSize + delta);
             FrameSize += delta;
         }
+    }
+
+    void AllocateFrameBytes(int delta)
+    {
+        string op = (delta > 0) ? "DEX" : "INX";
+        int count = Math.Abs(delta);
+
+        for (int i = 0; i < count; i++)
+        {
+            EmitAsm(op);
+        }
+
+        AdjustFrameSize(delta);
     }
 
     AsmOperand LowByte(Symbol sym)
@@ -654,9 +677,16 @@ class CodeGenerator
         // Parameters always reserve two bytes:
         int size = isParameter ? SizeOf(CType.UInt16) : SizeOf(type);
         if (size < 1) Program.Panic("locals must have nonzero size");
-        AdjustFrameSize(size);
-        int offset = FrameSize;
-        return DeclareSymbol(new Symbol(SymbolTag.Local, offset, type, name));
+        if (isParameter)
+        {
+            AdjustFrameSize(+size);
+        }
+        else
+        {
+            EmitComment("reserve {0} byte(s) for local", size);
+            AllocateFrameBytes(size);
+        }
+        return DeclareSymbol(new Symbol(SymbolTag.Local, FrameSize, type, name));
     }
 
     Symbol DeclareTemporary(CType type)
