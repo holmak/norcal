@@ -97,7 +97,7 @@ class CodeGenerator
         foreach (Expr decl in declarations)
         {
             FieldInfo[] parsedFields;
-            if (decl.Match(Tag.Function, out returnType, out functionName, out parsedFields))
+            if (decl.Match(Tag.Function, out returnType, out functionName, out parsedFields, out body))
             {
                 if (Functions.ContainsKey(functionName)) Error("function is already defined: " + functionName);
 
@@ -199,14 +199,6 @@ class CodeGenerator
                     DeclareLocal(field.Type, field.Name, isParameter: true);
                 }
 
-                // Two bytes must be reserved at the top of the frame for the return value.
-                // If the parameters didn't reserve enough space, add more now.
-                if (FrameSize < 2)
-                {
-                    EmitComment("reserve stack space for return value");
-                    AllocateFrameBytes(2 - FrameSize);
-                }
-
                 Compile(body);
                 ReturnFromFunction();
                 EndScope();
@@ -223,7 +215,8 @@ class CodeGenerator
     void Compile(Expr expr)
     {
         Expr subexpr, left, right;
-        Expr[] block;
+        Expr init, test, induct, body;
+        Expr[] block, parts;
         CType type;
         string name, op, mnemonic;
         AsmOperand operand;
@@ -238,33 +231,6 @@ class CodeGenerator
         else if (expr.Match(Tag.Variable, out type, out name))
         {
             DeclareLocal(type, name, isParameter: false);
-        }
-        else if (expr.Match(Tag.Assign, out left, out right))
-        {
-            CType leftType = TypeOf(left);
-            NaivePushAddressOf(left);
-            NaivePush(right);
-            NaiveStore(leftType);
-        }
-        else if (expr.Match(Tag.AssignModify, out op, out left, out right))
-        {
-            EmitComment("assign modified");
-            CType leftType = TypeOf(left);
-            NaivePushAddressOf(left);
-            NaiveLoadNondestructive();
-            NaivePush(right);
-            NaiveCallBinaryOperator(op);
-            NaiveStore(leftType);
-        }
-        else if (expr.Match(Tag.Return, out subexpr))
-        {
-            Symbol result = NaivePush(subexpr);
-            EmitAsm("LDA", LowByte(result));
-            EmitAsm("STA", LowByte(ReturnValue));
-            EmitAsm("LDA", HighByte(result));
-            EmitAsm("STA", HighByte(ReturnValue));
-            NaivePop();
-            ReturnFromFunction();
         }
         else if (expr.MatchTag(Tag.Label))
         {
@@ -293,9 +259,69 @@ class CodeGenerator
             }
             Emit(Tag.Asm, mnemonic, fixedOperand);
         }
+        else if (expr.Match(Tag.For, out init, out test, out induct, out body))
+        {
+            BeginScope();
+            Compile(init);
+            EmitComment("for_top");
+            Compile(test);
+            EmitComment("break if done");
+            Compile(body);
+            Compile(induct);
+            EmitComment("jump to top");
+            EndScope();
+        }
+        else if (expr.MatchAny(Tag.If, out parts))
+        {
+            EmitComment("if...");
+            foreach (Expr p in parts) Compile(p);
+            EmitComment("end if");
+        }
+        else if (expr.Match(Tag.Assign, out left, out right))
+        {
+            int leftSize = SizeOf(TypeOf(left));
+            int rightSize = SizeOf(TypeOf(right));
+            if (leftSize > 2) NYI(left, "type is too large for assignment");
+            if (rightSize > 2) NYI(right, "type is too large for assignment");
+
+            Symbol leftSymbol, rightSymbol;
+            if (TryGetSymbol(left, out leftSymbol) && TryGetSymbol(right, out rightSymbol))
+            {
+                EmitAsm("LDA", LowByte(rightSymbol));
+                EmitAsm("STA", LowByte(leftSymbol));
+
+                if (leftSize == 2)
+                {
+                    EmitAsm("LDA", HighByte(rightSymbol));
+                    EmitAsm("STA", HighByte(leftSymbol));
+                }
+            }
+            else
+            {
+                NYI(expr);
+            }
+        }
         else
         {
-            Program.UnhandledCase();
+            NYI(expr);
+        }
+    }
+
+    /// <summary>
+    /// If this is a simple enough expression, return the corresponding symbol.
+    /// </summary>
+    bool TryGetSymbol(Expr expr, out Symbol symbol)
+    {
+        string name;
+        if (expr.Match(Tag.Name, out name))
+        {
+            symbol = FindSymbol(name);
+            return true;
+        }
+        else
+        {
+            symbol = null;
+            return false;
         }
     }
 
@@ -308,163 +334,6 @@ class CodeGenerator
             EmitAsm("INX");
         }
         EmitAsm("RTS");
-    }
-
-    void NaivePushAddressOf(Expr expr)
-    {
-        string name;
-        Expr subexpr;
-        if (expr.Match(Tag.Name, out name))
-        {
-            Symbol sym = FindSymbol(name);
-            if (sym.Tag == SymbolTag.Constant)
-            {
-                Error("constants cannot be used as lvalues: {0}", name);
-            }
-            else if (sym.Tag == SymbolTag.Global)
-            {
-                EmitComment("push address of global '{0}'", sym.Name);
-                Symbol temp = NaivePushTemporary();
-                EmitAsm("LDA", new AsmOperand(LowByte(sym.Value), AddressMode.Immediate).WithComment("#<" + sym.Name));
-                EmitAsm("STA", LowByte(temp));
-                EmitAsm("LDA", new AsmOperand(HighByte(sym.Value), AddressMode.Immediate).WithComment("#>" + sym.Name));
-                EmitAsm("STA", HighByte(temp));
-            }
-            else if (sym.Tag == SymbolTag.Local)
-            {
-                EmitComment("push address of local '{0}'", sym.Name);
-                Symbol temp = NaivePushTemporary();
-                // Calculate the address of the local; it will be in the zero page:
-                EmitAsm("TXA");
-                EmitAsm("CLC");
-                EmitAsm("ADC", new AsmOperand(OffsetOfLocal(sym), AddressMode.Immediate).WithComment("#<" + sym.Name));
-                EmitAsm("STA", LowByte(temp));
-                EmitAsm("LDA", new AsmOperand(0, AddressMode.Immediate).WithComment("#>" + sym.Name));
-                EmitAsm("STA", HighByte(temp));
-            }
-            else
-            {
-                Program.UnhandledCase();
-            }
-        }
-        else if (expr.Match(Tag.Load, out subexpr))
-        {
-            NaivePush(subexpr);
-        }
-        else
-        {
-            Error("expression cannot be used as an lvalue: {0}", expr.Show());
-        }
-    }
-
-    Symbol NaivePush(Expr expr)
-    {
-        int number;
-        string name;
-        Expr subexpr, left, right;
-        if (expr.Match(Tag.Integer, out number))
-        {
-            EmitComment("push integer");
-            Symbol temp = NaivePushTemporary();
-            EmitAsm("LDA", new AsmOperand(LowByte(number), AddressMode.Immediate));
-            EmitAsm("STA", LowByte(temp));
-            EmitAsm("LDA", new AsmOperand(HighByte(number), AddressMode.Immediate));
-            EmitAsm("STA", HighByte(temp));
-        }
-        else if (expr.Match(Tag.Name, out name))
-        {
-            Symbol sym = FindSymbol(name);
-            if (sym.Tag == SymbolTag.Constant) EmitComment("push constant '{0}'", sym.Name);
-            else if (sym.Tag == SymbolTag.Global) EmitComment("push global '{0}'", sym.Name);
-            else if (sym.Tag == SymbolTag.Local) EmitComment("push local '{0}'", sym.Name);
-            else Program.UnhandledCase();
-
-            Symbol temp = NaivePushTemporary();
-            EmitAsm("LDA", LowByte(sym));
-            EmitAsm("STA", LowByte(temp));
-            EmitAsm("LDA", HighByte(sym));
-            EmitAsm("STA", HighByte(temp));
-        }
-        else if (expr.Match(Tag.Load, out subexpr))
-        {
-            CType valueType = DereferencePointerType(TypeOf(subexpr));
-            NaivePush(subexpr);
-            CallRuntimeFunction("load", valueType, 0);
-        }
-        else if (expr.Match(Tag.Add, out left, out right))
-        {
-            NaivePush(left);
-            NaivePush(right);
-            CallRuntimeFunction("add", CType.UInt16, -2);
-        }
-        else if (expr.Match(Tag.Subtract, out left, out right))
-        {
-            NaivePush(left);
-            NaivePush(right);
-            CallRuntimeFunction("sub", CType.UInt16, -2);
-        }
-        else
-        {
-            Program.UnhandledCase();
-        }
-
-        // The result is always pushed onto the stack:
-        // TODO: Use the appropriate result type.
-        CType resultType = CType.UInt16;
-        return new Symbol(SymbolTag.Local, FrameSize, resultType, "$result");
-    }
-
-    void NaiveConvert(Conversion rule, CType currentType, CType desiredType)
-    {
-        // TODO
-        if (currentType != desiredType)
-        {
-            EmitComment("convert TOS");
-        }
-    }
-
-    void NaiveLoadNondestructive()
-    {
-        // Reserve space for the result, which acts like a second, dummy argument:
-        NaivePushTemporary();
-        CallRuntimeFunction("load_nondestructive", CType.UInt16, 0);
-    }
-
-    void NaiveStore(CType type)
-    {
-        CallRuntimeFunction("store", GetTypeForSize(type), -2);
-        // Discard the "void" return value:
-        NaivePop();
-    }
-
-    /// <summary>
-    /// Sometimes we need to manipulate bytes without regard for their actual type.
-    /// (Mostly when moving data around.) The unsigned integer types are used
-    /// to represent "untyped" chunks of data of various sizes.
-    /// </summary>
-    CType GetTypeForSize(CType type)
-    {
-        int size = SizeOf(type);
-        if (size == 1) return CType.UInt8;
-        else if (size == 2) type = CType.UInt16;
-        else Program.Panic("invalid load/store size");
-        return CType.UInt16;
-    }
-
-    void NaiveCallBinaryOperator(string op)
-    {
-        EmitComment("call operator '{0}'", op);
-    }
-
-    Symbol NaivePushTemporary()
-    {
-        AllocateFrameBytes(+2);
-        return new Symbol(SymbolTag.Local, FrameSize, CType.UInt16, "$temp");
-    }
-
-    void NaivePop()
-    {
-        AllocateFrameBytes(-2);
     }
 
     int OffsetOfLocal(Symbol sym)
@@ -555,8 +424,9 @@ class CodeGenerator
 
     CType TypeOf(Expr expr)
     {
-        string name;
-        Expr left, right, subexpr;
+        string name, fieldName, functionName;
+        Expr left, right, subexpr, cond, functionExpr;
+        Expr[] rest;
         if (expr.MatchTag(Tag.Integer))
         {
             return CType.UInt16;
@@ -574,12 +444,76 @@ class CodeGenerator
         {
             return FindCommonType(TypeOf(left), TypeOf(right));
         }
+        else if (expr.Match(Tag.Index, out left, out right))
+        {
+            CType arrayType = TypeOf(left);
+            if (!arrayType.IsArray && !arrayType.IsPointer) Error("an array or pointer is required");
+            return arrayType.Subtype;
+        }
+        else if (expr.Match(Tag.Field, out left, out fieldName))
+        {
+            CType structType = TypeOf(left);
+            if (!structType.IsStructOrUnion) Error("a struct or union is required");
+            AggregateInfo info = GetAggregateInfo(structType.Name);
+            foreach (FieldInfo field in info.Fields)
+            {
+                if (field.Name == fieldName) return field.Type;
+            }
+            Error("field does not exist: {0}", fieldName);
+            return CType.Void;
+        }
+        else if (expr.Match(Tag.Conditional, out cond, out left, out right))
+        {
+            return FindCommonType(TypeOf(left), TypeOf(right));
+        }
+        else if (expr.Match(Tag.AddressOf, out subexpr))
+        {
+            return CType.MakePointer(TypeOf(subexpr));
+        }
+        else if (expr.Match(Tag.PreIncrement, out subexpr) ||
+            expr.Match(Tag.PreDecrement, out subexpr) ||
+            expr.Match(Tag.PostIncrement, out subexpr) ||
+            expr.Match(Tag.PostDecrement, out subexpr))
+        {
+            return TypeOf(subexpr);
+        }
+        else if (expr.MatchAny(Tag.Call, out functionExpr, out rest) && functionExpr.Match(Tag.Name, out functionName))
+        {
+            CFunctionInfo functionInfo;
+            if (!Functions.TryGetValue(functionName, out functionInfo))
+            {
+                Error("undefined function: {0}", functionName);
+            }
+            return functionInfo.ReturnType;
+        }
+        else if (BinaryOperatorsThatProduceIntegers.Contains(expr.GetTag()))
+        {
+            return CType.UInt16;
+        }
         else
         {
             Program.UnhandledCase();
             return null;
         }
     }
+
+    /// <summary>
+    /// Binary operators that always return a uint16_t.
+    /// </summary>
+    static readonly string[] BinaryOperatorsThatProduceIntegers = new string[]
+    {
+        Tag.Multiply,
+        Tag.Divide,
+        Tag.Modulus,
+        Tag.ShiftLeft,
+        Tag.ShiftRight,
+        Tag.Equal,
+        Tag.NotEqual,
+        Tag.BitwiseOr,
+        Tag.BitwiseAnd,
+        Tag.LogicalOr,
+        Tag.LogicalAnd,
+    };
 
     void Emit(params object[] args)
     {
@@ -598,6 +532,19 @@ class CodeGenerator
     void EmitComment(string format, params object[] args)
     {
         Emit(Tag.Comment, string.Format(format, args));
+    }
+
+    // TODO: Report a fatal error if this is hit.
+    void NYI(Expr expr, string message = null)
+    {
+        if (message == null)
+        {
+            EmitComment("NYI: {0}", expr.Show());
+        }
+        else
+        {
+            EmitComment("NYI: {0}: {1}", message, expr.Show());
+        }
     }
 
     void EmitVerboseComment(string format, params object[] args)

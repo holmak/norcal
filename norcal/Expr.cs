@@ -49,6 +49,10 @@ class Expr
         return new Expr(Args, newSource);
     }
 
+    public string GetTag() => (string)Args[0];
+
+    public object[] GetArgs() => Args;
+
     public bool MatchTag(string tag)
     {
         return (string)Args[0] == tag;
@@ -176,6 +180,23 @@ class Expr
             return true;
         }
 
+        vars = null;
+        return false;
+    }
+
+    public bool MatchAny<T1, T2>(string tag, out T1 var1, out T2[] vars)
+    {
+        if (Args.Length >= 2 &&
+            Args[0] is string && (string)Args[0] == tag &&
+            Args[1] is T1 &&
+            Args.Skip(2).All(x => x is T2))
+        {
+            var1 = (T1)Args[1];
+            vars = Args.Skip(2).Cast<T2>().ToArray();
+            return true;
+        }
+
+        var1 = default(T1);
         vars = null;
         return false;
     }

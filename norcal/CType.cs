@@ -105,7 +105,7 @@ class CType : IEquatable<CType>
     {
         if (Tag != other.Tag) return false;
         else if (Tag == CTypeTag.Simple) return SimpleType.Equals(other.SimpleType);
-        else if (Tag == CTypeTag.Pointer) return Subtype.Equals(other.Subtype);
+        else if (Tag == CTypeTag.Pointer || Tag == CTypeTag.Array) return Subtype.Equals(other.Subtype);
         else if (Tag == CTypeTag.Struct) return Name == other.Name;
         else
         {

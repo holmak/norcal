@@ -38,6 +38,11 @@ class FieldInfo
         Name = name;
         Offset = offset;
     }
+
+    public override string ToString()
+    {
+        return string.Format("Field: {0}, {1}, {2}", Offset, Type.Show(), Name);
+    }
 }
 
 [DebuggerDisplay("{Show(),nq}")]
