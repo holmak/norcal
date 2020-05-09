@@ -43,7 +43,7 @@ partial class Parser
         return e.WithSource(SourcePosition);
     }
 
-    Expr MakeSequence(IEnumerable<object> items)
+    Expr MakeSequence(IEnumerable<Expr> items)
     {
         List<object> list = new List<object>();
         list.Add(Tag.Sequence);
@@ -361,7 +361,7 @@ partial class Parser
 
             while (TryParse(TokenType.NEWLINE)) { /* Skip any number of newlines. */ }
             Expect(TokenType.LBRACE);
-            List<object> parts = new List<object>();
+            List<Expr> parts = new List<Expr>();
             while (!TryParse(TokenType.RBRACE))
             {
                 if (TryParse(TokenType.NEWLINE))
@@ -755,7 +755,7 @@ partial class Parser
                     }
                 }
 
-                e = MakeSequence(parts);
+                e = Expr.Make(parts.ToArray());
             }
             else if (TryParse(TokenType.PERIOD))
             {
