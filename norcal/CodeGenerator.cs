@@ -7,9 +7,7 @@ using System.Threading.Tasks;
 
 class CodeGenerator
 {
-    FilePosition SourcePosition = FilePosition.Unknown;
     List<Expr> Output = new List<Expr>();
-    Symbol TempPointer;
     Dictionary<string, CFunctionInfo> Functions = new Dictionary<string, CFunctionInfo>();
     Dictionary<string, AggregateInfo> AggregateTypes = new Dictionary<string, AggregateInfo>();
 
@@ -22,8 +20,6 @@ class CodeGenerator
     // The current function:
     string CurrentFunctionName = null;
     CType ReturnType = null;
-    // The return value always goes in the top two bytes of the call frame.
-    Symbol ReturnValue = null;
     int FrameSize = 0;
 
     // Local scope info:
@@ -43,8 +39,6 @@ class CodeGenerator
     void CompileProgram(Expr program)
     {
         CurrentScope = new LexicalScope(null);
-
-        TempPointer = DeclareGlobal(MemoryRegion.ZeroPage, CType.UInt8Ptr, "$temp_ptr");
 
         Expr[] declarations;
         if (!program.MatchAny(Tag.Sequence, out declarations))
@@ -74,7 +68,7 @@ class CodeGenerator
                 for (int i = 0; i < parsedFields.Length; i++)
                 {
                     fields[i] = new FieldInfo(parsedFields[i].Type, parsedFields[i].Name, offset);
-                    int fieldSize = SizeOf(parsedFields[i].Type);
+                    int fieldSize = SizeOf(decl, parsedFields[i].Type);
                     if (!union) offset += fieldSize;
                     maxSize = Math.Max(maxSize, fieldSize);
                 }
@@ -99,7 +93,7 @@ class CodeGenerator
             FieldInfo[] parsedFields;
             if (decl.Match(Tag.Function, out returnType, out functionName, out parsedFields, out body))
             {
-                if (Functions.ContainsKey(functionName)) Error("function is already defined: " + functionName);
+                if (Functions.ContainsKey(functionName)) Error(decl, "function is already defined: " + functionName);
 
                 // Calculate the offset of each parameter:
                 FieldInfo[] fields = new FieldInfo[parsedFields.Length];
@@ -107,7 +101,7 @@ class CodeGenerator
                 for (int i = 0; i < parsedFields.Length; i++)
                 {
                     fields[i] = new FieldInfo(parsedFields[i].Type, parsedFields[i].Name, offset);
-                    int fieldSize = SizeOf(parsedFields[i].Type);
+                    int fieldSize = SizeOf(decl, parsedFields[i].Type);
                     offset += fieldSize;
                 }
 
@@ -121,11 +115,11 @@ class CodeGenerator
             else if (decl.Match(Tag.Constant, out type, out name, out number))
             {
                 // TODO: Make sure the value fits in the specified type.
-                DeclareSymbol(new Symbol(SymbolTag.Constant, number, type, name));
+                DeclareSymbol(decl, new Symbol(SymbolTag.Constant, number, type, name));
             }
             else if (decl.Match(Tag.Variable, out region, out type, out name))
             {
-                DeclareGlobal(region, type, name);
+                DeclareGlobal(decl, region, type, name);
             }
             else if (decl.Match(Tag.ReadonlyData, out type, out name, out values))
             {
@@ -139,8 +133,8 @@ class CodeGenerator
 
                     if (values.Length > type.Dimension)
                     {
-                        Program.Error(
-                            decl.Source,
+                        Error(
+                            decl,
                             "declared size of array ({0}) is too small for the number of specified values ({1})",
                             type.Dimension, values.Length);
                     }
@@ -151,7 +145,7 @@ class CodeGenerator
                 }
 
                 // Convert the data to raw bytes:
-                byte[] bytes = new byte[SizeOf(type)];
+                byte[] bytes = new byte[SizeOf(decl, type)];
                 if (type.IsArray && type.Subtype == CType.UInt8)
                 {
                     for (int i = 0; i < type.Dimension; i++)
@@ -165,7 +159,7 @@ class CodeGenerator
                     Program.NYI();
                 }
 
-                DeclareSymbol(new Symbol(SymbolTag.Constant, 0, type, name));
+                DeclareSymbol(decl, new Symbol(SymbolTag.Constant, 0, type, name));
                 Emit(Tag.ReadonlyData, name, bytes);
             }
         }
@@ -190,13 +184,9 @@ class CodeGenerator
                     EmitAsm("LDX", new AsmOperand(0, AddressMode.Immediate));
                 }
 
-                // Always declare a local variable to represent the return value.
-                // (This is mostly only useful for assembly code.)
-                ReturnValue = DeclareSymbol(new Symbol(SymbolTag.Local, 2, CType.UInt16, "__result"));
-
                 foreach (FieldInfo field in fields)
                 {
-                    DeclareLocal(field.Type, field.Name, isParameter: true);
+                    DeclareLocal(decl, field.Type, field.Name, isParameter: true);
                 }
 
                 Compile(body);
@@ -230,7 +220,7 @@ class CodeGenerator
         }
         else if (expr.Match(Tag.Variable, out type, out name))
         {
-            DeclareLocal(type, name, isParameter: false);
+            DeclareLocal(expr, type, name, isParameter: false);
         }
         else if (expr.MatchTag(Tag.Label))
         {
@@ -250,7 +240,7 @@ class CodeGenerator
                 AddressMode actualMode = operand.Mode;
                 if (operand.Mode == AddressMode.Absolute) actualMode = AddressMode.ZeroPageX;
                 else if (operand.Mode == AddressMode.Indirect) actualMode = AddressMode.IndirectX;
-                else Error("invalid address mode for local variable");
+                else Error(expr, "invalid address mode for local variable");
 
                 string comment = sym.Name;
                 if (operand.Offset != 0) comment += ("+" + operand.Offset);
@@ -279,8 +269,8 @@ class CodeGenerator
         }
         else if (expr.Match(Tag.Assign, out left, out right))
         {
-            int leftSize = SizeOf(TypeOf(left));
-            int rightSize = SizeOf(TypeOf(right));
+            int leftSize = SizeOf(left, TypeOf(left));
+            int rightSize = SizeOf(right, TypeOf(right));
             if (leftSize > 2) NYI(left, "type is too large for assignment");
             if (rightSize > 2) NYI(right, "type is too large for assignment");
 
@@ -292,8 +282,8 @@ class CodeGenerator
 
                 if (leftSize == 2)
                 {
-                    EmitAsm("LDA", HighByte(rightSymbol));
-                    EmitAsm("STA", HighByte(leftSymbol));
+                    EmitAsm("LDA", HighByte(right, rightSymbol));
+                    EmitAsm("STA", HighByte(left, leftSymbol));
                 }
             }
             else
@@ -385,9 +375,9 @@ class CodeGenerator
         }
     }
 
-    AsmOperand HighByte(Symbol sym)
+    AsmOperand HighByte(Expr origin, Symbol sym)
     {
-        int size = SizeOf(sym.Type);
+        int size = SizeOf(origin, sym.Type);
 
         if (size < 2)
         {
@@ -433,11 +423,11 @@ class CodeGenerator
         }
         else if (expr.Match(Tag.Name, out name))
         {
-            return FindSymbol(name).Type;
+            return FindSymbol(expr, name).Type;
         }
         else if (expr.Match(Tag.Load, out subexpr))
         {
-            return DereferencePointerType(TypeOf(subexpr));
+            return DereferencePointerType(subexpr, TypeOf(subexpr));
         }
         else if (expr.Match(Tag.Add, out left, out right) ||
             expr.Match(Tag.Subtract, out left, out right))
@@ -447,19 +437,19 @@ class CodeGenerator
         else if (expr.Match(Tag.Index, out left, out right))
         {
             CType arrayType = TypeOf(left);
-            if (!arrayType.IsArray && !arrayType.IsPointer) Error("an array or pointer is required");
+            if (!arrayType.IsArray && !arrayType.IsPointer) Error(left, "an array or pointer is required");
             return arrayType.Subtype;
         }
         else if (expr.Match(Tag.Field, out left, out fieldName))
         {
             CType structType = TypeOf(left);
-            if (!structType.IsStructOrUnion) Error("a struct or union is required");
-            AggregateInfo info = GetAggregateInfo(structType.Name);
+            if (!structType.IsStructOrUnion) Error(left, "a struct or union is required");
+            AggregateInfo info = GetAggregateInfo(left, structType.Name);
             foreach (FieldInfo field in info.Fields)
             {
                 if (field.Name == fieldName) return field.Type;
             }
-            Error("field does not exist: {0}", fieldName);
+            Error(expr, "field does not exist: {0}", fieldName);
             return CType.Void;
         }
         else if (expr.Match(Tag.Conditional, out cond, out left, out right))
@@ -482,7 +472,7 @@ class CodeGenerator
             CFunctionInfo functionInfo;
             if (!Functions.TryGetValue(functionName, out functionInfo))
             {
-                Error("undefined function: {0}", functionName);
+                Error(functionExpr, "undefined function: {0}", functionName);
             }
             return functionInfo.ReturnType;
         }
@@ -522,7 +512,7 @@ class CodeGenerator
 
     void Emit(Expr e)
     {
-        Output.Add(e.WithSource(SourcePosition));
+        Output.Add(e);
     }
 
     void EmitAsm(string mnemonic) => Emit(Expr.MakeAsm(mnemonic));
@@ -565,11 +555,11 @@ class CodeGenerator
         CurrentScope = CurrentScope.Outer;
     }
 
-    Symbol FindSymbol(string name)
+    Symbol FindSymbol(Expr origin, string name)
     {
         Symbol sym;
         if (TryFindSymbol(name, out sym)) return sym;
-        Error("reference to undefined symbol: {0}", name);
+        Error(origin, "reference to undefined symbol: {0}", name);
         return null;
     }
 
@@ -587,9 +577,9 @@ class CodeGenerator
         return false;
     }
 
-    Symbol DeclareGlobal(MemoryRegion region, CType type, string name)
+    Symbol DeclareGlobal(Expr origin, MemoryRegion region, CType type, string name)
     {
-        int size = SizeOf(type);
+        int size = SizeOf(origin, type);
 
         // Reserve memory in the specified region.
         int address;
@@ -608,7 +598,7 @@ class CodeGenerator
         }
 
         Emit(Tag.Variable, address, size, name);
-        return DeclareSymbol(new Symbol(SymbolTag.Global, address, type, name));
+        return DeclareSymbol(origin, new Symbol(SymbolTag.Global, address, type, name));
     }
 
     int Allocate(AllocationRegion allocator, int size)
@@ -619,10 +609,10 @@ class CodeGenerator
         return address;
     }
 
-    Symbol DeclareLocal(CType type, string name, bool isParameter)
+    Symbol DeclareLocal(Expr origin, CType type, string name, bool isParameter)
     {
         // Parameters always reserve two bytes:
-        int size = isParameter ? SizeOf(CType.UInt16) : SizeOf(type);
+        int size = isParameter ? SizeOf(origin, CType.UInt16) : SizeOf(origin, type);
         if (size < 1) Program.Panic("locals must have nonzero size");
         if (isParameter)
         {
@@ -633,29 +623,15 @@ class CodeGenerator
             EmitComment("reserve {0} byte(s) for local", size);
             AllocateFrameBytes(size);
         }
-        return DeclareSymbol(new Symbol(SymbolTag.Local, FrameSize, type, name));
+        return DeclareSymbol(origin, new Symbol(SymbolTag.Local, FrameSize, type, name));
     }
 
-    Symbol DeclareTemporary(CType type)
-    {
-        int i = 0;
-        while (true)
-        {
-            string name = string.Format("$temp{0}", i);
-            if (!CurrentScope.Symbols.ContainsKey(name))
-            {
-                return DeclareLocal(type, name, isParameter: false);
-            }
-            i += 1;
-        }
-    }
-
-    Symbol DeclareSymbol(Symbol r)
+    Symbol DeclareSymbol(Expr origin, Symbol r)
     {
         // It is an error to define two things with the same name in the same scope.
         if (CurrentScope.Symbols.ContainsKey(r.Name))
         {
-            Error("symbols cannot be redefined: {0}", r.Name);
+            Error(origin, "symbols cannot be redefined: {0}", r.Name);
         }
 
         CurrentScope.Symbols.Add(r.Name, r);
@@ -681,16 +657,16 @@ class CodeGenerator
         }
     }
 
-    CType DereferencePointerType(CType pointer)
+    CType DereferencePointerType(Expr origin, CType pointer)
     {
-        if (!pointer.IsPointer) Error("a pointer type is required");
+        if (!pointer.IsPointer) Error(origin, "a pointer type is required");
         return pointer.Subtype;
     }
 
-    AggregateInfo GetAggregateInfo(string name)
+    AggregateInfo GetAggregateInfo(Expr origin, string name)
     {
         AggregateInfo info;
-        if (!AggregateTypes.TryGetValue(name, out info)) Error("struct or union not defined: {0}", name);
+        if (!AggregateTypes.TryGetValue(name, out info)) Error(origin, "struct or union not defined: {0}", name);
         return info;
     }
 
@@ -703,7 +679,7 @@ class CodeGenerator
         return null;
     }
 
-    int SizeOf(CType type)
+    int SizeOf(Expr origin, CType type)
     {
         if (type.IsSimple)
         {
@@ -722,63 +698,28 @@ class CodeGenerator
         }
         else if (type.IsStructOrUnion)
         {
-            AggregateInfo info = GetAggregateInfo(type.Name);
+            AggregateInfo info = GetAggregateInfo(origin, type.Name);
             return info.TotalSize;
         }
         else if (type.IsArray)
         {
-            return type.Dimension * SizeOf(type.Subtype);
+            return type.Dimension * SizeOf(origin, type.Subtype);
         }
 
         Program.NYI();
         return 1;
     }
 
-    void EmitCall(string functionName, int argCount)
+    [DebuggerStepThrough]
+    void Warning(Expr origin, string format, params object[] args)
     {
-        // Copy the arguments into the function's call frame:
-        CFunctionInfo function;
-        if (!Functions.TryGetValue(functionName, out function))
-        {
-            Error("function not implemented: {0}", functionName);
-        }
-
-        if (argCount != function.Parameters.Length)
-        {
-            Error("wrong number of arguments in call to '{0}': {1} required; {2} specified",
-                functionName, function.Parameters.Length, argCount);
-        }
-
-        for (int i = 0; i < function.Parameters.Length; i++)
-        {
-            //OperandReference arg = Peek(i);
-            FieldInfo param = function.Parameters[function.Parameters.Length - 1 - i];
-            //ConvertType(Conversion.Implicit, arg, param.Type);
-            //Store(arg, paramName);
-        }
-
-        // TODO: The return value goes... somewhere.
-
-        EmitAsm("JSR", new AsmOperand(functionName, AddressMode.Absolute));
-    }
-
-    void CallRuntimeFunction(string operation, CType type, int stackEffect)
-    {
-        string name = GetRuntimeFunctionName(operation, type);
-        EmitAsm("JSR", new AsmOperand(name, AddressMode.Absolute));
-        AdjustFrameSize(stackEffect);
+        Program.Warning(origin.Source, format, args);
     }
 
     [DebuggerStepThrough]
-    void Warning(string format, params object[] args)
+    void Error(Expr origin, string format, params object[] args)
     {
-        Program.Warning(SourcePosition, format, args);
-    }
-
-    [DebuggerStepThrough]
-    void Error(string format, params object[] args)
-    {
-        Program.Error(SourcePosition, format, args);
+        Program.Error(origin.Source, format, args);
     }
 
     static readonly Dictionary<string, string> UnaryRuntimeOperators = new Dictionary<string, string>
