@@ -277,6 +277,11 @@ class CodeGenerator
             Symbol leftSymbol, rightSymbol;
             if (TryGetSymbol(left, out leftSymbol) && TryGetSymbol(right, out rightSymbol))
             {
+                if (leftSymbol.Tag == SymbolTag.Constant)
+                {
+                    Error(left, "an assignable expression is required");
+                }
+
                 EmitAsm("LDA", LowByte(rightSymbol));
                 EmitAsm("STA", LowByte(leftSymbol));
 
@@ -302,10 +307,16 @@ class CodeGenerator
     /// </summary>
     bool TryGetSymbol(Expr expr, out Symbol symbol)
     {
+        int number;
         string name;
-        if (expr.Match(Tag.Name, out name))
+        if (expr.Match(Tag.Integer, out number))
         {
-            symbol = FindSymbol(name);
+            symbol = new Symbol(SymbolTag.Constant, number, CType.UInt16, "'literal'");
+            return true;
+        }
+        else if (expr.Match(Tag.Name, out name))
+        {
+            symbol = FindSymbol(expr, name);
             return true;
         }
         else
