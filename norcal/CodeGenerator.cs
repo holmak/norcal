@@ -206,11 +206,11 @@ class CodeGenerator
 
     void Compile(Expr expr)
     {
-        Expr subexpr, left, right;
+        Expr left, right, loadExpr, pointerExpr;
         Expr init, test, induct, body;
         Expr[] block, parts;
         CType type;
-        string name, op, mnemonic;
+        string name, mnemonic, fieldName;
         AsmOperand operand;
         if (expr.MatchAny(Tag.Sequence, out block))
         {
@@ -296,14 +296,19 @@ class CodeGenerator
         }
         else if (expr.Match(Tag.Assign, out left, out right))
         {
-            int leftSize = SizeOf(left, TypeOf(left));
-            int rightSize = SizeOf(right, TypeOf(right));
-            if (leftSize > 2) NYI(left, "type is too large for assignment");
-            if (rightSize > 2) NYI(right, "type is too large for assignment");
+            int leftSize = SizeOf(left);
+            int rightSize = SizeOf(right);
 
-            Symbol leftSymbol, rightSymbol;
+            if (leftSize > 2) Error(left, "type is too large for assignment");
+            if (rightSize > 2) Error(right, "type is too large for assignment");
+
+            Symbol leftSymbol, rightSymbol, pointerSymbol;
             if (TryGetSymbol(left, out leftSymbol) && TryGetSymbol(right, out rightSymbol))
             {
+                // Pattern:
+                // a = b;
+                // (for operands that can be addressed directly)
+
                 if (leftSymbol.Tag == SymbolTag.Constant)
                 {
                     Error(left, "an assignable expression is required");
@@ -317,6 +322,44 @@ class CodeGenerator
                     EmitAsm("LDA", HighByte(right, rightSymbol));
                     EmitAsm("STA", HighByte(left, leftSymbol));
                 }
+            }
+            else if (TryGetSymbol(left, out leftSymbol) &&
+                right.Match(Tag.Field, out loadExpr, out fieldName) &&
+                loadExpr.Match(Tag.Load, out pointerExpr) &&
+                TryGetSymbol(pointerExpr, out pointerSymbol) &&
+                SizeOf(left) == 2 &&
+                SizeOf(right) == 2)
+            {
+                // Pattern:
+                // u8 *p = board->array;
+                //
+                // LDA board
+                // CLC
+                // ADC <offsetof(array)
+                // STA p
+                // LDA board+1
+                // ADC >offsetof(array)
+                // STA p+1
+
+                if (leftSymbol.Tag == SymbolTag.Constant)
+                {
+                    Error(left, "an assignable expression is required");
+                }
+
+                FieldInfo field = GetFieldInfo(loadExpr, fieldName);
+
+                if (!field.Type.IsArray)
+                {
+                    Program.Panic("only arrays are supported");
+                }
+
+                EmitAsm("LDA", LowByte(pointerSymbol));
+                EmitAsm("CLC");
+                EmitAsm("ADC", new AsmOperand(LowByte(field.Offset), AddressMode.Immediate));
+                EmitAsm("STA", LowByte(leftSymbol));
+                EmitAsm("LDA", HighByte(left, pointerSymbol));
+                EmitAsm("ADC", new AsmOperand(HighByte(field.Offset), AddressMode.Immediate));
+                EmitAsm("STA", HighByte(left, leftSymbol));
             }
             else
             {
@@ -457,6 +500,14 @@ class CodeGenerator
 
     CType TypeOf(Expr expr)
     {
+        CType type = TypeOfWithoutDecay(expr);
+        // In most contexts, arrays are treated as a pointer to their first element.
+        if (type.IsArray) return CType.MakePointer(type.Subtype);
+        return type;
+    }
+
+    CType TypeOfWithoutDecay(Expr expr)
+    {
         string name, fieldName, functionName;
         Expr left, right, subexpr, cond, functionExpr;
         Expr[] rest;
@@ -485,15 +536,7 @@ class CodeGenerator
         }
         else if (expr.Match(Tag.Field, out left, out fieldName))
         {
-            CType structType = TypeOf(left);
-            if (!structType.IsStructOrUnion) Error(left, "a struct or union is required");
-            AggregateInfo info = GetAggregateInfo(left, structType.Name);
-            foreach (FieldInfo field in info.Fields)
-            {
-                if (field.Name == fieldName) return field.Type;
-            }
-            Error(expr, "field does not exist: {0}", fieldName);
-            return CType.Void;
+            return GetFieldInfo(left, fieldName).Type;
         }
         else if (expr.Match(Tag.Conditional, out cond, out left, out right))
         {
@@ -710,11 +753,29 @@ class CodeGenerator
         return pointer.Subtype;
     }
 
+    AggregateInfo GetAggregateInfo(Expr structExpr)
+    {
+        CType type = TypeOf(structExpr);
+        if (!type.IsStructOrUnion) Error(structExpr, "a struct or union type is required");
+        return GetAggregateInfo(structExpr, type.Name);
+    }
+
     AggregateInfo GetAggregateInfo(Expr origin, string name)
     {
         AggregateInfo info;
         if (!AggregateTypes.TryGetValue(name, out info)) Error(origin, "struct or union not defined: {0}", name);
         return info;
+    }
+
+    FieldInfo GetFieldInfo(Expr structExpr, string fieldName)
+    {
+        AggregateInfo info = GetAggregateInfo(structExpr);
+        foreach (FieldInfo field in info.Fields)
+        {
+            if (field.Name == fieldName) return field;
+        }
+        Error(structExpr, "invalid field name: " + fieldName);
+        return null;
     }
 
     static string AggregateLayoutToString(AggregateLayout layout)
@@ -724,6 +785,11 @@ class CodeGenerator
 
         Program.UnhandledCase();
         return null;
+    }
+
+    int SizeOf(Expr expr)
+    {
+        return SizeOf(expr, TypeOf(expr));
     }
 
     int SizeOf(Expr origin, CType type)
@@ -745,8 +811,7 @@ class CodeGenerator
         }
         else if (type.IsStructOrUnion)
         {
-            AggregateInfo info = GetAggregateInfo(origin, type.Name);
-            return info.TotalSize;
+            return GetAggregateInfo(origin, type.Name).TotalSize;
         }
         else if (type.IsArray)
         {
