@@ -100,10 +100,6 @@ class Assembler
                 prg.Add(LowByte(address));
                 prg.Add(HighByte(address));
             }
-            else if (e.Match(Tag.Variable, out globalAddress, out size, out name))
-            {
-                Debug.AddVariable(name, globalAddress, size);
-            }
             else if (e.Match(Tag.ReadonlyData, out name, out bytes))
             {
                 int address = PrgRomBase + prg.Count;
@@ -392,12 +388,18 @@ class AsmOperand
 
     public AsmOperand WithMode(AddressMode newMode)
     {
-        return new AsmOperand(Base, Offset, newMode, Modifier);
+        return new AsmOperand(Base, Offset, newMode, Modifier, Comment);
     }
 
     public AsmOperand WithComment(string newComment)
     {
         return new AsmOperand(Base, Offset, Mode, Modifier, newComment);
+    }
+
+    public AsmOperand ReplaceBase(int baseValue)
+    {
+        if (!Base.HasValue) throw new Exception("this operand has no base symbol");
+        return new AsmOperand(Maybe.Nothing, baseValue + Offset, Mode, Modifier, Comment);
     }
 
     public string Show()

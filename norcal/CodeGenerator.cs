@@ -229,23 +229,36 @@ class CodeGenerator
         }
         else if (expr.Match(Tag.Asm, out mnemonic, out operand))
         {
-            // If the operand refers to a local variable, replace it with an appropriate stack-relative operand.
+            // If the operand refers to a constant or variable, replace it with the actual address.
             AsmOperand fixedOperand = operand;
             Symbol sym;
-            if (operand.Base.HasValue && TryFindSymbol(operand.Base.Value, out sym) && sym.Tag == SymbolTag.Local)
+            if (operand.Base.HasValue && TryFindSymbol(operand.Base.Value, out sym))
             {
-                // Use the offset of the local variable plus any offset specified by the assembly source code:
-                int totalOffset = OffsetOfLocal(sym) + operand.Offset;
-
+                int baseValue;
                 AddressMode actualMode = operand.Mode;
-                if (operand.Mode == AddressMode.Absolute) actualMode = AddressMode.ZeroPageX;
-                else if (operand.Mode == AddressMode.Indirect) actualMode = AddressMode.IndirectX;
-                else Error(expr, "invalid address mode for local variable");
+                if (sym.Tag == SymbolTag.Constant || sym.Tag == SymbolTag.Global)
+                {
+                    baseValue = sym.Value;
+                }
+                else if (sym.Tag == SymbolTag.Local)
+                {
+                    // Use the offset of the local variable plus any offset specified by the assembly source code:
+                    baseValue = OffsetOfLocal(sym) + operand.Offset;
+
+                    // Convert the address mode to an appropriate stack-relative mode:
+                    if (operand.Mode == AddressMode.Absolute) actualMode = AddressMode.ZeroPageX;
+                    else if (operand.Mode == AddressMode.Indirect) actualMode = AddressMode.IndirectX;
+                    else Error(expr, "invalid address mode for local variable");
+                }
+                else
+                {
+                    Program.UnhandledCase();
+                    baseValue = 0;
+                }
 
                 string comment = sym.Name;
                 if (operand.Offset != 0) comment += ("+" + operand.Offset);
-
-                fixedOperand = new AsmOperand(totalOffset, actualMode).WithComment(comment);
+                fixedOperand = operand.ReplaceBase(baseValue).WithMode(actualMode).WithComment(comment);
             }
             Emit(Tag.Asm, mnemonic, fixedOperand);
         }
@@ -608,7 +621,6 @@ class CodeGenerator
             address = -1;
         }
 
-        Emit(Tag.Variable, address, size, name);
         return DeclareSymbol(origin, new Symbol(SymbolTag.Global, address, type, name));
     }
 
