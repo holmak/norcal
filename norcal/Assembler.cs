@@ -44,7 +44,7 @@ class Assembler
         foreach (Expr e in assembly)
         {
             string label, name, mnemonic;
-            int skipTarget, globalAddress, size, number;
+            int skipTarget;
             byte[] bytes;
             AsmOperand operand;
 
