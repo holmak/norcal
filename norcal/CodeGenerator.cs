@@ -21,6 +21,7 @@ class CodeGenerator
     string CurrentFunctionName = null;
     CType ReturnType = null;
     int FrameSize = 0;
+    int NextLabelNumber = 0;
 
     // Local scope info:
     LexicalScope CurrentScope;
@@ -176,6 +177,7 @@ class CodeGenerator
                 CurrentFunctionName = name;
                 ReturnType = returnType;
                 FrameSize = 0;
+                NextLabelNumber = 0;
 
                 if (name == "reset")
                 {
@@ -264,21 +266,33 @@ class CodeGenerator
         }
         else if (expr.Match(Tag.For, out init, out test, out induct, out body))
         {
+            string top = MakeUniqueLabel("for");
+            string bottom = MakeUniqueLabel("for_break");
+
             BeginScope();
             Compile(init);
-            EmitComment("for_top");
-            Compile(test);
-            EmitComment("break if done");
+            Emit(Tag.Label, top);
+            CompileJumpIf(false, test, bottom);
             Compile(body);
             Compile(induct);
-            EmitComment("jump to top");
+            EmitAsm("JMP", new AsmOperand(top, AddressMode.Absolute));
+            Emit(Tag.Label, bottom);
             EndScope();
         }
         else if (expr.MatchAny(Tag.If, out parts))
         {
-            EmitComment("if...");
-            foreach (Expr p in parts) Compile(p);
-            EmitComment("end if");
+            string endIf = MakeUniqueLabel("end_if");
+            for (int i = 0; i < parts.Length; i += 2)
+            {
+                test = parts[i];
+                body = parts[i + 1];
+                string nextClause = MakeUniqueLabel("next_clause");
+                CompileJumpIf(false, test, nextClause);
+                Compile(body);
+                EmitAsm("JMP", new AsmOperand(endIf, AddressMode.Absolute));
+                Emit(Tag.Label, nextClause);
+            }
+            Emit(Tag.Label, endIf);
         }
         else if (expr.Match(Tag.Assign, out left, out right))
         {
@@ -313,6 +327,11 @@ class CodeGenerator
         {
             NYI(expr);
         }
+    }
+
+    void CompileJumpIf(bool condition, Expr expr, string target)
+    {
+        NYI(expr, "jump if " + condition);
     }
 
     /// <summary>
@@ -660,6 +679,11 @@ class CodeGenerator
         CurrentScope.Symbols.Add(r.Name, r);
         EmitComment("symbol {0} is {1}", r.Name, r);
         return r;
+    }
+
+    string MakeUniqueLabel(string prefix)
+    {
+        return string.Format("${0}_{1}", prefix, NextLabelNumber++);
     }
 
     static CType FindCommonType(CType left, CType right)
