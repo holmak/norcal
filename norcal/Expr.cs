@@ -72,6 +72,25 @@ class Expr
         }
     }
 
+    public bool MatchAnyTag<T1, T2>(out string tag, out T1 var1, out T2 var2)
+    {
+        if (Args.Length == 3 &&
+            Args[0] is string &&
+            Args[1] is T1 &&
+            Args[2] is T2)
+        {
+            tag = (string)Args[0];
+            var1 = (T1)Args[1];
+            var2 = (T2)Args[2];
+            return true;
+        }
+
+        tag = null;
+        var1 = default(T1);
+        var2 = default(T2);
+        return false;
+    }
+
     public bool Match(string tag)
     {
         if (Args.Length == 1 &&

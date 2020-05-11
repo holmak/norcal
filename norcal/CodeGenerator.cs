@@ -600,7 +600,7 @@ class CodeGenerator
 
     CType TypeOfWithoutDecay(Expr expr)
     {
-        string name, fieldName, functionName;
+        string name, fieldName, functionName, op;
         int number;
         Expr left, right, subexpr, cond, functionExpr;
         Expr[] rest;
@@ -656,9 +656,9 @@ class CodeGenerator
             }
             return functionInfo.ReturnType;
         }
-        else if (BinaryOperatorsThatProduceIntegers.Contains(expr.GetTag()))
+        else if (expr.MatchAnyTag(out op, out left, out right) && BinaryOperatorsThatAlwaysProduceIntegers.Contains(op))
         {
-            return CType.UInt16;
+            return FindCommonType(TypeOf(left), TypeOf(right));
         }
         else
         {
@@ -670,7 +670,7 @@ class CodeGenerator
     /// <summary>
     /// Binary operators that always return a uint16_t.
     /// </summary>
-    static readonly string[] BinaryOperatorsThatProduceIntegers = new string[]
+    static readonly string[] BinaryOperatorsThatAlwaysProduceIntegers = new string[]
     {
         Tag.Multiply,
         Tag.Divide,
