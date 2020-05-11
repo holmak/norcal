@@ -448,6 +448,10 @@ class CodeGenerator
             string opcode = condition ? "BCC" : "BCS";
             EmitAsm(opcode, label);
         }
+        else if (expr.Match(Tag.GreaterThanOrEqual, out left, out right))
+        {
+            CompileJumpIf(!condition, Expr.Make(Tag.LessThan, left, right), labelName);
+        }
         else
         {
             NYI(expr, "jump if " + condition);
