@@ -394,13 +394,20 @@ class CodeGenerator
 
     void CompileJumpIf(bool condition, Expr expr, string target)
     {
-        int number;
-        if (expr.Match(Tag.Integer, out number))
+        Symbol symbol;
+
+        if (TryGetSymbol(expr, out symbol) && symbol.Tag == SymbolTag.Constant)
         {
-            if ((number != 0) == condition)
+            if ((symbol.Value != 0) == condition)
             {
                 EmitAsm("JMP", new AsmOperand(target, AddressMode.Absolute));
             }
+        }
+        else if (TryGetSymbol(expr, out symbol) && SizeOf(expr) == 1)
+        {
+            EmitAsm("LDA", LowByte(symbol));
+            string opcode = condition ? "BNE" : "BEQ";
+            EmitAsm(opcode, new AsmOperand(target, AddressMode.Absolute));
         }
         else
         {
