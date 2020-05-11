@@ -268,33 +268,33 @@ class CodeGenerator
         }
         else if (expr.Match(Tag.For, out init, out test, out induct, out body))
         {
-            string top = MakeUniqueLabel("for");
-            string bottom = MakeUniqueLabel("for_break");
+            AsmOperand top = MakeUniqueLabel("for");
+            AsmOperand bottom = MakeUniqueLabel("for_break");
 
             BeginScope();
             Compile(init);
-            Emit(Tag.Label, top);
+            EmitLabel(top);
             CompileJumpIf(false, test, bottom);
             Compile(body);
             Compile(induct);
-            EmitAsm("JMP", new AsmOperand(top, AddressMode.Absolute));
-            Emit(Tag.Label, bottom);
+            EmitAsm("JMP", top);
+            EmitLabel(bottom);
             EndScope();
         }
         else if (expr.MatchAny(Tag.If, out parts))
         {
-            string endIf = MakeUniqueLabel("end_if");
+            AsmOperand endIf = MakeUniqueLabel("end_if");
             for (int i = 0; i < parts.Length; i += 2)
             {
                 test = parts[i];
                 body = parts[i + 1];
-                string nextClause = MakeUniqueLabel("next_clause");
+                AsmOperand nextClause = MakeUniqueLabel("next_clause");
                 CompileJumpIf(false, test, nextClause);
                 Compile(body);
-                EmitAsm("JMP", new AsmOperand(endIf, AddressMode.Absolute));
-                Emit(Tag.Label, nextClause);
+                EmitAsm("JMP", endIf);
+                EmitLabel(nextClause);
             }
-            Emit(Tag.Label, endIf);
+            EmitLabel(endIf);
         }
         else if (expr.Match(Tag.Assign, out left, out right))
         {
@@ -406,10 +406,8 @@ class CodeGenerator
         }
     }
 
-    void CompileJumpIf(bool condition, Expr expr, string labelName)
+    void CompileJumpIf(bool condition, Expr expr, AsmOperand target)
     {
-        AsmOperand label = new AsmOperand(labelName, AddressMode.Absolute);
-
         Symbol symbol, leftSymbol, rightSymbol;
         Expr left, right;
 
@@ -419,14 +417,14 @@ class CodeGenerator
             {
                 if ((symbol.Value != 0) == condition)
                 {
-                    EmitAsm("JMP", label);
+                    EmitAsm("JMP", target);
                 }
             }
             else
             {
                 EmitAsm("LDA", LowByte(symbol));
                 string opcode = condition ? "BNE" : "BEQ";
-                EmitAsm(opcode, label);
+                EmitAsm(opcode, target);
             }
         }
         else if (expr.Match(Tag.LessThan, out left, out right) &&
@@ -446,11 +444,11 @@ class CodeGenerator
             EmitAsm("LDA", LowByte(leftSymbol));
             EmitAsm("CMP", LowByte(rightSymbol));
             string opcode = condition ? "BCC" : "BCS";
-            EmitAsm(opcode, label);
+            EmitAsm(opcode, target);
         }
         else if (expr.Match(Tag.GreaterThanOrEqual, out left, out right))
         {
-            CompileJumpIf(!condition, Expr.Make(Tag.LessThan, left, right), labelName);
+            CompileJumpIf(!condition, Expr.Make(Tag.LessThan, left, right), target);
         }
         else
         {
@@ -701,6 +699,12 @@ class CodeGenerator
 
     void EmitAsm(string mnemonic, AsmOperand operand) => Emit(Expr.MakeAsm(mnemonic, operand));
 
+    void EmitLabel(AsmOperand operand)
+    {
+        if (operand.Mode != AddressMode.Absolute) Program.Panic("labels declarations must use absolute address mode");
+        Emit(Tag.Label, operand.Base.Value);
+    }
+
     void EmitComment(string format, params object[] args)
     {
         Emit(Tag.Comment, string.Format(format, args));
@@ -820,9 +824,10 @@ class CodeGenerator
         return r;
     }
 
-    string MakeUniqueLabel(string prefix)
+    AsmOperand MakeUniqueLabel(string prefix)
     {
-        return string.Format("${0}_{1}", prefix, NextLabelNumber++);
+        string name = string.Format("${0}_{1}", prefix, NextLabelNumber++);
+        return new AsmOperand(name, AddressMode.Absolute);
     }
 
     static CType FindCommonType(CType left, CType right)
