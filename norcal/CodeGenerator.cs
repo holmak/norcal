@@ -406,9 +406,12 @@ class CodeGenerator
         }
     }
 
-    void CompileJumpIf(bool condition, Expr expr, string target)
+    void CompileJumpIf(bool condition, Expr expr, string labelName)
     {
-        Symbol symbol;
+        AsmOperand label = new AsmOperand(labelName, AddressMode.Absolute);
+
+        Symbol symbol, leftSymbol, rightSymbol;
+        Expr left, right;
 
         if (TryGetSymbol(expr, out symbol) && SizeOf(expr) == 1)
         {
@@ -416,15 +419,34 @@ class CodeGenerator
             {
                 if ((symbol.Value != 0) == condition)
                 {
-                    EmitAsm("JMP", new AsmOperand(target, AddressMode.Absolute));
+                    EmitAsm("JMP", label);
                 }
             }
             else
             {
                 EmitAsm("LDA", LowByte(symbol));
                 string opcode = condition ? "BNE" : "BEQ";
-                EmitAsm(opcode, new AsmOperand(target, AddressMode.Absolute));
+                EmitAsm(opcode, label);
             }
+        }
+        else if (expr.Match(Tag.LessThan, out left, out right) &&
+            TryGetSymbol(left, out leftSymbol) &&
+            TryGetSymbol(right, out rightSymbol) &&
+            SizeOf(left) == 1 &&
+            SizeOf(right) == 1)
+        {
+            // Pattern:
+            // if (a < b) ...
+            //
+            // LDA b
+            // CMP a
+            // (carry is clear if CMP's operand is larger)
+            // BCC/BCS target
+
+            EmitAsm("LDA", LowByte(leftSymbol));
+            EmitAsm("CMP", LowByte(rightSymbol));
+            string opcode = condition ? "BCC" : "BCS";
+            EmitAsm(opcode, label);
         }
         else
         {
