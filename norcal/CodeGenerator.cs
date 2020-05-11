@@ -206,12 +206,14 @@ class CodeGenerator
 
     void Compile(Expr expr)
     {
-        Expr left, right;
+        Expr subexpr, left, right;
         Expr init, test, induct, body;
         Expr[] block, parts;
         CType type;
         string name, mnemonic, fieldName;
+        Symbol symbol;
         AsmOperand operand;
+
         if (expr.MatchAny(Tag.Sequence, out block))
         {
             foreach (Expr stmt in block)
@@ -385,6 +387,18 @@ class CodeGenerator
             {
                 NYI(expr);
             }
+        }
+        else if ((expr.Match(Tag.PreIncrement, out subexpr) || expr.Match(Tag.PostIncrement, out subexpr)) &&
+            TryGetSymbol(subexpr, out symbol) &&
+            SizeOf(subexpr) == 1)
+        {
+            EmitAsm("INC", LowByte(symbol));
+        }
+        else if ((expr.Match(Tag.PreDecrement, out subexpr) || expr.Match(Tag.PostDecrement, out subexpr)) &&
+            TryGetSymbol(subexpr, out symbol) &&
+            SizeOf(subexpr) == 1)
+        {
+            EmitAsm("DEC", LowByte(symbol));
         }
         else
         {
