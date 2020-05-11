@@ -398,7 +398,6 @@ class CodeGenerator
 
         if (TryGetSymbol(expr, out symbol) && SizeOf(expr) == 1)
         {
-            EmitComment("NEWNEW");
             if (symbol.Tag == SymbolTag.Constant)
             {
                 if ((symbol.Value != 0) == condition)
