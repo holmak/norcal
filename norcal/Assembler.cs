@@ -396,6 +396,11 @@ class AsmOperand
         return new AsmOperand(Base, Offset, Mode, Modifier, newComment);
     }
 
+    public AsmOperand WithComment(string newCommentFormat, params object[] args)
+    {
+        return WithComment(string.Format(newCommentFormat, args));
+    }
+
     public AsmOperand ReplaceBase(int baseValue)
     {
         if (!Base.HasValue) throw new Exception("this operand has no base symbol");

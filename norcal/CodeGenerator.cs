@@ -206,7 +206,7 @@ class CodeGenerator
 
     void Compile(Expr expr)
     {
-        Expr left, right, loadExpr, pointerExpr;
+        Expr left, right;
         Expr init, test, induct, body;
         Expr[] block, parts;
         CType type;
@@ -302,7 +302,10 @@ class CodeGenerator
             if (leftSize > 2) Error(left, "type is too large for assignment");
             if (rightSize > 2) Error(right, "type is too large for assignment");
 
-            Symbol leftSymbol, rightSymbol, pointerSymbol;
+            Expr loadExpr, pointerExpr, arrayExpr, indexExpr;
+            Symbol leftSymbol, rightSymbol, pointerSymbol, indexSymbol;
+            AsmOperand basePointer;
+
             if (TryGetSymbol(left, out leftSymbol) && TryGetSymbol(right, out rightSymbol))
             {
                 // Pattern:
@@ -361,6 +364,23 @@ class CodeGenerator
                 EmitAsm("ADC", new AsmOperand(HighByte(field.Offset), AddressMode.Immediate));
                 EmitAsm("STA", HighByte(left, leftSymbol));
             }
+            else if (left.Match(Tag.Index, out arrayExpr, out indexExpr) &&
+                TryGetPointerOperand(arrayExpr, out basePointer) &&
+                TryGetSymbol(indexExpr, out indexSymbol) &&
+                TryGetSymbol(right, out rightSymbol) &&
+                SizeOf(left) == 1)
+            {
+                // Pattern:
+                // array[i] = c;
+                //
+                // LDY index_subexpression
+                // LDA right
+                // STA (array),Y
+
+                EmitAsm("LDA", LowByte(rightSymbol));
+                EmitAsm("LDY", LowByte(indexSymbol));
+                EmitAsm("STA", basePointer);
+            }
             else
             {
                 NYI(expr);
@@ -399,6 +419,19 @@ class CodeGenerator
             symbol = null;
             return false;
         }
+    }
+
+    bool TryGetPointerOperand(Expr expr, out AsmOperand baseAddress)
+    {
+        Symbol symbol;
+        if (TryGetSymbol(expr, out symbol) && symbol.Tag == SymbolTag.Global && symbol.Value < 0x100)
+        {
+            baseAddress = new AsmOperand(symbol.Value, AddressMode.IndirectY).WithComment("({0}),Y", symbol.Name);
+            return true;
+        }
+
+        baseAddress = null;
+        return false;
     }
 
     void ReturnFromFunction()
