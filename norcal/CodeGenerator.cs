@@ -396,18 +396,22 @@ class CodeGenerator
     {
         Symbol symbol;
 
-        if (TryGetSymbol(expr, out symbol) && symbol.Tag == SymbolTag.Constant)
+        if (TryGetSymbol(expr, out symbol) && SizeOf(expr) == 1)
         {
-            if ((symbol.Value != 0) == condition)
+            EmitComment("NEWNEW");
+            if (symbol.Tag == SymbolTag.Constant)
             {
-                EmitAsm("JMP", new AsmOperand(target, AddressMode.Absolute));
+                if ((symbol.Value != 0) == condition)
+                {
+                    EmitAsm("JMP", new AsmOperand(target, AddressMode.Absolute));
+                }
             }
-        }
-        else if (TryGetSymbol(expr, out symbol) && SizeOf(expr) == 1)
-        {
-            EmitAsm("LDA", LowByte(symbol));
-            string opcode = condition ? "BNE" : "BEQ";
-            EmitAsm(opcode, new AsmOperand(target, AddressMode.Absolute));
+            else
+            {
+                EmitAsm("LDA", LowByte(symbol));
+                string opcode = condition ? "BNE" : "BEQ";
+                EmitAsm(opcode, new AsmOperand(target, AddressMode.Absolute));
+            }
         }
         else
         {
@@ -560,11 +564,13 @@ class CodeGenerator
     CType TypeOfWithoutDecay(Expr expr)
     {
         string name, fieldName, functionName;
+        int number;
         Expr left, right, subexpr, cond, functionExpr;
         Expr[] rest;
-        if (expr.MatchTag(Tag.Integer))
+
+        if (expr.Match(Tag.Integer, out number))
         {
-            return CType.UInt16;
+            return (number < 256) ? CType.UInt8 : CType.UInt16;
         }
         else if (expr.Match(Tag.Name, out name))
         {
