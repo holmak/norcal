@@ -608,7 +608,7 @@ partial class Parser
         while (TryParse(TokenType.PIPE))
         {
             Expr right = ParseBitwiseXorExpr();
-            e = Make(Tag.BitwiseOr, right);
+            e = Make(Tag.BitwiseOr, e, right);
         }
         return e;
     }
