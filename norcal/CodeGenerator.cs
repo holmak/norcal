@@ -394,7 +394,18 @@ class CodeGenerator
 
     void CompileJumpIf(bool condition, Expr expr, string target)
     {
-        NYI(expr, "jump if " + condition);
+        int number;
+        if (expr.Match(Tag.Integer, out number))
+        {
+            if ((number != 0) == condition)
+            {
+                EmitAsm("JMP", new AsmOperand(target, AddressMode.Absolute));
+            }
+        }
+        else
+        {
+            NYI(expr, "jump if " + condition);
+        }
     }
 
     /// <summary>
