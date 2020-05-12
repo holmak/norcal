@@ -255,28 +255,6 @@ static class Program
 /// </summary>
 static class Tag
 {
-    // Statements:
-    public static readonly string Sequence = "$sequence";
-    public static readonly string Empty = "$empty";
-    public static readonly string If = "$if";
-    public static readonly string For = "$for";
-    public static readonly string Continue = "$continue";
-    public static readonly string Break = "$break";
-
-    // Operators:
-    public static readonly string Assign = "$assign";
-    public static readonly string AssignModify = "$assign_modify";
-    public static readonly string Conditional = "$conditional";
-    public static readonly string LogicalOr = "$logical_or";
-    public static readonly string LogicalAnd = "$logical_and";
-    public static readonly string Index = "$index";
-
-    // Leaf expressions:
-    public static readonly string Integer = "$integer";
-    public static readonly string Name = "$name";
-
-    // ------------------------------------------------------------------------
-
     // Top-level declarations:
     public static readonly string Function = "$function";
     public static readonly string Constant = "$constant";
@@ -285,36 +263,48 @@ static class Tag
     public static readonly string Struct = "$struct";
     public static readonly string Union = "$union";
 
-    // Special nodes:
-    public static readonly string NoOperation = "$nop";
-    public static readonly string AddressOf = "$address_of";
+    // Statements:
+    public static readonly string Sequence = "$sequence";
+    public static readonly string If = "$if";
+    public static readonly string For = "$for";
+    public static readonly string Continue = "$continue";
+    public static readonly string Break = "$break";
     public static readonly string Return = "$return";
-    public static readonly string Cast = "$cast";
-    public static readonly string Field = "$field";
-    public static readonly string Call = "$call";
 
-    // Intrinsic functions:
+    // Expressions:
+    public static readonly string AddressOf = "$address_of";
+    public static readonly string Field = "$field";
+    public static readonly string Index = "$index";
+    public static readonly string Call = "$call";
+    public static readonly string Assign = "$assign";
+    public static readonly string AssignModify = "$assign_modify";
+    public static readonly string Conditional = "$conditional";
     public static readonly string Add = "$add";
     public static readonly string Subtract = "$sub";
     public static readonly string Multiply = "$mul";
     public static readonly string Divide = "$div";
     public static readonly string Modulus = "$mod";
     public static readonly string Load = "$load";
-    public static readonly string LoadNondestructive = "$load_nondestructive";
     public static readonly string Store = "$store";
+
     public static readonly string Equal = "$equal";
     public static readonly string NotEqual = "$not_equal";
     public static readonly string LessThan = "$less_than";
     public static readonly string LessThanOrEqual = "$less_than_or_equal";
     public static readonly string GreaterThan = "$greater_than";
     public static readonly string GreaterThanOrEqual = "$greater_than_or_equal";
+
+    public static readonly string BitwiseNot = "$bitwise_not";
     public static readonly string BitwiseAnd = "$bitwise_and";
     public static readonly string BitwiseOr = "$bitwise_or";
     public static readonly string BitwiseXor = "$bitwise_xor";
-    public static readonly string BitwiseNot = "$bitwise_not";
     public static readonly string ShiftLeft = "$shift_left";
     public static readonly string ShiftRight = "$shift_right";
+
     public static readonly string LogicalNot = "$logical_not";
+    public static readonly string LogicalOr = "$logical_or";
+    public static readonly string LogicalAnd = "$logical_and";
+
     public static readonly string PreIncrement = "$pre_increment";
     public static readonly string PostIncrement = "$post_increment";
     public static readonly string PreDecrement = "$pre_decrement";
@@ -324,11 +314,14 @@ static class Tag
     public static readonly string Asm = "$asm";
     public static readonly string Label = "$label";
     public static readonly string Jump = "$jump";
-    public static readonly string JumpIfTrue = "$jump_if_true";
-    public static readonly string JumpIfFalse = "$jump_if_false";
     public static readonly string Comment = "$comment";
     public static readonly string SkipTo = "$skip_to";
     public static readonly string Word = "$word";
+
+    // Leaf expressions:
+    public static readonly string Empty = "$empty";
+    public static readonly string Integer = "$integer";
+    public static readonly string Name = "$name";
 }
 
 enum Severity
