@@ -21,6 +21,7 @@ class CodeGenerator
     string CurrentFunctionName = null;
     CType ReturnType = null;
     int FrameSize = 0;
+    int NextLocalOffset;
     int NextLabelNumber = 0;
 
     // Local scope info:
@@ -176,7 +177,6 @@ class CodeGenerator
 
                 CurrentFunctionName = name;
                 ReturnType = returnType;
-                FrameSize = 0;
                 NextLabelNumber = 0;
 
                 if (name == "reset")
@@ -186,9 +186,24 @@ class CodeGenerator
                     EmitAsm("LDX", new AsmOperand(0, AddressMode.Immediate));
                 }
 
+                // Figure out the total frame size needed for parameters and locals:
+                FrameSize = SizeOfLocals(body);
                 foreach (FieldInfo field in fields)
                 {
-                    DeclareLocal(decl, field.Type, field.Name, isParameter: true);
+                    FrameSize += SizeOf(decl, field.Type);
+                }
+                NextLocalOffset = FrameSize;
+
+                EmitComment("frame size = " + FrameSize);
+                for (int i = 0; i < FrameSize; i++)
+                {
+                    EmitAsm("DEX");
+                }
+
+                // Declare parameters as local symbols:
+                foreach (FieldInfo field in fields)
+                {
+                    DeclareLocal(decl, field.Type, field.Name);
                 }
 
                 Compile(body);
@@ -224,7 +239,7 @@ class CodeGenerator
         }
         else if (expr.Match(Tag.Variable, out type, out name))
         {
-            DeclareLocal(expr, type, name, isParameter: false);
+            DeclareLocal(expr, type, name);
         }
         else if (expr.MatchTag(Tag.Label))
         {
@@ -493,11 +508,32 @@ class CodeGenerator
         return false;
     }
 
+    int SizeOfLocals(Expr expr)
+    {
+        CType type;
+        string name;
+        Expr[] body;
+
+        if (expr.MatchAny(Tag.Sequence, out body) ||
+            expr.MatchAny(Tag.If, out body) ||
+            expr.MatchAny(Tag.For, out body))
+        {
+            return body.Select(SizeOfLocals).Sum();
+        }
+        else if (expr.Match(Tag.Variable, out type, out name))
+        {
+            return SizeOf(expr, type);
+        }
+        else
+        {
+            return 0;
+        }
+    }
+
     void ReturnFromFunction()
     {
         EmitComment("epilogue");
-        // Discard all locals, except for the return value.
-        for (int i = 0; i < FrameSize - 2; i++)
+        for (int i = 0; i < FrameSize; i++)
         {
             EmitAsm("INX");
         }
@@ -507,29 +543,7 @@ class CodeGenerator
     int OffsetOfLocal(Symbol sym)
     {
         if (sym.Tag != SymbolTag.Local) Program.Panic("a local symbol is required");
-        return FrameSize - sym.Value;
-    }
-
-    void AdjustFrameSize(int delta)
-    {
-        if (delta != 0)
-        {
-            EmitVerboseComment("frame size {0} {1} => {2}", delta > 0 ? "+" : "-", Math.Abs(delta), FrameSize + delta);
-            FrameSize += delta;
-        }
-    }
-
-    void AllocateFrameBytes(int delta)
-    {
-        string op = (delta > 0) ? "DEX" : "INX";
-        int count = Math.Abs(delta);
-
-        for (int i = 0; i < count; i++)
-        {
-            EmitAsm(op);
-        }
-
-        AdjustFrameSize(delta);
+        return sym.Value;
     }
 
     AsmOperand LowByte(Symbol sym)
@@ -656,6 +670,10 @@ class CodeGenerator
             }
             return functionInfo.ReturnType;
         }
+        else if (expr.MatchAnyTag(out op, out subexpr) && UnaryOperatorsThatAlwaysProduceIntegers.Contains(op))
+        {
+            return TypeOf(subexpr);
+        }
         else if (expr.MatchAnyTag(out op, out left, out right) && BinaryOperatorsThatAlwaysProduceIntegers.Contains(op))
         {
             return FindCommonType(TypeOf(left), TypeOf(right));
@@ -668,7 +686,16 @@ class CodeGenerator
     }
 
     /// <summary>
-    /// Binary operators that always return a uint16_t.
+    /// Unary operators that always return an integer.
+    /// </summary>
+    static readonly string[] UnaryOperatorsThatAlwaysProduceIntegers = new string[]
+    {
+        Tag.BitwiseNot,
+        Tag.LogicalNot,
+    };
+
+    /// <summary>
+    /// Binary operators that always return an integer.
     /// </summary>
     static readonly string[] BinaryOperatorsThatAlwaysProduceIntegers = new string[]
     {
@@ -794,21 +821,12 @@ class CodeGenerator
         return address;
     }
 
-    Symbol DeclareLocal(Expr origin, CType type, string name, bool isParameter)
+    Symbol DeclareLocal(Expr origin, CType type, string name)
     {
-        // Parameters always reserve two bytes:
-        int size = isParameter ? SizeOf(origin, CType.UInt16) : SizeOf(origin, type);
-        if (size < 1) Program.Panic("locals must have nonzero size");
-        if (isParameter)
-        {
-            AdjustFrameSize(+size);
-        }
-        else
-        {
-            EmitComment("reserve {0} byte(s) for local", size);
-            AllocateFrameBytes(size);
-        }
-        return DeclareSymbol(origin, new Symbol(SymbolTag.Local, FrameSize, type, name));
+        int size = SizeOf(origin, type);
+        NextLocalOffset -= size;
+        if (NextLocalOffset < 0) Program.Panic("call frame is too small");
+        return DeclareSymbol(origin, new Symbol(SymbolTag.Local, NextLocalOffset, type, name));
     }
 
     Symbol DeclareSymbol(Expr origin, Symbol r)
