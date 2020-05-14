@@ -328,7 +328,19 @@ class CodeGenerator
             AsmOperand leftOperand, rightOperand, basePointer, indexOperand;
             WideOperand leftWideOperand, rightWideOperand, pointerWideOperand;
 
-            if (!wide &&
+            if (TryGetOperand(left, out leftOperand) &&
+                TryGetOperand(right, out rightOperand))
+            {
+                // Pattern:
+                // left = right;
+                //
+                // LDA right
+                // STA left
+
+                EmitAsm("LDA", rightOperand);
+                EmitAsm("STA", leftOperand);
+            }
+            else if (!wide &&
                 left.Match(Tag.Index, out arrayExpr, out indexExpr) &&
                 TryGetPointerOperand(arrayExpr, out basePointer) &&
                 TryGetOperand(indexExpr, out indexOperand) &&
