@@ -227,7 +227,11 @@ class CodeGenerator
         string name, mnemonic, fieldName;
         AsmOperand operand;
 
-        EmitComment("SRC: {0}", expr.Show());
+        // Don't print "block" expressions; the subexpressions will be handled individually.
+        if (!expr.MatchTag(Tag.Sequence) && !expr.MatchTag(Tag.If) && !expr.MatchTag(Tag.For))
+        {
+            EmitComment("SRC: {0}", expr.Show());
+        }
 
         if (expr.MatchAny(Tag.Sequence, out block))
         {
