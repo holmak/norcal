@@ -205,7 +205,7 @@ class CodeGenerator
                     DeclareLocal(decl, field.Type, field.Name);
                 }
 
-                Compile(body);
+                CompileStatement(body);
                 ReturnFromFunction();
                 EndScope();
             }
@@ -218,7 +218,7 @@ class CodeGenerator
         Emit(Tag.Word, "brk");
     }
 
-    void Compile(Expr expr)
+    void CompileStatement(Expr expr)
     {
         Expr subexpr, left, right;
         Expr init, test, induct, body;
@@ -238,7 +238,7 @@ class CodeGenerator
             foreach (Expr stmt in block)
             {
                 EmitVerboseComment("STATEMENT: " + stmt.Show());
-                Compile(stmt);
+                CompileStatement(stmt);
             }
         }
         else if (expr.Match(Tag.Variable, out type, out name))
@@ -291,11 +291,11 @@ class CodeGenerator
             AsmOperand bottom = MakeUniqueLabel("for_break");
 
             BeginScope();
-            Compile(init);
+            CompileStatement(init);
             EmitLabel(top);
             CompileJumpIf(false, test, bottom);
-            Compile(body);
-            Compile(induct);
+            CompileStatement(body);
+            CompileStatement(induct);
             EmitAsm("JMP", top);
             EmitLabel(bottom);
             EndScope();
@@ -309,7 +309,7 @@ class CodeGenerator
                 body = parts[i + 1];
                 AsmOperand nextClause = MakeUniqueLabel("next_clause");
                 CompileJumpIf(false, test, nextClause);
-                Compile(body);
+                CompileStatement(body);
                 EmitAsm("JMP", endIf);
                 EmitLabel(nextClause);
             }
