@@ -71,14 +71,15 @@ int main(int argc, char *argv[])
     reset6502();
     run = true;
     while (true)
+    //for (int i = 0; i < 300; i++)
     {
-        //fprintf(stderr, "PC = %04X  A = %02X\n", pc, a);
+        //fprintf(stderr, "PC = %04X  A = %02X  X = %02X  Y = %02X\n", pc, a, x, y);
         //fprintf(stderr, "RAM ");
-        //for (int i = 0; i < 16; i++) fprintf(stderr, "%02X ", ram[i]);
+        //for (int i = 0xF0; i < 0x100; i++) fprintf(stderr, "%02X ", ram[i]);
         //fprintf(stderr, "\n");
         //fprintf(stderr, "ROM ");
-        //for (int i = 0; i < 16; i++) fprintf(stderr, "%02X ", rom[i]);
-        //fprintf(stderr, "\n");
+        //for (int i = 0; i < 16; i++) fprintf(stderr, "%02X ", rom[pc - ROM_BASE + i]);
+        //fprintf(stderr, "\n\n");
 
         if (clockticks6502 >= CYCLE_LIMIT)
         {
