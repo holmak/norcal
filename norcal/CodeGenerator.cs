@@ -225,8 +225,9 @@ class CodeGenerator
         Expr[] block, parts;
         CType type;
         string name, mnemonic, fieldName;
-        Symbol symbol;
         AsmOperand operand;
+
+        EmitComment("SRC: {0}", expr.Show());
 
         if (expr.MatchAny(Tag.Sequence, out block))
         {
@@ -324,14 +325,14 @@ class CodeGenerator
             bool wide = leftSize > 1 || rightSize > 1;
 
             Expr loadExpr, pointerExpr, arrayExpr, indexExpr;
-            Symbol leftSymbol, rightSymbol, pointerSymbol, indexSymbol;
-            AsmOperand basePointer;
+            AsmOperand leftOperand, rightOperand, basePointer, indexOperand;
+            WideOperand leftWideOperand, rightWideOperand, pointerWideOperand;
 
             if (!wide &&
                 left.Match(Tag.Index, out arrayExpr, out indexExpr) &&
                 TryGetPointerOperand(arrayExpr, out basePointer) &&
-                TryGetSymbol(indexExpr, out indexSymbol) &&
-                TryGetSymbol(right, out rightSymbol))
+                TryGetOperand(indexExpr, out indexOperand) &&
+                TryGetOperand(right, out rightOperand))
             {
                 // Pattern:
                 // array[i] = c;
@@ -340,35 +341,35 @@ class CodeGenerator
                 // LDA right
                 // STA (array),Y
 
-                EmitAsm("LDA", LowByte(rightSymbol));
-                EmitAsm("LDY", LowByte(indexSymbol));
+                EmitAsm("LDA", rightOperand);
+                EmitAsm("LDY", indexOperand);
                 EmitAsm("STA", basePointer);
             }
-            else if (wide && TryGetSymbol(left, out leftSymbol) && TryGetSymbol(right, out rightSymbol))
+            else if (wide && TryGetWideOperand(left, out leftWideOperand) && TryGetWideOperand(right, out rightWideOperand))
             {
                 // Pattern:
                 // a = b;
                 // (for operands that can be addressed directly)
 
-                if (leftSymbol.Tag == SymbolTag.Constant)
+                if (leftWideOperand.Low.Mode == AddressMode.Immediate)
                 {
                     Error(left, "an assignable expression is required");
                 }
 
-                EmitAsm("LDA", LowByte(rightSymbol));
-                EmitAsm("STA", LowByte(leftSymbol));
+                EmitAsm("LDA", rightWideOperand.Low);
+                EmitAsm("STA", leftWideOperand.Low);
 
                 if (leftSize == 2)
                 {
-                    EmitAsm("LDA", HighByte(right, rightSymbol));
-                    EmitAsm("STA", HighByte(left, leftSymbol));
+                    EmitAsm("LDA", rightWideOperand.High);
+                    EmitAsm("STA", leftWideOperand.High);
                 }
             }
             else if (wide &&
-                TryGetSymbol(left, out leftSymbol) &&
+                TryGetWideOperand(left, out leftWideOperand) &&
                 right.Match(Tag.Field, out loadExpr, out fieldName) &&
                 loadExpr.Match(Tag.Load, out pointerExpr) &&
-                TryGetSymbol(pointerExpr, out pointerSymbol) &&
+                TryGetWideOperand(pointerExpr, out pointerWideOperand) &&
                 SizeOf(left) == 2 &&
                 SizeOf(right) == 2)
             {
@@ -383,7 +384,7 @@ class CodeGenerator
                 // ADC >offsetof(array)
                 // STA p+1
 
-                if (leftSymbol.Tag == SymbolTag.Constant)
+                if (leftWideOperand.Low.Mode == AddressMode.Immediate)
                 {
                     Error(left, "an assignable expression is required");
                 }
@@ -395,63 +396,60 @@ class CodeGenerator
                     Program.Panic("only arrays are supported");
                 }
 
-                EmitAsm("LDA", LowByte(pointerSymbol));
+                EmitAsm("LDA", pointerWideOperand.Low);
                 EmitAsm("CLC");
                 EmitAsm("ADC", new AsmOperand(LowByte(field.Offset), AddressMode.Immediate));
-                EmitAsm("STA", LowByte(leftSymbol));
-                EmitAsm("LDA", HighByte(left, pointerSymbol));
+                EmitAsm("STA", leftWideOperand.Low);
+                EmitAsm("LDA", pointerWideOperand.High);
                 EmitAsm("ADC", new AsmOperand(HighByte(field.Offset), AddressMode.Immediate));
-                EmitAsm("STA", HighByte(left, leftSymbol));
+                EmitAsm("STA", leftWideOperand.High);
             }
             else
             {
-                NYI(expr, wide ? "WIDE" : "NARROW");
+                NYI(wide ? "WIDE" : "NARROW");
             }
         }
         else if ((expr.Match(Tag.PreIncrement, out subexpr) || expr.Match(Tag.PostIncrement, out subexpr)) &&
-            TryGetSymbol(subexpr, out symbol) &&
-            SizeOf(subexpr) == 1)
+            TryGetOperand(subexpr, out operand))
         {
-            EmitAsm("INC", LowByte(symbol));
+            EmitAsm("INC", operand);
         }
         else if ((expr.Match(Tag.PreDecrement, out subexpr) || expr.Match(Tag.PostDecrement, out subexpr)) &&
-            TryGetSymbol(subexpr, out symbol) &&
+            TryGetOperand(subexpr, out operand) &&
             SizeOf(subexpr) == 1)
         {
-            EmitAsm("DEC", LowByte(symbol));
+            EmitAsm("DEC", operand);
         }
         else
         {
-            NYI(expr);
+            NYI();
         }
     }
 
     void CompileJumpIf(bool condition, Expr expr, AsmOperand target)
     {
-        Symbol symbol, leftSymbol, rightSymbol;
+        AsmOperand operand, leftOperand, rightOperand;
         Expr left, right;
 
-        if (TryGetSymbol(expr, out symbol) && SizeOf(expr) == 1)
+        if (TryGetOperand(expr, out operand))
         {
-            if (symbol.Tag == SymbolTag.Constant)
+            if (operand.Mode == AddressMode.Immediate)
             {
-                if ((symbol.Value != 0) == condition)
+                if ((operand.Offset != 0) == condition)
                 {
                     EmitAsm("JMP", target);
                 }
             }
             else
             {
-                EmitAsm("LDA", LowByte(symbol));
+                EmitAsm("LDA", operand);
                 string opcode = condition ? "BNE" : "BEQ";
                 EmitAsm(opcode, target);
             }
         }
         else if (expr.Match(Tag.LessThan, out left, out right) &&
-            TryGetSymbol(left, out leftSymbol) &&
-            TryGetSymbol(right, out rightSymbol) &&
-            SizeOf(left) == 1 &&
-            SizeOf(right) == 1)
+            TryGetOperand(left, out leftOperand) &&
+            TryGetOperand(right, out rightOperand))
         {
             // Pattern:
             // if (a < b) ...
@@ -461,8 +459,8 @@ class CodeGenerator
             // (carry is clear if CMP's operand is larger)
             // BCC/BCS target
 
-            EmitAsm("LDA", LowByte(leftSymbol));
-            EmitAsm("CMP", LowByte(rightSymbol));
+            EmitAsm("LDA", leftOperand);
+            EmitAsm("CMP", rightOperand);
             string opcode = condition ? "BCC" : "BCS";
             EmitAsm(opcode, target);
         }
@@ -472,40 +470,120 @@ class CodeGenerator
         }
         else
         {
-            NYI(expr, "jump if " + condition);
+            NYI("jump if " + condition);
         }
     }
 
     /// <summary>
-    /// If this is a simple enough expression, return the corresponding symbol.
+    /// If this expression can be represented by a single operand, produce it.
     /// </summary>
-    bool TryGetSymbol(Expr expr, out Symbol symbol)
+    bool TryGetOperand(Expr expr, out AsmOperand operand)
     {
+        int size = SizeOf(expr);
+
         int number;
         string name;
-        if (expr.Match(Tag.Integer, out number))
+        if (size != 1)
         {
-            symbol = new Symbol(SymbolTag.Constant, number, CType.UInt16, "'literal'");
+            operand = null;
+            return false;
+        }
+        else if (expr.Match(Tag.Integer, out number))
+        {
+            if (number > 255) Program.Panic("immediate is too large for one byte");
+            operand = new AsmOperand(number, AddressMode.Immediate).WithComment("'literal'");
             return true;
         }
         else if (expr.Match(Tag.Name, out name))
         {
-            symbol = FindSymbol(expr, name);
+            Symbol sym = FindSymbol(expr, name);
+            if (sym.Tag == SymbolTag.Constant)
+            {
+                operand = new AsmOperand(LowByte(sym.Value), AddressMode.Immediate).WithComment("#" + sym.Name);
+            }
+            else if (sym.Tag == SymbolTag.Global)
+            {
+                operand = new AsmOperand(sym.Value, AddressMode.Absolute).WithComment(sym.Name);
+            }
+            else if (sym.Tag == SymbolTag.Local)
+            {
+                operand = new AsmOperand(OffsetOfLocal(sym), AddressMode.ZeroPageX).WithComment(sym.Name);
+            }
+            else
+            {
+                Program.UnhandledCase();
+                operand = null;
+            }
             return true;
         }
         else
         {
-            symbol = null;
+            operand = null;
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// If this expression can be represented by a pair of operands, produce it.
+    /// </summary>
+    bool TryGetWideOperand(Expr expr, out WideOperand operand)
+    {
+        int size = SizeOf(expr);
+        if (size < 1) Program.Panic("expression must have size of at least 1");
+
+        operand = new WideOperand();
+        int number;
+        string name;
+        if (expr.Match(Tag.Integer, out number))
+        {
+            operand.Low = new AsmOperand(LowByte(number), AddressMode.Immediate).WithComment("<'literal'");
+            operand.High = new AsmOperand(HighByte(number), AddressMode.Immediate).WithComment(">'literal'");
+            return true;
+        }
+        else if (expr.Match(Tag.Name, out name))
+        {
+            Symbol sym = FindSymbol(expr, name);
+
+            if (sym.Tag == SymbolTag.Constant)
+            {
+                operand.Low = new AsmOperand(LowByte(sym.Value), AddressMode.Immediate).WithComment("#<" + sym.Name);
+                operand.High = new AsmOperand(HighByte(sym.Value), AddressMode.Immediate).WithComment("#>" + sym.Name);
+            }
+            else if (sym.Tag == SymbolTag.Global)
+            {
+                operand.Low = new AsmOperand(sym.Value, AddressMode.Absolute).WithComment(sym.Name);
+                operand.High = new AsmOperand(sym.Value + 1, AddressMode.Absolute).WithComment(sym.Name + "+1");
+            }
+            else if (sym.Tag == SymbolTag.Local)
+            {
+                operand.Low = new AsmOperand(OffsetOfLocal(sym), AddressMode.ZeroPageX).WithComment(sym.Name);
+                operand.High = new AsmOperand(OffsetOfLocal(sym) + 1, AddressMode.ZeroPageX).WithComment(sym.Name + "+1");
+            }
+            else
+            {
+                Program.UnhandledCase();
+            }
+
+            if (size < 2)
+            {
+                operand.High = new AsmOperand(0, AddressMode.Immediate).WithComment("...zero-extended");
+            }
+
+            return true;
+        }
+        else
+        {
+            operand = null;
             return false;
         }
     }
 
     bool TryGetPointerOperand(Expr expr, out AsmOperand baseAddress)
     {
-        Symbol symbol;
-        if (TryGetSymbol(expr, out symbol) && symbol.Tag == SymbolTag.Global && symbol.Value < 0x100)
+        WideOperand operand;
+        if (TryGetWideOperand(expr, out operand) && operand.Low.Mode == AddressMode.Absolute && operand.Low.Offset < 0x100)
         {
-            baseAddress = new AsmOperand(symbol.Value, AddressMode.IndirectY).WithComment("({0}),Y", symbol.Name);
+            baseAddress = operand.Low.WithMode(AddressMode.IndirectY).WithComment("({0}),Y", operand.Low.Comment);
             return true;
         }
 
@@ -548,54 +626,6 @@ class CodeGenerator
     {
         if (sym.Tag != SymbolTag.Local) Program.Panic("a local symbol is required");
         return sym.Value;
-    }
-
-    AsmOperand LowByte(Symbol sym)
-    {
-        if (sym.Tag == SymbolTag.Constant)
-        {
-            return new AsmOperand(LowByte(sym.Value), AddressMode.Immediate).WithComment("#<" + sym.Name);
-        }
-        else if (sym.Tag == SymbolTag.Global)
-        {
-            return new AsmOperand(sym.Value, AddressMode.Absolute).WithComment(sym.Name);
-        }
-        else if (sym.Tag == SymbolTag.Local)
-        {
-            return new AsmOperand(OffsetOfLocal(sym), AddressMode.ZeroPageX).WithComment(sym.Name);
-        }
-        else
-        {
-            Program.UnhandledCase();
-            return null;
-        }
-    }
-
-    AsmOperand HighByte(Expr origin, Symbol sym)
-    {
-        int size = SizeOf(origin, sym.Type);
-
-        if (size < 2)
-        {
-            return new AsmOperand(0, AddressMode.Immediate).WithComment("...zero-extended");
-        }
-        else if (sym.Tag == SymbolTag.Constant)
-        {
-            return new AsmOperand(HighByte(sym.Value), AddressMode.Immediate).WithComment("#>" + sym.Name);
-        }
-        else if (sym.Tag == SymbolTag.Global)
-        {
-            return new AsmOperand(sym.Value + 1, AddressMode.Absolute).WithComment(sym.Name + "+1");
-        }
-        else if (sym.Tag == SymbolTag.Local)
-        {
-            return new AsmOperand(OffsetOfLocal(sym) + 1, AddressMode.ZeroPageX).WithComment(sym.Name + "+1");
-        }
-        else
-        {
-            Program.UnhandledCase();
-            return null;
-        }
     }
 
     static int LowByte(int n)
@@ -710,6 +740,10 @@ class CodeGenerator
         Tag.ShiftRight,
         Tag.Equal,
         Tag.NotEqual,
+        Tag.LessThan,
+        Tag.LessThanOrEqual,
+        Tag.GreaterThan,
+        Tag.GreaterThanOrEqual,
         Tag.BitwiseOr,
         Tag.BitwiseAnd,
         Tag.LogicalOr,
@@ -741,16 +775,16 @@ class CodeGenerator
         Emit(Tag.Comment, string.Format(format, args));
     }
 
-    // TODO: Report a fatal error if this is hit.
-    void NYI(Expr expr, string message = null)
+    // TODO: Report a fatal error if this is hit in release builds.
+    void NYI(string message = null)
     {
         if (message == null)
         {
-            EmitComment("NYI: {0}", expr.Show());
+            EmitComment("NYI");
         }
         else
         {
-            EmitComment("NYI: {0}: {1}", message, expr.Show());
+            EmitComment("NYI: {0}", message);
         }
     }
 
@@ -1031,11 +1065,6 @@ enum SymbolTag
     Local,
 }
 
-class Continuation
-{
-    public static readonly Continuation Fallthrough = null;
-}
-
 class LoopScope
 {
     public LoopScope Outer;
@@ -1074,4 +1103,9 @@ class AllocationRegion
         Next = bottom;
         Top = top;
     }
+}
+
+class WideOperand
+{
+    public AsmOperand Low, High;
 }
