@@ -315,14 +315,36 @@ class CodeGenerator
             int leftSize = SizeOf(left);
             int rightSize = SizeOf(right);
 
+            if (leftSize == 0) Error(left, "void expressions cannot be used in assignment");
+            if (rightSize == 0) Error(right, "void expressions cannot be used in assignment");
             if (leftSize > 2) Error(left, "type is too large for assignment");
             if (rightSize > 2) Error(right, "type is too large for assignment");
+
+            // Expressions involving values wider than one byte are more difficult to compile.
+            bool wide = leftSize > 1 || rightSize > 1;
 
             Expr loadExpr, pointerExpr, arrayExpr, indexExpr;
             Symbol leftSymbol, rightSymbol, pointerSymbol, indexSymbol;
             AsmOperand basePointer;
 
-            if (TryGetSymbol(left, out leftSymbol) && TryGetSymbol(right, out rightSymbol))
+            if (!wide &&
+                left.Match(Tag.Index, out arrayExpr, out indexExpr) &&
+                TryGetPointerOperand(arrayExpr, out basePointer) &&
+                TryGetSymbol(indexExpr, out indexSymbol) &&
+                TryGetSymbol(right, out rightSymbol))
+            {
+                // Pattern:
+                // array[i] = c;
+                //
+                // LDY index_subexpression
+                // LDA right
+                // STA (array),Y
+
+                EmitAsm("LDA", LowByte(rightSymbol));
+                EmitAsm("LDY", LowByte(indexSymbol));
+                EmitAsm("STA", basePointer);
+            }
+            else if (wide && TryGetSymbol(left, out leftSymbol) && TryGetSymbol(right, out rightSymbol))
             {
                 // Pattern:
                 // a = b;
@@ -342,7 +364,8 @@ class CodeGenerator
                     EmitAsm("STA", HighByte(left, leftSymbol));
                 }
             }
-            else if (TryGetSymbol(left, out leftSymbol) &&
+            else if (wide &&
+                TryGetSymbol(left, out leftSymbol) &&
                 right.Match(Tag.Field, out loadExpr, out fieldName) &&
                 loadExpr.Match(Tag.Load, out pointerExpr) &&
                 TryGetSymbol(pointerExpr, out pointerSymbol) &&
@@ -380,26 +403,9 @@ class CodeGenerator
                 EmitAsm("ADC", new AsmOperand(HighByte(field.Offset), AddressMode.Immediate));
                 EmitAsm("STA", HighByte(left, leftSymbol));
             }
-            else if (left.Match(Tag.Index, out arrayExpr, out indexExpr) &&
-                TryGetPointerOperand(arrayExpr, out basePointer) &&
-                TryGetSymbol(indexExpr, out indexSymbol) &&
-                TryGetSymbol(right, out rightSymbol) &&
-                SizeOf(left) == 1)
-            {
-                // Pattern:
-                // array[i] = c;
-                //
-                // LDY index_subexpression
-                // LDA right
-                // STA (array),Y
-
-                EmitAsm("LDA", LowByte(rightSymbol));
-                EmitAsm("LDY", LowByte(indexSymbol));
-                EmitAsm("STA", basePointer);
-            }
             else
             {
-                NYI(expr);
+                NYI(expr, wide ? "WIDE" : "NARROW");
             }
         }
         else if ((expr.Match(Tag.PreIncrement, out subexpr) || expr.Match(Tag.PostIncrement, out subexpr)) &&
