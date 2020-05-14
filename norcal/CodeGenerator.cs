@@ -194,7 +194,6 @@ class CodeGenerator
                 }
                 NextLocalOffset = FrameSize;
 
-                EmitComment("frame size = " + FrameSize);
                 for (int i = 0; i < FrameSize; i++)
                 {
                     EmitAsm("DEX");
