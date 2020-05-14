@@ -1,7 +1,7 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|AnyCPU'">
-    <StartWorkingDirectory>C:\Repos\NORCAL\</StartWorkingDirectory>
-    <StartArguments>runtime.c test.h ignore/repro.c -o program.nes --debug-output</StartArguments>
+    <StartWorkingDirectory>C:\Repos\hackmatch-nes</StartWorkingDirectory>
+    <StartArguments>..\norcal\runtime.c src\board.c src\common.c src\data.c src\main.c src\mode_splash.c src\mode_title.c src\mode_single.c src\mode_versus.c -o hackmatch.nes --debug-output</StartArguments>
   </PropertyGroup>
 </Project>
