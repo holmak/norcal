@@ -532,7 +532,6 @@ class CodeGenerator
 
     void ReturnFromFunction()
     {
-        EmitComment("epilogue");
         for (int i = 0; i < FrameSize; i++)
         {
             EmitAsm("INX");
