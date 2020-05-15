@@ -347,18 +347,18 @@ class CodeGenerator
             else if (!wide &&
                 left.Match(Tag.Index, out arrayExpr, out indexExpr) &&
                 TryGetPointerOperand(arrayExpr, out basePointer) &&
-                TryGetOperand(indexExpr, out indexOperand) &&
+                TryCompileIntoRegister(Register.Y, indexExpr) &&
                 TryGetOperand(right, out rightOperand))
             {
                 // Pattern:
-                // array[i] = c;
+                // array[complex_index] = b;
                 //
-                // LDY index_subexpression
+                // LDY complex_index
                 // LDA right
                 // STA (array),Y
 
+                EmitComment("NEWNEW");
                 EmitAsm("LDA", rightOperand);
-                EmitAsm("LDY", indexOperand);
                 EmitAsm("STA", basePointer);
             }
             else if (wide && TryGetWideOperand(left, out leftWideOperand) && TryGetWideOperand(right, out rightWideOperand))
@@ -487,6 +487,41 @@ class CodeGenerator
         else
         {
             NYI("jump if " + condition);
+        }
+    }
+
+    /// <summary>
+    /// Return true if the expression could be calculated and loaded into the specified register.
+    /// Only the specified register and A may be overwritten.
+    /// </summary>
+    bool TryCompileIntoRegister(Register register, Expr expr)
+    {
+        // TODO: I only want to emit this code if ALL of the caller's conditions are true.
+
+        Expr left, right;
+        AsmOperand operand, leftOperand;
+        int number;
+
+        if (register == Register.Y && TryGetOperand(expr, out operand))
+        {
+            EmitComment("NEWINDEX.1");
+            EmitAsm("LDY", operand);
+            return true;
+        }
+        else if (register == Register.Y &&
+            expr.Match(Tag.Subtract, out left, out right) &&
+            TryGetOperand(left, out leftOperand) &&
+            right.Match(Tag.Integer, out number) &&
+            number == 1)
+        {
+            EmitComment("NEWINDEX.2");
+            EmitAsm("LDY", leftOperand);
+            EmitAsm("DEY");
+            return true;
+        }
+        else
+        {
+            return false;
         }
     }
 
@@ -1124,4 +1159,10 @@ class AllocationRegion
 class WideOperand
 {
     public AsmOperand Low, High;
+}
+
+enum Register
+{
+    A,
+    Y,
 }
