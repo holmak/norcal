@@ -462,6 +462,14 @@ class CodeGenerator
             return;
         }
 
+        if (expr.Match(Tag.Return, out subexpr))
+        {
+            Speculate();
+            CompileIntoRegister(Register.A, subexpr);
+            ReturnFromFunction();
+            if (Commit()) return;
+        }
+
         NYI();
     }
 
@@ -523,7 +531,11 @@ class CodeGenerator
         AsmOperand operand, leftOperand;
         int number;
 
-        if (register == Register.Y && TryGetOperand(expr, out operand))
+        if (register == Register.A && TryGetOperand(expr, out operand))
+        {
+            EmitAsm("LDA", operand);
+        }
+        else if (register == Register.Y && TryGetOperand(expr, out operand))
         {
             EmitAsm("LDY", operand);
         }
