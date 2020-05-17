@@ -240,8 +240,9 @@ class CodeGenerator
         // Don't print "block" expressions; the subexpressions will be handled individually.
         if (!expr.MatchTag(Tag.Sequence) && !expr.MatchTag(Tag.If) && !expr.MatchTag(Tag.For))
         {
-            EmitComment("AST: {0}", expr.Show());
-            EmitComment("SRC: {0}", ToSourceCode(expr));
+            EmitComment("");
+            EmitComment("{0}", ToSourceCode(expr));
+            EmitComment("{0}", expr.Show());
         }
 
         if (expr.MatchAny(Tag.Sequence, out block))
@@ -500,7 +501,7 @@ class CodeGenerator
             if (Commit()) return;
         }
 
-        NYI();
+        NYI("unhandled expression");
     }
 
     void CompileJumpIf(bool condition, Expr expr, AsmOperand target)
@@ -547,7 +548,7 @@ class CodeGenerator
         }
         else
         {
-            NYI("jump if " + condition);
+            NYI(string.Format("jump if {0}: {1}", condition.ToString().ToLower(), expr.Show()));
         }
     }
 
@@ -935,16 +936,9 @@ class CodeGenerator
     }
 
     // TODO: Report a fatal error if this is hit in release builds.
-    void NYI(string message = null)
+    void NYI(string message)
     {
-        if (message == null)
-        {
-            EmitComment("NYI");
-        }
-        else
-        {
-            EmitComment("NYI: {0}", message);
-        }
+        EmitComment("NYI: {0}", message);
     }
 
     void EmitVerboseComment(string format, params object[] args)
@@ -1208,6 +1202,19 @@ class CodeGenerator
         if (expr.Match(Tag.Add, out left, out right))
         {
             return string.Format("({0}) + ({1})", ToSourceCode(left), ToSourceCode(right));
+        }
+
+        Expr function;
+        Expr[] args;
+        if (expr.MatchAny(Tag.Call, out function, out args))
+        {
+            return string.Format("{0}({1})", ToSourceCode(function), string.Join(", ", args.Select(ToSourceCode)));
+        }
+
+        CType type;
+        if (expr.Match(Tag.Variable, out type, out name))
+        {
+            return string.Format("{0} {1};", type.Show(), name);
         }
 
         return "???";

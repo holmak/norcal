@@ -131,12 +131,12 @@ class CType : IEquatable<CType>
 
     public string Show()
     {
-        if (Tag == CTypeTag.Simple) return SimpleType.ToString();
-        else if (Tag == CTypeTag.Pointer) return "pointer to " + Subtype.Show();
+        if (Tag == CTypeTag.Simple) return SimpleType.ToString().ToLower();
+        else if (Tag == CTypeTag.Pointer) return "*" + Subtype.Show();
         else if (Tag == CTypeTag.Struct) return "struct " + Name;
         else if (Tag == CTypeTag.Union) return "union " + Name;
-        else if (Tag == CTypeTag.Array) return string.Format("array[{1}] of {0}", Subtype.Show(), Dimension);
-        else if (Tag == CTypeTag.ArrayWithDimensionExpression) return string.Format("array[{1}] of {0}", Subtype.Show(), DimensionExpression.Show());
+        else if (Tag == CTypeTag.Array) return string.Format("{0}[{1}]", Subtype.Show(), Dimension);
+        else if (Tag == CTypeTag.ArrayWithDimensionExpression) return string.Format("{0}[{1}]", Subtype.Show(), DimensionExpression.Show());
         else throw new NotImplementedException();
     }
 }
