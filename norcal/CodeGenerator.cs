@@ -242,17 +242,23 @@ class CodeGenerator
                 EmitVerboseComment("STATEMENT: " + stmt.Show());
                 CompileStatement(stmt);
             }
+            return;
         }
-        else if (expr.Match(Tag.Variable, out type, out name))
+
+        if (expr.Match(Tag.Variable, out type, out name))
         {
             DeclareLocal(expr, type, name);
+            return;
         }
-        else if (expr.MatchTag(Tag.Label))
+
+        if (expr.MatchTag(Tag.Label))
         {
             // Pass through:
             Emit(expr);
+            return;
         }
-        else if (expr.Match(Tag.Asm, out mnemonic, out operand))
+
+        if (expr.Match(Tag.Asm, out mnemonic, out operand))
         {
             // If the operand refers to a constant or variable, replace it with the actual address.
             AsmOperand fixedOperand = operand;
@@ -286,8 +292,10 @@ class CodeGenerator
                 fixedOperand = operand.ReplaceBase(baseValue).WithMode(actualMode).WithComment(comment);
             }
             Emit(Tag.Asm, mnemonic, fixedOperand);
+            return;
         }
-        else if (expr.Match(Tag.For, out init, out test, out induct, out body))
+
+        if (expr.Match(Tag.For, out init, out test, out induct, out body))
         {
             AsmOperand top = MakeUniqueLabel("for");
             AsmOperand bottom = MakeUniqueLabel("for_break");
@@ -301,8 +309,10 @@ class CodeGenerator
             EmitAsm("JMP", top);
             EmitLabel(bottom);
             EndScope();
+            return;
         }
-        else if (expr.MatchAny(Tag.If, out parts))
+
+        if (expr.MatchAny(Tag.If, out parts))
         {
             AsmOperand endIf = MakeUniqueLabel("end_if");
             for (int i = 0; i < parts.Length; i += 2)
@@ -316,8 +326,10 @@ class CodeGenerator
                 EmitLabel(nextClause);
             }
             EmitLabel(endIf);
+            return;
         }
-        else if (expr.Match(Tag.Assign, out left, out right))
+
+        if (expr.Match(Tag.Assign, out left, out right))
         {
             int leftSize = SizeOf(left);
             int rightSize = SizeOf(right);
@@ -432,22 +444,25 @@ class CodeGenerator
             }
 
             NYI(wide ? "WIDE" : "NARROW");
+            return;
         }
-        else if ((expr.Match(Tag.PreIncrement, out subexpr) || expr.Match(Tag.PostIncrement, out subexpr)) &&
+
+        if ((expr.Match(Tag.PreIncrement, out subexpr) || expr.Match(Tag.PostIncrement, out subexpr)) &&
             TryGetOperand(subexpr, out operand))
         {
             EmitAsm("INC", operand);
+            return;
         }
-        else if ((expr.Match(Tag.PreDecrement, out subexpr) || expr.Match(Tag.PostDecrement, out subexpr)) &&
+
+        if ((expr.Match(Tag.PreDecrement, out subexpr) || expr.Match(Tag.PostDecrement, out subexpr)) &&
             TryGetOperand(subexpr, out operand) &&
             SizeOf(subexpr) == 1)
         {
             EmitAsm("DEC", operand);
+            return;
         }
-        else
-        {
-            NYI();
-        }
+
+        NYI();
     }
 
     void CompileJumpIf(bool condition, Expr expr, AsmOperand target)
