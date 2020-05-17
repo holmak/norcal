@@ -329,7 +329,7 @@ class CodeGenerator
             bool wide = leftSize > 1 || rightSize > 1;
 
             Expr loadExpr, pointerExpr, arrayExpr, indexExpr;
-            AsmOperand leftOperand, rightOperand, basePointer, indexOperand;
+            AsmOperand leftOperand, rightOperand, basePointer;
             WideOperand leftWideOperand, rightWideOperand, pointerWideOperand;
 
             if (TryGetOperand(left, out leftOperand) &&
@@ -343,8 +343,10 @@ class CodeGenerator
 
                 EmitAsm("LDA", rightOperand);
                 EmitAsm("STA", leftOperand);
+                return;
             }
-            else if (!wide &&
+
+            if (!wide &&
                 left.Match(Tag.Index, out arrayExpr, out indexExpr) &&
                 TryGetPointerOperand(arrayExpr, out basePointer) &&
                 TryCompileIntoRegister(Register.Y, indexExpr) &&
@@ -360,8 +362,10 @@ class CodeGenerator
                 EmitComment("NEWNEW");
                 EmitAsm("LDA", rightOperand);
                 EmitAsm("STA", basePointer);
+                return;
             }
-            else if (wide && TryGetWideOperand(left, out leftWideOperand) && TryGetWideOperand(right, out rightWideOperand))
+
+            if (wide && TryGetWideOperand(left, out leftWideOperand) && TryGetWideOperand(right, out rightWideOperand))
             {
                 // Pattern:
                 // a = b;
@@ -380,8 +384,11 @@ class CodeGenerator
                     EmitAsm("LDA", rightWideOperand.High);
                     EmitAsm("STA", leftWideOperand.High);
                 }
+
+                return;
             }
-            else if (wide &&
+
+            if (wide &&
                 TryGetWideOperand(left, out leftWideOperand) &&
                 right.Match(Tag.Field, out loadExpr, out fieldName) &&
                 loadExpr.Match(Tag.Load, out pointerExpr) &&
@@ -419,11 +426,10 @@ class CodeGenerator
                 EmitAsm("LDA", pointerWideOperand.High);
                 EmitAsm("ADC", new AsmOperand(HighByte(field.Offset), AddressMode.Immediate));
                 EmitAsm("STA", leftWideOperand.High);
+                return;
             }
-            else
-            {
-                NYI(wide ? "WIDE" : "NARROW");
-            }
+
+            NYI(wide ? "WIDE" : "NARROW");
         }
         else if ((expr.Match(Tag.PreIncrement, out subexpr) || expr.Match(Tag.PostIncrement, out subexpr)) &&
             TryGetOperand(subexpr, out operand))
