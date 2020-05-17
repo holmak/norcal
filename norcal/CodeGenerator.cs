@@ -366,7 +366,7 @@ class CodeGenerator
                 TryGetOperand(right, out rightOperand))
             {
                 // Pattern:
-                // array[complex_index] = b;
+                // array[complex_index] = right;
                 //
                 // LDY complex_index
                 // LDA right
@@ -377,6 +377,27 @@ class CodeGenerator
                 EmitAsm("LDA", rightOperand);
                 EmitAsm("STA", basePointer);
                 if (Commit()) return;
+            }
+
+            Expr structExpr;
+            if (!wide &&
+                left.Match(Tag.Field, out pointerExpr, out fieldName) &&
+                pointerExpr.Match(Tag.Load, out structExpr) &&
+                TryGetPointerOperand(structExpr, out basePointer) &&
+                TryGetOperand(right, out rightOperand))
+            {
+                // Pattern:
+                // record.field = b;
+                //
+                // LDY #offsetof(field)
+                // LDA right
+                // STA (record),Y
+
+                FieldInfo field = GetFieldInfo(pointerExpr, fieldName);
+                CompileIntoRegister(Register.Y, Expr.Make(Tag.Integer, field.Offset));
+                EmitAsm("LDA", rightOperand);
+                EmitAsm("STA", basePointer);
+                return;
             }
 
             if (wide && TryGetWideOperand(left, out leftWideOperand) && TryGetWideOperand(right, out rightWideOperand))
@@ -838,6 +859,7 @@ class CodeGenerator
 
     void Abort()
     {
+        if (Output.Count == 1) Program.Panic("cannot abort transaction; no speculative output in progress");
         SpeculationError = true;
     }
 
