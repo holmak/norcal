@@ -218,6 +218,12 @@ class CodeGenerator
         Emit(Tag.Word, "nmi");
         Emit(Tag.Word, "reset");
         Emit(Tag.Word, "brk");
+
+        Console.WriteLine("Memory usage:");
+        foreach (AllocationRegion allocator in new[] { ZeroPageRegion, OamRegion, RamRegion })
+        {
+            Console.WriteLine("    {0}: {1} bytes free", allocator.Name, allocator.Top - allocator.Next);
+        }
     }
 
     void CompileStatement(Expr expr)
