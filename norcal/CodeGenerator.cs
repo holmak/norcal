@@ -558,19 +558,25 @@ class CodeGenerator
     /// </summary>
     void CompileIntoRegister(Register register, Expr expr)
     {
-        Expr left, right;
-        AsmOperand operand, leftOperand;
-        int number;
+        AsmOperand operand;
 
         if (register == Register.A && TryGetOperand(expr, out operand))
         {
             EmitAsm("LDA", operand);
+            return;
         }
-        else if (register == Register.Y && TryGetOperand(expr, out operand))
+
+        if (register == Register.Y && TryGetOperand(expr, out operand))
         {
             EmitAsm("LDY", operand);
+            return;
         }
-        else if (register == Register.Y &&
+
+        // Pattern: Simple value minus a small constant.
+        int number;
+        Expr left, right;
+        AsmOperand leftOperand;
+        if (register == Register.Y &&
             expr.Match(Tag.Subtract, out left, out right) &&
             TryGetOperand(left, out leftOperand) &&
             right.Match(Tag.Integer, out number) &&
@@ -578,6 +584,23 @@ class CodeGenerator
         {
             EmitAsm("LDY", leftOperand);
             EmitAsm("DEY");
+            return;
+        }
+
+        // Pattern: Simple value divided by a power of two.
+        int power;
+        if (register == Register.Y &&
+            expr.Match(Tag.Divide, out left, out right) &&
+            TryGetOperand(left, out leftOperand) &&
+            TryGetConstant(right, out number) &&
+            TryGetPowerOfTwo(number, out power))
+        {
+            EmitAsm("LDA", leftOperand);
+            for (int i = 0; i < power; i++)
+            {
+                EmitAsm("LSR");
+            }
+            EmitAsm("TYA");
         }
         else
         {
@@ -620,20 +643,22 @@ class CodeGenerator
     {
         int size = SizeOf(expr);
 
-        int number;
-        string name;
         if (size != 1)
         {
             operand = null;
             return false;
         }
-        else if (expr.Match(Tag.Integer, out number))
+
+        int number;
+        if (expr.Match(Tag.Integer, out number))
         {
             if (number > 255) Program.Panic("immediate is too large for one byte");
             operand = new AsmOperand(number, AddressMode.Immediate).WithComment("'literal'");
             return true;
         }
-        else if (expr.Match(Tag.Name, out name))
+
+        string name;
+        if (expr.Match(Tag.Name, out name))
         {
             Symbol sym = FindSymbol(expr, name);
             if (sym.Tag == SymbolTag.Constant)
@@ -655,11 +680,9 @@ class CodeGenerator
             }
             return true;
         }
-        else
-        {
-            operand = null;
-            return false;
-        }
+
+        operand = null;
+        return false;
     }
 
     /// <summary>
@@ -728,6 +751,38 @@ class CodeGenerator
 
         baseAddress = null;
         return false;
+    }
+
+    /// <summary>
+    /// True only if the expression is a compile-time constant.
+    /// </summary>
+    bool TryGetConstant(Expr expr, out int number)
+    {
+        AsmOperand operand;
+        if (TryGetOperand(expr, out operand) && operand.Mode == AddressMode.Immediate)
+        {
+            number = operand.Offset;
+            return true;
+        }
+
+        number = 0;
+        return false;
+    }
+
+    static bool TryGetPowerOfTwo(int number, out int power)
+    {
+        power = 0;
+        if (number <= 0) return false;
+        while (true)
+        {
+            if ((number & 1) == 1)
+            {
+                // If we've reached the lowest one-bit, and it is the only bit set, then this is a power of two.
+                return (number == 1);
+            }
+            number >>= 1;
+            power += 1;
+        }
     }
 
     int SizeOfLocals(Expr expr)
