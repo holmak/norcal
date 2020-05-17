@@ -73,7 +73,7 @@ partial class Parser
             CType type = ExpectType();
             string name = ExpectAnyName();
             Expect(TokenType.EQUAL);
-            int value = ExpectInt();
+            Expr value = ParseExpr();
             Expect(TokenType.SEMICOLON);
             return Make(Tag.Constant, type, name, value);
         }
@@ -246,10 +246,16 @@ partial class Parser
     {
         if (TryParse(TokenType.LBRACKET))
         {
-            // TODO: Figure out how to handle missing array dimensions.
-            int dimension;
-            if (!TryParseInt(out dimension)) dimension = 0;
-            Expect(TokenType.RBRACKET);
+            Expr dimension;
+            if (TryParse(TokenType.RBRACKET))
+            {
+                dimension = Expr.Make(Tag.Empty);
+            }
+            else
+            {
+                dimension = ParseExpr();
+                Expect(TokenType.RBRACKET);
+            }
             type = CType.MakeArray(type, dimension);
         }
     }

@@ -51,17 +51,22 @@ class CodeGenerator
         }
 
         string name, functionName;
-        int number;
         CType type, returnType;
         MemoryRegion region;
         int[] values;
-        Expr body;
+        Expr value, body;
 
-        // Pass: Process all struct and union declarations.
+        // Pass: Process constants and struct/union declarations.
         foreach (Expr decl in declarations)
         {
             FieldInfo[] parsedFields;
-            if (decl.Match(Tag.Struct, out name, out parsedFields) || decl.Match(Tag.Union, out name, out parsedFields))
+            if (decl.Match(Tag.Constant, out type, out name, out value))
+            {
+                // TODO: Make sure the value fits in the specified type.
+                int number = CalculateConstantExpression(value);
+                DeclareSymbol(decl, new Symbol(SymbolTag.Constant, number, type, name));
+            }
+            else if (decl.Match(Tag.Struct, out name, out parsedFields) || decl.Match(Tag.Union, out name, out parsedFields))
             {
                 bool union = decl.MatchTag(Tag.Union);
 
@@ -71,8 +76,9 @@ class CodeGenerator
                 int maxSize = 1;
                 for (int i = 0; i < parsedFields.Length; i++)
                 {
-                    fields[i] = new FieldInfo(parsedFields[i].Type, parsedFields[i].Name, offset);
-                    int fieldSize = SizeOf(decl, parsedFields[i].Type);
+                    CType fieldType = CalculateConstantArrayDimensions(parsedFields[i].Type);
+                    fields[i] = new FieldInfo(fieldType, parsedFields[i].Name, offset);
+                    int fieldSize = SizeOf(decl, fieldType);
                     if (!union) offset += fieldSize;
                     maxSize = Math.Max(maxSize, fieldSize);
                 }
@@ -104,8 +110,9 @@ class CodeGenerator
                 int offset = 0;
                 for (int i = 0; i < parsedFields.Length; i++)
                 {
-                    fields[i] = new FieldInfo(parsedFields[i].Type, parsedFields[i].Name, offset);
-                    int fieldSize = SizeOf(decl, parsedFields[i].Type);
+                    CType fieldType = CalculateConstantArrayDimensions(parsedFields[i].Type);
+                    fields[i] = new FieldInfo(fieldType, parsedFields[i].Name, offset);
+                    int fieldSize = SizeOf(decl, fieldType);
                     offset += fieldSize;
                 }
 
@@ -115,11 +122,6 @@ class CodeGenerator
                     ReturnType = returnType,
                 };
                 Functions.Add(functionName, function);
-            }
-            else if (decl.Match(Tag.Constant, out type, out name, out number))
-            {
-                // TODO: Make sure the value fits in the specified type.
-                DeclareSymbol(decl, new Symbol(SymbolTag.Constant, number, type, name));
             }
             else if (decl.Match(Tag.Variable, out region, out type, out name))
             {
@@ -582,6 +584,34 @@ class CodeGenerator
         }
     }
 
+    int CalculateConstantExpression(Expr expr)
+    {
+        int number;
+        if (expr.Match(Tag.Integer, out number))
+        {
+            return number;
+        }
+
+        string name;
+        if (expr.Match(Tag.Name, out name))
+        {
+            Symbol sym = FindSymbol(expr, name);
+            if (sym.Tag == SymbolTag.Constant)
+            {
+                return sym.Value;
+            }
+        }
+
+        Expr left, right;
+        if (expr.Match(Tag.Multiply, out left, out right))
+        {
+            return CalculateConstantExpression(left) * CalculateConstantExpression(right);
+        }
+
+        Error(expr, "a constant expression is required");
+        return 0;
+    }
+
     /// <summary>
     /// If this expression can be represented by a single operand, produce it.
     /// </summary>
@@ -977,7 +1007,21 @@ class CodeGenerator
             address = -1;
         }
 
+        type = CalculateConstantArrayDimensions(type);
         return DeclareSymbol(origin, new Symbol(SymbolTag.Global, address, type, name));
+    }
+
+    /// <summary>
+    /// Convert array dimension expressions to constant integers.
+    /// </summary>
+    CType CalculateConstantArrayDimensions(CType type)
+    {
+        if (type.Tag == CTypeTag.ArrayWithDimensionExpression)
+        {
+            int dimension = CalculateConstantExpression(type.DimensionExpression);
+            type = CType.MakeArray(type.Subtype, dimension);
+        }
+        return type;
     }
 
     int Allocate(AllocationRegion allocator, int size)
@@ -998,6 +1042,11 @@ class CodeGenerator
 
     Symbol DeclareSymbol(Expr origin, Symbol r)
     {
+        if (r.Type.Tag == CTypeTag.ArrayWithDimensionExpression)
+        {
+            Program.Panic("array dimensions must be calculated before this point");
+        }
+
         // It is an error to define two things with the same name in the same scope.
         if (CurrentScope.Symbols.ContainsKey(r.Name))
         {

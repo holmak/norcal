@@ -12,6 +12,7 @@ enum CTypeTag
     Struct,
     Union,
     Array,
+    ArrayWithDimensionExpression,
 }
 
 enum CSimpleType
@@ -30,6 +31,7 @@ class CType : IEquatable<CType>
     public string Name;
     public CType Subtype;
     public int Dimension;
+    public Expr DimensionExpression;
 
     public static readonly CType Implied = MakeSimple(CSimpleType.Implied);
     public static readonly CType Void = MakeSimple(CSimpleType.Void);
@@ -84,10 +86,20 @@ class CType : IEquatable<CType>
         };
     }
 
+    public static CType MakeArray(CType elementType, Expr dimension)
+    {
+        return new CType
+        {
+            Tag = CTypeTag.ArrayWithDimensionExpression,
+            Subtype = elementType,
+            DimensionExpression = dimension,
+        };
+    }
+
     public bool IsSimple => Tag == CTypeTag.Simple;
     public bool IsPointer => Tag == CTypeTag.Pointer;
     public bool IsStructOrUnion => Tag == CTypeTag.Struct || Tag == CTypeTag.Union;
-    public bool IsArray => Tag == CTypeTag.Array;
+    public bool IsArray => Tag == CTypeTag.Array || Tag == CTypeTag.ArrayWithDimensionExpression;
     public bool IsInteger => IsSimple && (SimpleType == CSimpleType.UInt8 || SimpleType == CSimpleType.UInt16);
 
     public override bool Equals(object obj)
@@ -105,7 +117,7 @@ class CType : IEquatable<CType>
     {
         if (Tag != other.Tag) return false;
         else if (Tag == CTypeTag.Simple) return SimpleType.Equals(other.SimpleType);
-        else if (Tag == CTypeTag.Pointer || Tag == CTypeTag.Array) return Subtype.Equals(other.Subtype);
+        else if (Tag == CTypeTag.Pointer || Tag == CTypeTag.Array || Tag == CTypeTag.ArrayWithDimensionExpression) return Subtype.Equals(other.Subtype);
         else if (Tag == CTypeTag.Struct) return Name == other.Name;
         else
         {
@@ -124,6 +136,7 @@ class CType : IEquatable<CType>
         else if (Tag == CTypeTag.Struct) return "struct " + Name;
         else if (Tag == CTypeTag.Union) return "union " + Name;
         else if (Tag == CTypeTag.Array) return string.Format("array[{1}] of {0}", Subtype.Show(), Dimension);
+        else if (Tag == CTypeTag.ArrayWithDimensionExpression) return string.Format("array[{1}] of {0}", Subtype.Show(), DimensionExpression.Show());
         else throw new NotImplementedException();
     }
 }
