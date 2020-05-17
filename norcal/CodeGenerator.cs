@@ -356,8 +356,7 @@ class CodeGenerator
             AsmOperand leftOperand, rightOperand, basePointer;
             WideOperand leftWideOperand, rightWideOperand, pointerWideOperand;
 
-            if (TryGetOperand(left, out leftOperand) &&
-                TryGetOperand(right, out rightOperand))
+            if (!wide && TryGetOperand(left, out leftOperand))
             {
                 // Pattern:
                 // left = right;
@@ -365,26 +364,26 @@ class CodeGenerator
                 // LDA right
                 // STA left
 
-                EmitAsm("LDA", rightOperand);
+                Speculate();
+                CompileIntoRegister(Register.A, right);
                 EmitAsm("STA", leftOperand);
-                return;
+                if (Commit()) return;
             }
 
             if (!wide &&
                 left.Match(Tag.Index, out arrayExpr, out indexExpr) &&
-                TryGetPointerOperand(arrayExpr, out basePointer) &&
-                TryGetOperand(right, out rightOperand))
+                TryGetPointerOperand(arrayExpr, out basePointer))
             {
                 // Pattern:
-                // array[complex_index] = right;
+                // array[index] = right;
                 //
-                // LDY complex_index
+                // LDY index
                 // LDA right
                 // STA (array),Y
 
                 Speculate();
                 CompileIntoRegister(Register.Y, indexExpr);
-                EmitAsm("LDA", rightOperand);
+                CompileIntoRegister(Register.A, right);
                 EmitAsm("STA", basePointer);
                 if (Commit()) return;
             }
