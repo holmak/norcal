@@ -7,7 +7,8 @@ using System.Threading.Tasks;
 
 class CodeGenerator
 {
-    List<Expr> Output = new List<Expr>();
+    Stack<List<Expr>> Output = new Stack<List<Expr>>();
+    bool SpeculationError;
     Dictionary<string, CFunctionInfo> Functions = new Dictionary<string, CFunctionInfo>();
     Dictionary<string, AggregateInfo> AggregateTypes = new Dictionary<string, AggregateInfo>();
 
@@ -35,11 +36,12 @@ class CodeGenerator
     {
         CodeGenerator converter = new CodeGenerator();
         converter.CompileProgram(program);
-        return converter.Output;
+        return converter.Output.Peek();
     }
 
     void CompileProgram(Expr program)
     {
+        Output.Push(new List<Expr>());
         CurrentScope = new LexicalScope(null);
 
         Expr[] declarations;
@@ -349,7 +351,6 @@ class CodeGenerator
             if (!wide &&
                 left.Match(Tag.Index, out arrayExpr, out indexExpr) &&
                 TryGetPointerOperand(arrayExpr, out basePointer) &&
-                TryCompileIntoRegister(Register.Y, indexExpr) &&
                 TryGetOperand(right, out rightOperand))
             {
                 // Pattern:
@@ -359,10 +360,11 @@ class CodeGenerator
                 // LDA right
                 // STA (array),Y
 
-                EmitComment("NEWNEW");
+                Speculate();
+                CompileIntoRegister(Register.Y, indexExpr);
                 EmitAsm("LDA", rightOperand);
                 EmitAsm("STA", basePointer);
-                return;
+                if (Commit()) return;
             }
 
             if (wide && TryGetWideOperand(left, out leftWideOperand) && TryGetWideOperand(right, out rightWideOperand))
@@ -500,19 +502,15 @@ class CodeGenerator
     /// Return true if the expression could be calculated and loaded into the specified register.
     /// Only the specified register and A may be overwritten.
     /// </summary>
-    bool TryCompileIntoRegister(Register register, Expr expr)
+    void CompileIntoRegister(Register register, Expr expr)
     {
-        // TODO: I only want to emit this code if ALL of the caller's conditions are true.
-
         Expr left, right;
         AsmOperand operand, leftOperand;
         int number;
 
         if (register == Register.Y && TryGetOperand(expr, out operand))
         {
-            EmitComment("NEWINDEX.1");
             EmitAsm("LDY", operand);
-            return true;
         }
         else if (register == Register.Y &&
             expr.Match(Tag.Subtract, out left, out right) &&
@@ -520,14 +518,12 @@ class CodeGenerator
             right.Match(Tag.Integer, out number) &&
             number == 1)
         {
-            EmitComment("NEWINDEX.2");
             EmitAsm("LDY", leftOperand);
             EmitAsm("DEY");
-            return true;
         }
         else
         {
-            return false;
+            Abort();
         }
     }
 
@@ -807,6 +803,26 @@ class CodeGenerator
         Tag.LogicalAnd,
     };
 
+    void Speculate()
+    {
+        Output.Push(new List<Expr>());
+        SpeculationError = false;
+    }
+
+    void Abort()
+    {
+        SpeculationError = true;
+    }
+
+    bool Commit()
+    {
+        bool accept = !SpeculationError;
+        List<Expr> latest = Output.Pop();
+        if (Output.Count == 0) Program.Panic("output stack underflowed");
+        if (accept) Output.Peek().AddRange(latest);
+        return accept;
+    }
+
     void Emit(params object[] args)
     {
         Emit(Expr.Make(args));
@@ -814,7 +830,7 @@ class CodeGenerator
 
     void Emit(Expr e)
     {
-        Output.Add(e);
+        Output.Peek().Add(e);
     }
 
     void EmitAsm(string mnemonic) => Emit(Expr.MakeAsm(mnemonic));
