@@ -1146,17 +1146,6 @@ class CodeGenerator
         Tag.LessThanOrEqual,
         Tag.GreaterThanOrEqual,
     };
-
-    static string GetRuntimeFunctionName(string operation, CType type)
-    {
-        string typeSuffix = null;
-
-        if (type == CType.UInt8) typeSuffix = "u8";
-        else if (type == CType.UInt16) typeSuffix = "u16";
-        else Program.Panic("invalid combination of operator and type: {0}, {1}", operation, type.Show());
-
-        return "_rt_" + operation + "_" + typeSuffix;
-    }
 }
 
 class Symbol
