@@ -232,7 +232,8 @@ class CodeGenerator
         // Don't print "block" expressions; the subexpressions will be handled individually.
         if (!expr.MatchTag(Tag.Sequence) && !expr.MatchTag(Tag.If) && !expr.MatchTag(Tag.For))
         {
-            EmitComment("SRC: {0}", expr.Show());
+            EmitComment("AST: {0}", expr.Show());
+            EmitComment("SRC: {0}", ToSourceCode(expr));
         }
 
         if (expr.MatchAny(Tag.Sequence, out block))
@@ -1099,6 +1100,62 @@ class CodeGenerator
 
         Program.NYI();
         return 1;
+    }
+
+    /// <summary>
+    /// Convert an AST expression back into C source code.
+    /// </summary>
+    static string ToSourceCode(Expr expr)
+    {
+        int number;
+        if (expr.Match(Tag.Integer, out number))
+        {
+            if (number < 256) return number.ToString();
+            else return string.Format("0x{0:X}", number);
+        }
+
+        string name;
+        if (expr.Match(Tag.Name, out name))
+        {
+            return name;
+        }
+
+        Expr left, right;
+        if (expr.Match(Tag.Assign, out left, out right))
+        {
+            return ToSourceCode(left) + " = " + ToSourceCode(right);
+        }
+
+        Expr arrayExpr, indexExpr;
+        if (expr.Match(Tag.Index, out arrayExpr, out indexExpr))
+        {
+            return string.Format("({0})[{1}]", ToSourceCode(arrayExpr), ToSourceCode(indexExpr));
+        }
+
+        Expr pointerExpr, structExpr;
+        string fieldName;
+        if (expr.Match(Tag.Field, out structExpr, out fieldName) && structExpr.Match(Tag.Load, out pointerExpr))
+        {
+            return string.Format("({0})->{1}", ToSourceCode(pointerExpr), fieldName);
+        }
+
+        if (expr.Match(Tag.Field, out structExpr, out fieldName))
+        {
+            return string.Format("({0}).{1}", ToSourceCode(structExpr), fieldName);
+        }
+
+        Expr subexpr;
+        if (expr.Match(Tag.Return, out subexpr))
+        {
+            return string.Format("return {0};", ToSourceCode(subexpr));
+        }
+
+        if (expr.Match(Tag.Add, out left, out right))
+        {
+            return string.Format("({0}) + ({1})", ToSourceCode(left), ToSourceCode(right));
+        }
+
+        return "???";
     }
 
     [DebuggerStepThrough]
