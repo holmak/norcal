@@ -132,7 +132,7 @@ class CType : IEquatable<CType>
     public string Show()
     {
         if (Tag == CTypeTag.Simple) return SimpleType.ToString().ToLower();
-        else if (Tag == CTypeTag.Pointer) return "*" + Subtype.Show();
+        else if (Tag == CTypeTag.Pointer) return Subtype.Show() + "*";
         else if (Tag == CTypeTag.Struct) return "struct " + Name;
         else if (Tag == CTypeTag.Union) return "union " + Name;
         else if (Tag == CTypeTag.Array) return string.Format("{0}[{1}]", Subtype.Show(), Dimension);
