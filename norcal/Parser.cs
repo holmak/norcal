@@ -819,9 +819,7 @@ partial class Parser
             }
             values[s.Length] = '\0';
 
-            return Make(Tag.Sequence,
-                Make(Tag.ReadonlyData, CType.MakeArray(CType.UInt8, s.Length + 1), name, values),
-                Make(Tag.Name, name));
+            return Make(Tag.ReadonlyData, CType.MakeArray(CType.UInt8, s.Length + 1), name, values);
         }
         else if (TryParseAnyName(out name))
         {

@@ -890,6 +890,8 @@ class CodeGenerator
     {
         string name, fieldName, functionName, op;
         int number;
+        int[] data;
+        CType type;
         Expr left, right, subexpr, cond, functionExpr;
         Expr[] rest;
 
@@ -951,6 +953,10 @@ class CodeGenerator
         else if (expr.MatchAnyTag(out op, out left, out right) && BinaryOperatorsThatAlwaysProduceIntegers.Contains(op))
         {
             return FindCommonType(TypeOf(left), TypeOf(right));
+        }
+        else if (expr.Match(Tag.ReadonlyData, out type, out name, out data))
+        {
+            return type;
         }
         else
         {
