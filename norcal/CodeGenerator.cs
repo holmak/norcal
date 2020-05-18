@@ -166,7 +166,7 @@ class CodeGenerator
                     Program.NYI();
                 }
 
-                DeclareSymbol(decl, new Symbol(SymbolTag.Constant, 0, type, name));
+                DeclareSymbol(decl, new Symbol(SymbolTag.ReadonlyData, 0, type, name));
                 Emit(Tag.ReadonlyData, name, bytes);
             }
         }
@@ -271,9 +271,12 @@ class CodeGenerator
         if (expr.Match(Tag.Asm, out mnemonic, out operand))
         {
             // If the operand refers to a constant or variable, replace it with the actual address.
+            // (References to readonly data must remain as symbols.)
             AsmOperand fixedOperand = operand;
             Symbol sym;
-            if (operand.Base.HasValue && TryFindSymbol(operand.Base.Value, out sym))
+            if (operand.Base.HasValue &&
+                TryFindSymbol(operand.Base.Value, out sym) &&
+                sym.Tag != SymbolTag.ReadonlyData)
             {
                 int baseValue;
                 AddressMode actualMode = operand.Mode;
@@ -793,6 +796,12 @@ class CodeGenerator
             {
                 operand = new AsmOperand(LowByte(sym.Value), AddressMode.Immediate).WithComment("#" + sym.Name);
             }
+            else if (sym.Tag == SymbolTag.ReadonlyData)
+            {
+                // Readonly data is always represented by a pointer, which is too large for this purpose.
+                Program.Panic("this case should never be reached");
+                operand = null;
+            }
             else if (sym.Tag == SymbolTag.Global)
             {
                 operand = new AsmOperand(sym.Value, AddressMode.Absolute).WithComment(sym.Name);
@@ -836,18 +845,24 @@ class CodeGenerator
 
             if (sym.Tag == SymbolTag.Constant)
             {
-                operand.Low = new AsmOperand(LowByte(sym.Value), AddressMode.Immediate).WithComment("#<" + sym.Name);
-                operand.High = new AsmOperand(HighByte(sym.Value), AddressMode.Immediate).WithComment("#>" + sym.Name);
+                operand.Low = new AsmOperand(LowByte(sym.Value), AddressMode.Immediate).WithComment("#<" + name);
+                operand.High = new AsmOperand(HighByte(sym.Value), AddressMode.Immediate).WithComment("#>" + name);
+            }
+            else if (sym.Tag == SymbolTag.ReadonlyData)
+            {
+                // No comment is needed for these, since the operand is already a symbol.
+                operand.Low = new AsmOperand(name, ImmediateModifier.LowByte);
+                operand.High = new AsmOperand(name, ImmediateModifier.HighByte);
             }
             else if (sym.Tag == SymbolTag.Global)
             {
-                operand.Low = new AsmOperand(sym.Value, AddressMode.Absolute).WithComment(sym.Name);
-                operand.High = new AsmOperand(sym.Value + 1, AddressMode.Absolute).WithComment(sym.Name + "+1");
+                operand.Low = new AsmOperand(sym.Value, AddressMode.Absolute).WithComment(name);
+                operand.High = new AsmOperand(sym.Value + 1, AddressMode.Absolute).WithComment(name + "+1");
             }
             else if (sym.Tag == SymbolTag.Local)
             {
-                operand.Low = new AsmOperand(OffsetOfLocal(sym), AddressMode.ZeroPageX).WithComment(sym.Name);
-                operand.High = new AsmOperand(OffsetOfLocal(sym) + 1, AddressMode.ZeroPageX).WithComment(sym.Name + "+1");
+                operand.Low = new AsmOperand(OffsetOfLocal(sym), AddressMode.ZeroPageX).WithComment(name);
+                operand.High = new AsmOperand(OffsetOfLocal(sym) + 1, AddressMode.ZeroPageX).WithComment(name + "+1");
             }
             else
             {
@@ -1541,6 +1556,7 @@ class Symbol
 enum SymbolTag
 {
     Constant,
+    ReadonlyData,
     Global,
     Local,
 }
