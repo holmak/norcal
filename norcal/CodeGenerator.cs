@@ -9,6 +9,7 @@ class CodeGenerator
 {
     Stack<List<Expr>> Output = new Stack<List<Expr>>();
     bool SpeculationError;
+    string AbortReason;
     Dictionary<string, CFunctionInfo> Functions = new Dictionary<string, CFunctionInfo>();
     Dictionary<string, AggregateInfo> AggregateTypes = new Dictionary<string, AggregateInfo>();
 
@@ -476,6 +477,13 @@ class CodeGenerator
             return;
         }
 
+        if (expr.MatchTag(Tag.Call))
+        {
+            Speculate();
+            CompileCall(expr);
+            if (Commit()) return;
+        }
+
         if ((expr.Match(Tag.PreIncrement, out subexpr) || expr.Match(Tag.PostIncrement, out subexpr)) &&
             TryGetOperand(subexpr, out operand))
         {
@@ -558,7 +566,7 @@ class CodeGenerator
     /// </summary>
     void CompileIntoA(Expr expr)
     {
-        if (SizeOf(expr) != 1) Abort();
+        if (SizeOf(expr) != 1) Abort("too large for A");
 
         Expr left, right;
         AsmOperand operand, leftOperand, rightOperand;
@@ -622,7 +630,14 @@ class CodeGenerator
             return;
         }
 
-        Abort();
+        // Call:
+        if (expr.MatchTag(Tag.Call))
+        {
+            CompileCall(expr);
+            return;
+        }
+
+        Abort("too complex for A");
     }
 
     /// <summary>
@@ -630,7 +645,7 @@ class CodeGenerator
     /// </summary>
     void CompileIntoY(Expr expr)
     {
-        if (SizeOf(expr) != 1) Abort();
+        if (SizeOf(expr) != 1) Abort("too large for Y");
 
         Expr left, right;
         AsmOperand operand;
@@ -653,7 +668,9 @@ class CodeGenerator
             return;
         }
 
-        Abort();
+        // See if the value can be calculated in A:
+        CompileIntoA(expr);
+        EmitAsm("TAY");
     }
 
     int CalculateConstantExpression(Expr expr)
@@ -682,6 +699,69 @@ class CodeGenerator
 
         Error(expr, "a constant expression is required");
         return 0;
+    }
+
+    /// <summary>
+    /// The result will be stored in A.
+    /// </summary>
+    void CompileCall(Expr expr)
+    {
+        Expr functionExpr;
+        Expr[] args;
+        string function;
+
+        if (expr.MatchAny(Tag.Call, out functionExpr, out args) &&
+            functionExpr.Match(Tag.Name, out function))
+        {
+            CFunctionInfo info;
+            if (!Functions.TryGetValue(function, out info)) Error(functionExpr, "function not defined: {0}", function);
+
+            if (args.Length != info.Parameters.Length)
+            {
+                Error(expr, "wrong number of arguments in function call");
+            }
+
+            // Push arguments to negative stack offsets:
+            int offset = 256;
+            for (int i = 0; i < args.Length; i++)
+            {
+                FieldInfo param = info.Parameters[i];
+                Expr arg = args[i];
+                EmitComment("arg {0}: {1}", i, ToSourceCode(arg));
+                int paramSize = SizeOf(arg, param.Type);
+                offset -= paramSize;
+                if (paramSize == 1)
+                {
+                    CompileIntoA(arg);
+                    EmitAsm("STA", new AsmOperand(offset, AddressMode.ZeroPageX));
+                }
+                else if (paramSize == 2)
+                {
+                    WideOperand w;
+                    if (TryGetWideOperand(arg, out w))
+                    {
+                        EmitAsm("LDA", w.Low);
+                        EmitAsm("STA", new AsmOperand(offset, AddressMode.ZeroPageX));
+                        EmitAsm("LDA", w.High);
+                        EmitAsm("STA", new AsmOperand(offset + 1, AddressMode.ZeroPageX));
+                    }
+                    else
+                    {
+                        // TODO: Handle more complex wide arguments.
+                        Abort("wide argument is too complex");
+                    }
+                }
+                else
+                {
+                    Abort("argument is too large");
+                }
+            }
+
+            EmitAsm("JSR", new AsmOperand(function, AddressMode.Absolute));
+            return;
+        }
+
+        Abort("call is too complex");
     }
 
     /// <summary>
@@ -1004,10 +1084,11 @@ class CodeGenerator
         SpeculationError = false;
     }
 
-    void Abort()
+    void Abort(string reason)
     {
         if (Output.Count == 1) Program.Panic("cannot abort transaction; no speculative output in progress");
         SpeculationError = true;
+        AbortReason = reason;
     }
 
     bool Commit()
@@ -1016,6 +1097,7 @@ class CodeGenerator
         List<Expr> latest = Output.Pop();
         if (Output.Count == 0) Program.Panic("output stack underflowed");
         if (accept) Output.Peek().AddRange(latest);
+        if (!accept) EmitComment("ABORT: " + AbortReason);
         return accept;
     }
 
