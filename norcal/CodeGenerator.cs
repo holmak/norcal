@@ -557,54 +557,95 @@ class CodeGenerator
     /// </summary>
     void CompileIntoRegister(Register register, Expr expr)
     {
-        AsmOperand operand;
+        if (SizeOf(expr) != 1) Abort();
 
+        // Simple value:
+        AsmOperand operand;
         if (register == Register.A && TryGetOperand(expr, out operand))
         {
             EmitAsm("LDA", operand);
             return;
         }
 
+        // Simple value:
         if (register == Register.Y && TryGetOperand(expr, out operand))
         {
             EmitAsm("LDY", operand);
             return;
         }
 
-        // Pattern: Simple value minus a small constant.
-        int number;
+        // Addition:
         Expr left, right;
+        AsmOperand rightOperand;
+        if (register == Register.A &&
+            expr.Match(Tag.Add, out left, out right) &&
+            TryGetOperand(right, out rightOperand))
+        {
+            CompileIntoRegister(register, left);
+            EmitAsm("CLC");
+            EmitAsm("ADC", rightOperand);
+            return;
+        }
+
+        // Multiplication by a constant:
         AsmOperand leftOperand;
+        int number;
+        if (register == Register.A &&
+            expr.Match(Tag.Multiply, out left, out right) &&
+            TryGetOperand(left, out leftOperand) &&
+            TryGetConstant(right, out number))
+        {
+            EmitAsm("LDA", new AsmOperand(0, AddressMode.Immediate));
+            EmitAsm("CLC");
+            for (int i = 0; i < number; i++)
+            {
+                EmitAsm("ADC", leftOperand);
+            }
+            return;
+        }
+
+        // Subtract one:
         if (register == Register.Y &&
             expr.Match(Tag.Subtract, out left, out right) &&
-            TryGetOperand(left, out leftOperand) &&
             right.Match(Tag.Integer, out number) &&
             number == 1)
         {
-            EmitAsm("LDY", leftOperand);
+            CompileIntoRegister(Register.Y, left);
             EmitAsm("DEY");
             return;
         }
 
-        // Pattern: Simple value divided by a power of two.
+        // Multiplication by a power of two:
         int power;
-        if (register == Register.Y &&
-            expr.Match(Tag.Divide, out left, out right) &&
-            TryGetOperand(left, out leftOperand) &&
+        if (register == Register.A &&
+            expr.Match(Tag.Multiply, out left, out right) &&
             TryGetConstant(right, out number) &&
             TryGetPowerOfTwo(number, out power))
         {
-            EmitAsm("LDA", leftOperand);
+            CompileIntoRegister(Register.A, left);
+            for (int i = 0; i < power; i++)
+            {
+                EmitAsm("ASL");
+            }
+            return;
+        }
+
+        // Division by a power of two:
+        if (register == Register.Y &&
+            expr.Match(Tag.Divide, out left, out right) &&
+            TryGetConstant(right, out number) &&
+            TryGetPowerOfTwo(number, out power))
+        {
+            CompileIntoRegister(Register.A, left);
             for (int i = 0; i < power; i++)
             {
                 EmitAsm("LSR");
             }
-            EmitAsm("TYA");
+            EmitAsm("TAY");
+            return;
         }
-        else
-        {
-            Abort();
-        }
+
+        Abort();
     }
 
     int CalculateConstantExpression(Expr expr)
