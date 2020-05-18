@@ -365,7 +365,7 @@ class CodeGenerator
                 // STA left
 
                 Speculate();
-                CompileIntoRegister(Register.A, right);
+                CompileIntoA(right);
                 EmitAsm("STA", leftOperand);
                 if (Commit()) return;
             }
@@ -382,8 +382,8 @@ class CodeGenerator
                 // STA (array),Y
 
                 Speculate();
-                CompileIntoRegister(Register.Y, indexExpr);
-                CompileIntoRegister(Register.A, right);
+                CompileIntoY(indexExpr);
+                CompileIntoA(right);
                 EmitAsm("STA", basePointer);
                 if (Commit()) return;
             }
@@ -403,7 +403,7 @@ class CodeGenerator
                 // STA (record),Y
 
                 FieldInfo field = GetFieldInfo(pointerExpr, fieldName);
-                CompileIntoRegister(Register.Y, Expr.Make(Tag.Integer, field.Offset));
+                CompileIntoY(Expr.Make(Tag.Integer, field.Offset));
                 EmitAsm("LDA", rightOperand);
                 EmitAsm("STA", basePointer);
                 return;
@@ -495,7 +495,7 @@ class CodeGenerator
         if (expr.Match(Tag.Return, out subexpr))
         {
             Speculate();
-            CompileIntoRegister(Register.A, subexpr);
+            CompileIntoA(subexpr);
             ReturnFromFunction();
             if (Commit()) return;
         }
@@ -552,46 +552,35 @@ class CodeGenerator
     }
 
     /// <summary>
-    /// Return true if the expression could be calculated and loaded into the specified register.
-    /// Only the specified register and A may be overwritten.
+    /// Return true if the expression could be calculated and loaded into A.
     /// </summary>
-    void CompileIntoRegister(Register register, Expr expr)
+    void CompileIntoA(Expr expr)
     {
         if (SizeOf(expr) != 1) Abort();
 
+        Expr left, right;
+        AsmOperand operand, leftOperand, rightOperand;
+        int number;
+
         // Simple value:
-        AsmOperand operand;
-        if (register == Register.A && TryGetOperand(expr, out operand))
+        if (TryGetOperand(expr, out operand))
         {
             EmitAsm("LDA", operand);
             return;
         }
 
-        // Simple value:
-        if (register == Register.Y && TryGetOperand(expr, out operand))
-        {
-            EmitAsm("LDY", operand);
-            return;
-        }
-
         // Addition:
-        Expr left, right;
-        AsmOperand rightOperand;
-        if (register == Register.A &&
-            expr.Match(Tag.Add, out left, out right) &&
+        if (expr.Match(Tag.Add, out left, out right) &&
             TryGetOperand(right, out rightOperand))
         {
-            CompileIntoRegister(register, left);
+            CompileIntoA(left);
             EmitAsm("CLC");
             EmitAsm("ADC", rightOperand);
             return;
         }
 
         // Multiplication by a constant:
-        AsmOperand leftOperand;
-        int number;
-        if (register == Register.A &&
-            expr.Match(Tag.Multiply, out left, out right) &&
+        if (expr.Match(Tag.Multiply, out left, out right) &&
             TryGetOperand(left, out leftOperand) &&
             TryGetConstant(right, out number))
         {
@@ -604,25 +593,13 @@ class CodeGenerator
             return;
         }
 
-        // Subtract one:
-        if (register == Register.Y &&
-            expr.Match(Tag.Subtract, out left, out right) &&
-            right.Match(Tag.Integer, out number) &&
-            number == 1)
-        {
-            CompileIntoRegister(Register.Y, left);
-            EmitAsm("DEY");
-            return;
-        }
-
         // Multiplication by a power of two:
         int power;
-        if (register == Register.A &&
-            expr.Match(Tag.Multiply, out left, out right) &&
+        if (expr.Match(Tag.Multiply, out left, out right) &&
             TryGetConstant(right, out number) &&
             TryGetPowerOfTwo(number, out power))
         {
-            CompileIntoRegister(Register.A, left);
+            CompileIntoA(left);
             for (int i = 0; i < power; i++)
             {
                 EmitAsm("ASL");
@@ -631,17 +608,46 @@ class CodeGenerator
         }
 
         // Division by a power of two:
-        if (register == Register.Y &&
-            expr.Match(Tag.Divide, out left, out right) &&
+        if (expr.Match(Tag.Divide, out left, out right) &&
             TryGetConstant(right, out number) &&
             TryGetPowerOfTwo(number, out power))
         {
-            CompileIntoRegister(Register.A, left);
+            CompileIntoA(left);
             for (int i = 0; i < power; i++)
             {
                 EmitAsm("LSR");
             }
-            EmitAsm("TAY");
+            return;
+        }
+
+        Abort();
+    }
+
+    /// <summary>
+    /// Return true if the expression could be calculated and loaded into Y. Register A may also be overwritten.
+    /// </summary>
+    void CompileIntoY(Expr expr)
+    {
+        if (SizeOf(expr) != 1) Abort();
+
+        Expr left, right;
+        AsmOperand operand;
+        int number;
+
+        // Simple value:
+        if (TryGetOperand(expr, out operand))
+        {
+            EmitAsm("LDY", operand);
+            return;
+        }
+
+        // Subtract one:
+        if (expr.Match(Tag.Subtract, out left, out right) &&
+            right.Match(Tag.Integer, out number) &&
+            number == 1)
+        {
+            CompileIntoY(left);
+            EmitAsm("DEY");
             return;
         }
 
@@ -1453,10 +1459,4 @@ class AllocationRegion
 class WideOperand
 {
     public AsmOperand Low, High;
-}
-
-enum Register
-{
-    A,
-    Y,
 }
