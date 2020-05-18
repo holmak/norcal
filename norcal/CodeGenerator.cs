@@ -564,6 +564,13 @@ class CodeGenerator
             return;
         }
 
+        if (!condition && expr.Match(Tag.LogicalAnd, out left, out right))
+        {
+            CompileJumpIf(false, left, target);
+            CompileJumpIf(false, right, target);
+            return;
+        }
+
         NYI("unhandled jump expression");
     }
 
