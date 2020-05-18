@@ -242,7 +242,6 @@ class CodeGenerator
         {
             EmitComment("");
             EmitComment("{0}", ToSourceCode(expr));
-            EmitComment("{0}", expr.Show());
         }
 
         if (expr.MatchAny(Tag.Sequence, out block))
@@ -1263,6 +1262,8 @@ class CodeGenerator
     /// </summary>
     static string ToSourceCode(Expr expr)
     {
+        if (expr.Match(Tag.Empty)) return "// empty";
+
         int number;
         if (expr.Match(Tag.Integer, out number))
         {
@@ -1276,20 +1277,52 @@ class CodeGenerator
             return name;
         }
 
-        Expr left, right;
-        if (expr.Match(Tag.Assign, out left, out right))
+        string mnemonic;
+        AsmOperand operand;
+        if (expr.Match(Tag.Asm, out mnemonic, out operand))
         {
-            return ToSourceCode(left) + " = " + ToSourceCode(right);
+            return string.Format("__asm {0} {1}", mnemonic, operand.Show());
         }
 
-        string op;
-        if (expr.Match(Tag.AssignModify, out op, out left, out right))
+        if (expr.MatchTag(Tag.ReadonlyData))
         {
-            if (op == Tag.Add) op = "+";
-            else if (op == Tag.Subtract) op = "-";
-            else op = "???";
+            return "<readonly_data>";
+        }
 
-            return string.Format("({0}) {1}= ({2})", ToSourceCode(left), op, ToSourceCode(right));
+        Expr subexpr, left, right;
+        string tag, op;
+
+        if (expr.MatchAnyTag(out tag, out subexpr) && PrefixOperators.TryGetValue(tag, out op))
+        {
+            return string.Format("{0}({1})", op, ToSourceCode(subexpr));
+        }
+
+        if (expr.MatchAnyTag(out tag, out subexpr) && PostfixOperators.TryGetValue(tag, out op))
+        {
+            return string.Format("({1}){0}", op, ToSourceCode(subexpr));
+        }
+
+        if (expr.MatchAnyTag(out tag, out left, out right) && BinaryOperators.TryGetValue(tag, out op))
+        {
+            return string.Format("({1}) {0} ({2})", op, ToSourceCode(left), ToSourceCode(right));
+        }
+
+        if (expr.Match(Tag.AssignModify, out tag, out left, out right) && BinaryOperators.TryGetValue(tag, out op))
+        {
+            return string.Format("({1}) {0}= ({2})", op, ToSourceCode(left), ToSourceCode(right));
+        }
+
+        Expr test;
+        if (expr.Match(Tag.Conditional, out test, out left, out right))
+        {
+            return string.Format("({0}) ? ({1}) : ({2})", ToSourceCode(test), ToSourceCode(left), ToSourceCode(right));
+        }
+
+        Expr function;
+        Expr[] args;
+        if (expr.MatchAny(Tag.Call, out function, out args))
+        {
+            return string.Format("{0}({1})", ToSourceCode(function), string.Join(", ", args.Select(ToSourceCode)));
         }
 
         Expr arrayExpr, indexExpr;
@@ -1315,68 +1348,9 @@ class CodeGenerator
             return "return;";
         }
 
-        Expr subexpr;
         if (expr.Match(Tag.Return, out subexpr))
         {
             return string.Format("return {0};", ToSourceCode(subexpr));
-        }
-
-        Expr test;
-        if (expr.Match(Tag.Conditional, out test, out left, out right))
-        {
-            return string.Format("({0}) ? ({1}) : ({2})", ToSourceCode(test), ToSourceCode(left), ToSourceCode(right));
-        }
-
-        if (expr.Match(Tag.Add, out left, out right))
-        {
-            return string.Format("({0}) + ({1})", ToSourceCode(left), ToSourceCode(right));
-        }
-
-        if (expr.Match(Tag.Subtract, out left, out right))
-        {
-            return string.Format("({0}) - ({1})", ToSourceCode(left), ToSourceCode(right));
-        }
-
-        if (expr.Match(Tag.Multiply, out left, out right))
-        {
-            return string.Format("({0}) * ({1})", ToSourceCode(left), ToSourceCode(right));
-        }
-
-        if (expr.Match(Tag.Divide, out left, out right))
-        {
-            return string.Format("({0}) / ({1})", ToSourceCode(left), ToSourceCode(right));
-        }
-
-        if (expr.Match(Tag.PreIncrement, out subexpr))
-        {
-            return string.Format("++({0})", ToSourceCode(subexpr));
-        }
-
-        if (expr.Match(Tag.PostIncrement, out subexpr))
-        {
-            return string.Format("({0})++", ToSourceCode(subexpr));
-        }
-
-        if (expr.Match(Tag.PreDecrement, out subexpr))
-        {
-            return string.Format("--({0})", ToSourceCode(subexpr));
-        }
-
-        if (expr.Match(Tag.PostDecrement, out subexpr))
-        {
-            return string.Format("({0})--", ToSourceCode(subexpr));
-        }
-
-        if (expr.Match(Tag.Load, out subexpr))
-        {
-            return string.Format("*({0})", ToSourceCode(subexpr));
-        }
-
-        Expr function;
-        Expr[] args;
-        if (expr.MatchAny(Tag.Call, out function, out args))
-        {
-            return string.Format("{0}({1})", ToSourceCode(function), string.Join(", ", args.Select(ToSourceCode)));
         }
 
         CType type;
@@ -1389,10 +1363,9 @@ class CodeGenerator
 
         if (expr.Match(Tag.Continue)) return "continue;";
 
-        if (expr.Match(Tag.Label, out name))
-        {
-            return name + ":";
-        }
+        if (expr.Match(Tag.Label, out name)) return name + ":";
+
+        if (expr.Match(Tag.Jump, out name)) return "goto " + name + ";";
 
         return "???";
     }
@@ -1409,28 +1382,43 @@ class CodeGenerator
         Program.Error(origin.Source, format, args);
     }
 
-    static readonly Dictionary<string, string> UnaryRuntimeOperators = new Dictionary<string, string>
+    static readonly Dictionary<string, string> PrefixOperators = new Dictionary<string, string>
     {
-        { Tag.BitwiseNot, "bitwise_not" },
-        { Tag.LogicalNot, "logical_not" },
+        { Tag.BitwiseNot, "~" },
+        { Tag.LogicalNot, "!" },
+        { Tag.PreIncrement, "++" },
+        { Tag.PreDecrement, "--" },
+        { Tag.Load, "*" },
+        { Tag.AddressOf, "&" },
     };
 
-    static readonly Dictionary<string, string> BinaryRuntimeOperators = new Dictionary<string, string>
+    static readonly Dictionary<string, string> PostfixOperators = new Dictionary<string, string>
     {
-        { Tag.Multiply, "mul" },
-        { Tag.Divide, "div" },
-        { Tag.Modulus, "mod" },
-        { Tag.Equal, "eq" },
-        { Tag.NotEqual, "ne" },
-        { Tag.LessThan, "lt" },
-        { Tag.GreaterThan, "gt" },
-        { Tag.LessThanOrEqual, "le" },
-        { Tag.GreaterThanOrEqual, "ge" },
-        { Tag.BitwiseAnd, "bitwise_and" },
-        { Tag.BitwiseOr, "bitwise_or" },
-        { Tag.BitwiseXor, "bitwise_xor" },
-        { Tag.ShiftLeft, "shift_left" },
-        { Tag.ShiftRight, "shift_right" },
+        { Tag.PostIncrement, "++" },
+        { Tag.PostDecrement, "--" },
+    };
+
+    static readonly Dictionary<string, string> BinaryOperators = new Dictionary<string, string>
+    {
+        { Tag.Assign, "=" },
+        { Tag.Add, "+" },
+        { Tag.Subtract, "-" },
+        { Tag.Multiply, "*" },
+        { Tag.Divide, "/" },
+        { Tag.Modulus, "%" },
+        { Tag.Equal, "==" },
+        { Tag.NotEqual, "!=" },
+        { Tag.LessThan, "<" },
+        { Tag.GreaterThan, ">" },
+        { Tag.LessThanOrEqual, "<=" },
+        { Tag.GreaterThanOrEqual, ">=" },
+        { Tag.BitwiseAnd, "&" },
+        { Tag.BitwiseOr, "|" },
+        { Tag.BitwiseXor, "^" },
+        { Tag.LogicalAnd, "&&" },
+        { Tag.LogicalOr, "||" },
+        { Tag.ShiftLeft, "<<" },
+        { Tag.ShiftRight, ">>" },
     };
 
     static readonly string[] BinaryOperatorsThatAllowPointers = new string[]
