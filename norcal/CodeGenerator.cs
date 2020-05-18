@@ -504,6 +504,9 @@ class CodeGenerator
 
     void CompileJumpIf(bool condition, Expr expr, AsmOperand target)
     {
+        EmitComment("");
+        EmitComment("jump if {0}: {1}", condition.ToString().ToLower(), ToSourceCode(expr));
+
         AsmOperand operand, leftOperand, rightOperand;
         Expr left, right;
 
@@ -546,7 +549,7 @@ class CodeGenerator
         }
         else
         {
-            NYI(string.Format("jump if {0}: {1}", condition.ToString().ToLower(), expr.Show()));
+            NYI("unhandled jump expression");
         }
     }
 
