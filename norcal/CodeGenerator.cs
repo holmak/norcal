@@ -536,8 +536,10 @@ class CodeGenerator
                 string opcode = condition ? "BNE" : "BEQ";
                 EmitAsm(opcode, target);
             }
+            return;
         }
-        else if (expr.Match(Tag.LessThan, out left, out right) &&
+
+        if (expr.Match(Tag.LessThan, out left, out right) &&
             TryGetOperand(left, out leftOperand) &&
             TryGetOperand(right, out rightOperand))
         {
@@ -553,15 +555,16 @@ class CodeGenerator
             EmitAsm("CMP", rightOperand);
             string opcode = condition ? "BCC" : "BCS";
             EmitAsm(opcode, target);
+            return;
         }
-        else if (expr.Match(Tag.GreaterThanOrEqual, out left, out right))
+
+        if (expr.Match(Tag.GreaterThanOrEqual, out left, out right))
         {
             CompileJumpIf(!condition, Expr.Make(Tag.LessThan, left, right), target);
+            return;
         }
-        else
-        {
-            NYI("unhandled jump expression");
-        }
+
+        NYI("unhandled jump expression");
     }
 
     /// <summary>
