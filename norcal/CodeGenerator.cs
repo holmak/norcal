@@ -1276,6 +1276,16 @@ class CodeGenerator
             return ToSourceCode(left) + " = " + ToSourceCode(right);
         }
 
+        string op;
+        if (expr.Match(Tag.AssignModify, out op, out left, out right))
+        {
+            if (op == Tag.Add) op = "+";
+            else if (op == Tag.Subtract) op = "-";
+            else op = "???";
+
+            return string.Format("({0}) {1}= ({2})", ToSourceCode(left), op, ToSourceCode(right));
+        }
+
         Expr arrayExpr, indexExpr;
         if (expr.Match(Tag.Index, out arrayExpr, out indexExpr))
         {
@@ -1294,10 +1304,21 @@ class CodeGenerator
             return string.Format("({0}).{1}", ToSourceCode(structExpr), fieldName);
         }
 
+        if (expr.Match(Tag.Return))
+        {
+            return "return;";
+        }
+
         Expr subexpr;
         if (expr.Match(Tag.Return, out subexpr))
         {
             return string.Format("return {0};", ToSourceCode(subexpr));
+        }
+
+        Expr test;
+        if (expr.Match(Tag.Conditional, out test, out left, out right))
+        {
+            return string.Format("({0}) ? ({1}) : ({2})", ToSourceCode(test), ToSourceCode(left), ToSourceCode(right));
         }
 
         if (expr.Match(Tag.Add, out left, out right))
@@ -1320,6 +1341,26 @@ class CodeGenerator
             return string.Format("({0}) / ({1})", ToSourceCode(left), ToSourceCode(right));
         }
 
+        if (expr.Match(Tag.PreIncrement, out subexpr))
+        {
+            return string.Format("++({0})", ToSourceCode(subexpr));
+        }
+
+        if (expr.Match(Tag.PostIncrement, out subexpr))
+        {
+            return string.Format("({0})++", ToSourceCode(subexpr));
+        }
+
+        if (expr.Match(Tag.PreDecrement, out subexpr))
+        {
+            return string.Format("--({0})", ToSourceCode(subexpr));
+        }
+
+        if (expr.Match(Tag.PostDecrement, out subexpr))
+        {
+            return string.Format("({0})--", ToSourceCode(subexpr));
+        }
+
         if (expr.Match(Tag.Load, out subexpr))
         {
             return string.Format("*({0})", ToSourceCode(subexpr));
@@ -1336,6 +1377,15 @@ class CodeGenerator
         if (expr.Match(Tag.Variable, out type, out name))
         {
             return string.Format("{0} {1};", type.Show(), name);
+        }
+
+        if (expr.Match(Tag.Break)) return "break;";
+
+        if (expr.Match(Tag.Continue)) return "continue;";
+
+        if (expr.Match(Tag.Label, out name))
+        {
+            return name + ":";
         }
 
         return "???";
