@@ -1258,6 +1258,26 @@ class CodeGenerator
             return string.Format("({0}) + ({1})", ToSourceCode(left), ToSourceCode(right));
         }
 
+        if (expr.Match(Tag.Subtract, out left, out right))
+        {
+            return string.Format("({0}) - ({1})", ToSourceCode(left), ToSourceCode(right));
+        }
+
+        if (expr.Match(Tag.Multiply, out left, out right))
+        {
+            return string.Format("({0}) * ({1})", ToSourceCode(left), ToSourceCode(right));
+        }
+
+        if (expr.Match(Tag.Divide, out left, out right))
+        {
+            return string.Format("({0}) / ({1})", ToSourceCode(left), ToSourceCode(right));
+        }
+
+        if (expr.Match(Tag.Load, out subexpr))
+        {
+            return string.Format("*({0})", ToSourceCode(subexpr));
+        }
+
         Expr function;
         Expr[] args;
         if (expr.MatchAny(Tag.Call, out function, out args))
