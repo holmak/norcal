@@ -562,8 +562,23 @@ class CodeGenerator
             if (Commit()) return;
         }
 
+        if (expr.Match(Tag.LessThanOrEqual, out left, out right))
+        {
+            // (a <= b) === !(b < a)
+            CompileJumpIf(condition, Expr.Make(Tag.LessThan, right, left), target);
+            return;
+        }
+
+        if (expr.Match(Tag.GreaterThan, out left, out right))
+        {
+            // (a > b) === (b < a)
+            CompileJumpIf(condition, Expr.Make(Tag.LessThan, right, left), target);
+            return;
+        }
+
         if (expr.Match(Tag.GreaterThanOrEqual, out left, out right))
         {
+            // (a >= b) === !(a < b)
             CompileJumpIf(!condition, Expr.Make(Tag.LessThan, left, right), target);
             return;
         }
