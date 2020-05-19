@@ -521,27 +521,29 @@ class CodeGenerator
 
         AsmOperand operand, leftOperand, rightOperand;
         Expr left, right;
+        int number;
 
-        if (TryGetOperand(expr, out operand))
+        // Jump (or not) unconditionally when the condition is a constant:
+        if (TryGetConstant(expr, out number))
         {
-            if (operand.Mode == AddressMode.Immediate)
+            if ((number != 0) == condition)
             {
-                if ((operand.Offset != 0) == condition)
-                {
-                    EmitAsm("JMP", target);
-                }
-            }
-            else
-            {
-                EmitAsm("LDA", operand);
-                string opcode = condition ? "BNE" : "BEQ";
-                EmitAsm(opcode, target);
+                EmitAsm("JMP", target);
             }
             return;
         }
 
+        // Jump if nonzero:
+        {
+            Speculate();
+            CompileIntoA(expr);
+            string opcode = condition ? "BNE" : "BEQ";
+            EmitAsm(opcode, target);
+            if (Commit()) return;
+        }
+
+        // Jump if less than:
         if (expr.Match(Tag.LessThan, out left, out right) &&
-            TryGetOperand(left, out leftOperand) &&
             TryGetOperand(right, out rightOperand))
         {
             // Pattern:
@@ -549,14 +551,15 @@ class CodeGenerator
             //
             // LDA b
             // CMP a
-            // (carry is clear if CMP's operand is larger)
+            // (carry is *clear* if a < b)
             // BCC/BCS target
 
-            EmitAsm("LDA", leftOperand);
+            Speculate();
+            CompileIntoA(left);
             EmitAsm("CMP", rightOperand);
             string opcode = condition ? "BCC" : "BCS";
             EmitAsm(opcode, target);
-            return;
+            if (Commit()) return;
         }
 
         if (expr.Match(Tag.GreaterThanOrEqual, out left, out right))
