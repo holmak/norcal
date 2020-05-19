@@ -355,7 +355,7 @@ class CodeGenerator
             // Expressions involving values wider than one byte are more difficult to compile.
             bool wide = leftSize > 1 || rightSize > 1;
 
-            Expr loadExpr, pointerExpr, arrayExpr, indexExpr;
+            Expr loadExpr, pointerExpr, arrayExpr, indexExpr, structExpr;
             AsmOperand leftOperand, rightOperand, basePointer;
             WideOperand leftWideOperand, rightWideOperand, pointerWideOperand;
 
@@ -391,25 +391,26 @@ class CodeGenerator
                 if (Commit()) return;
             }
 
-            Expr structExpr;
             if (!wide &&
-                left.Match(Tag.Field, out pointerExpr, out fieldName) &&
-                pointerExpr.Match(Tag.Load, out structExpr) &&
-                TryGetPointerOperand(structExpr, out basePointer) &&
-                TryGetOperand(right, out rightOperand))
+                left.Match(Tag.Field, out structExpr, out fieldName) &&
+                structExpr.Match(Tag.Load, out pointerExpr) &&
+                TryGetPointerOperand(pointerExpr, out basePointer))
             {
                 // Pattern:
-                // record.field = b;
+                // record->field = right;
                 //
                 // LDY #offsetof(field)
                 // LDA right
                 // STA (record),Y
 
-                FieldInfo field = GetFieldInfo(pointerExpr, fieldName);
-                CompileIntoY(Expr.Make(Tag.Integer, field.Offset));
-                EmitAsm("LDA", rightOperand);
+                FieldInfo field = GetFieldInfo(structExpr, fieldName);
+
+                Speculate();
+                if (field.Offset > 255) Abort("field offset is too large");
+                EmitAsm("LDY", new AsmOperand(field.Offset, AddressMode.Immediate).WithComment("offset of .{0}", fieldName));
+                CompileIntoA(right);
                 EmitAsm("STA", basePointer);
-                return;
+                if (Commit()) return;
             }
 
             if (wide && TryGetWideOperand(left, out leftWideOperand) && TryGetWideOperand(right, out rightWideOperand))
