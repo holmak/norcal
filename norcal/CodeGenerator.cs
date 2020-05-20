@@ -389,9 +389,21 @@ class CodeGenerator
                 // LDA right
                 // STA (array),Y
 
+                // There are two subexpressions to compile here: the index and the right hand side.
+                // Typically you want to compile the more complicated expression first so that
+                // you have more registers to work with; therefore, try compiling in both orders and
+                // hope that one works.
+
                 Speculate();
                 CompileIntoY(indexExpr);
                 CompileIntoA(right);
+                EmitAsm("STA", basePointer);
+                ReleaseA();
+                if (Commit()) return;
+
+                Speculate();
+                CompileIntoA(right);
+                CompileIntoY(indexExpr);
                 EmitAsm("STA", basePointer);
                 ReleaseA();
                 if (Commit()) return;
