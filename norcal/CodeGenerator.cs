@@ -616,15 +616,31 @@ class CodeGenerator
     {
         if (SizeOf(expr) != 1) Abort("too large for A");
 
-        Expr left, right;
-        AsmOperand operand, leftOperand, rightOperand;
+        Expr left, right, structExpr, pointerExpr;
+        AsmOperand operand, leftOperand, rightOperand, basePointer;
         int number;
+        string fieldName;
 
         // Simple value:
         if (TryGetOperand(expr, out operand))
         {
             ReserveA();
             EmitAsm("LDA", operand);
+            return;
+        }
+
+        // Field via pointer to struct:
+        if (expr.Match(Tag.Field, out structExpr, out fieldName) &&
+            structExpr.Match(Tag.Load, out pointerExpr) &&
+            TryGetPointerOperand(pointerExpr, out basePointer))
+        {
+            FieldInfo field = GetFieldInfo(structExpr, fieldName);
+            if (field.Offset > 255) Abort("field offset is too large");
+            ReserveY();
+            EmitAsm("LDY", new AsmOperand(field.Offset, AddressMode.Immediate).WithComment("offset of .{0}", fieldName));
+            ReserveA();
+            EmitAsm("LDA", basePointer);
+            ReleaseY();
             return;
         }
 
