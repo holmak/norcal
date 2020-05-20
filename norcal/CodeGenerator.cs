@@ -7,9 +7,8 @@ using System.Threading.Tasks;
 
 class CodeGenerator
 {
-    Stack<List<Expr>> Output = new Stack<List<Expr>>();
-    bool SpeculationError;
-    string AbortReason;
+    Stack<OutputTransaction> OutputStack = new Stack<OutputTransaction>();
+    OutputTransaction Output => OutputStack.Peek();
     Dictionary<string, CFunctionInfo> Functions = new Dictionary<string, CFunctionInfo>();
     Dictionary<string, AggregateInfo> AggregateTypes = new Dictionary<string, AggregateInfo>();
 
@@ -37,12 +36,12 @@ class CodeGenerator
     {
         CodeGenerator converter = new CodeGenerator();
         converter.CompileProgram(program);
-        return converter.Output.Peek();
+        return converter.Output.Lines;
     }
 
     void CompileProgram(Expr program)
     {
-        Output.Push(new List<Expr>());
+        OutputStack.Push(new OutputTransaction());
         CurrentScope = new LexicalScope(null);
 
         Expr[] declarations;
@@ -222,6 +221,11 @@ class CodeGenerator
         Emit(Tag.Word, "reset");
         Emit(Tag.Word, "brk");
 
+        if (Output.SpeculationError)
+        {
+            Program.Panic("root transaction error: {0}", Output.AbortReason);
+        }
+
         Console.WriteLine("Memory usage:");
         foreach (AllocationRegion allocator in new[] { ZeroPageRegion, OamRegion, RamRegion })
         {
@@ -370,6 +374,7 @@ class CodeGenerator
                 Speculate();
                 CompileIntoA(right);
                 EmitAsm("STA", leftOperand);
+                ReleaseA();
                 if (Commit()) return;
             }
 
@@ -388,6 +393,7 @@ class CodeGenerator
                 CompileIntoY(indexExpr);
                 CompileIntoA(right);
                 EmitAsm("STA", basePointer);
+                ReleaseA();
                 if (Commit()) return;
             }
 
@@ -407,9 +413,12 @@ class CodeGenerator
 
                 Speculate();
                 if (field.Offset > 255) Abort("field offset is too large");
+                ReserveY();
                 EmitAsm("LDY", new AsmOperand(field.Offset, AddressMode.Immediate).WithComment("offset of .{0}", fieldName));
                 CompileIntoA(right);
                 EmitAsm("STA", basePointer);
+                ReleaseA();
+                ReleaseY();
                 if (Commit()) return;
             }
 
@@ -424,13 +433,17 @@ class CodeGenerator
                     Error(left, "an assignable expression is required");
                 }
 
+                ReserveA();
                 EmitAsm("LDA", rightWideOperand.Low);
                 EmitAsm("STA", leftWideOperand.Low);
+                ReleaseA();
 
                 if (leftSize == 2)
                 {
+                    ReserveA();
                     EmitAsm("LDA", rightWideOperand.High);
                     EmitAsm("STA", leftWideOperand.High);
+                    ReleaseA();
                 }
 
                 return;
@@ -467,6 +480,7 @@ class CodeGenerator
                     Program.Panic("only arrays are supported");
                 }
 
+                ReserveA();
                 EmitAsm("LDA", pointerWideOperand.Low);
                 EmitAsm("CLC");
                 EmitAsm("ADC", new AsmOperand(LowByte(field.Offset), AddressMode.Immediate));
@@ -474,6 +488,7 @@ class CodeGenerator
                 EmitAsm("LDA", pointerWideOperand.High);
                 EmitAsm("ADC", new AsmOperand(HighByte(field.Offset), AddressMode.Immediate));
                 EmitAsm("STA", leftWideOperand.High);
+                ReleaseA();
                 return;
             }
 
@@ -608,6 +623,7 @@ class CodeGenerator
         // Simple value:
         if (TryGetOperand(expr, out operand))
         {
+            ReserveA();
             EmitAsm("LDA", operand);
             return;
         }
@@ -627,6 +643,7 @@ class CodeGenerator
             TryGetOperand(left, out leftOperand) &&
             TryGetConstant(right, out number))
         {
+            ReserveA();
             EmitAsm("LDA", new AsmOperand(0, AddressMode.Immediate));
             EmitAsm("CLC");
             for (int i = 0; i < number; i++)
@@ -687,6 +704,7 @@ class CodeGenerator
         // Simple value:
         if (TryGetOperand(expr, out operand))
         {
+            ReserveY();
             EmitAsm("LDY", operand);
             return;
         }
@@ -703,7 +721,9 @@ class CodeGenerator
 
         // See if the value can be calculated in A:
         CompileIntoA(expr);
+        ReserveY();
         EmitAsm("TAY");
+        ReleaseA();
     }
 
     int CalculateConstantExpression(Expr expr)
@@ -767,16 +787,19 @@ class CodeGenerator
                 {
                     CompileIntoA(arg);
                     EmitAsm("STA", new AsmOperand(offset, AddressMode.ZeroPageX));
+                    ReleaseA();
                 }
                 else if (paramSize == 2)
                 {
                     WideOperand w;
                     if (TryGetWideOperand(arg, out w))
                     {
+                        ReserveA();
                         EmitAsm("LDA", w.Low);
                         EmitAsm("STA", new AsmOperand(offset, AddressMode.ZeroPageX));
                         EmitAsm("LDA", w.High);
                         EmitAsm("STA", new AsmOperand(offset + 1, AddressMode.ZeroPageX));
+                        ReleaseA();
                     }
                     else
                     {
@@ -790,6 +813,8 @@ class CodeGenerator
                 }
             }
 
+            // The return value will be stored in A.
+            ReserveA();
             EmitAsm("JSR", new AsmOperand(function, AddressMode.Absolute));
             return;
         }
@@ -1125,25 +1150,49 @@ class CodeGenerator
 
     void Speculate()
     {
-        Output.Push(new List<Expr>());
-        SpeculationError = false;
+        OutputStack.Push(new OutputTransaction());
     }
 
     void Abort(string reason)
     {
-        if (Output.Count == 1) Program.Panic("cannot abort transaction; no speculative output in progress");
-        SpeculationError = true;
-        AbortReason = reason;
+        if (OutputStack.Count <= 1) Program.Panic("cannot abort transaction; no speculative output in progress");
+        Output.SpeculationError = true;
+        Output.AbortReason = reason;
     }
 
     bool Commit()
     {
-        bool accept = !SpeculationError;
-        List<Expr> latest = Output.Pop();
-        if (Output.Count == 0) Program.Panic("output stack underflowed");
-        if (accept) Output.Peek().AddRange(latest);
-        if (!accept) EmitComment("ABORT: " + AbortReason);
+        bool accept = !Output.SpeculationError;
+        OutputTransaction latest = OutputStack.Pop();
+        if (OutputStack.Count == 0) Program.Panic("output stack underflowed");
+        if (accept) Output.Lines.AddRange(latest.Lines);
+        //if (!accept) EmitComment("ABORT: " + latest.AbortReason);
         return accept;
+    }
+
+    void ReserveA()
+    {
+        if (OutputStack.Any(x => x.ReservedA)) Abort("register A is already in use");
+        Output.ReservedA = true;
+    }
+
+    void ReserveY()
+    {
+        if (OutputStack.Any(x => x.ReservedY)) Abort("register Y is already in use");
+        Output.ReservedY = true;
+    }
+
+    void ReleaseA()
+    {
+        // Don't report errors if a speculation error has occurred, since reserve/release pairs will be unbalanced.
+        if (!Output.SpeculationError && !Output.ReservedA) Program.Panic("register A is not reserved in the current transaction");
+        Output.ReservedA = false;
+    }
+
+    void ReleaseY()
+    {
+        if (!Output.SpeculationError && !Output.ReservedY) Program.Panic("register Y is not reserved in the current transaction");
+        Output.ReservedY = false;
     }
 
     void Emit(params object[] args)
@@ -1153,7 +1202,7 @@ class CodeGenerator
 
     void Emit(Expr e)
     {
-        Output.Peek().Add(e);
+        Output.Lines.Add(e);
     }
 
     void EmitAsm(string mnemonic) => Emit(Expr.MakeAsm(mnemonic));
@@ -1634,4 +1683,12 @@ class AllocationRegion
 class WideOperand
 {
     public AsmOperand Low, High;
+}
+
+class OutputTransaction
+{
+    public List<Expr> Lines = new List<Expr>();
+    public bool SpeculationError;
+    public string AbortReason = "";
+    public bool ReservedA, ReservedY;
 }
