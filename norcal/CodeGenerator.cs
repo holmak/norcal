@@ -638,6 +638,16 @@ class CodeGenerator
             return;
         }
 
+        // Subtraction:
+        if (expr.Match(Tag.Subtract, out left, out right) &&
+            TryGetOperand(right, out rightOperand))
+        {
+            CompileIntoA(left);
+            EmitAsm("SEC");
+            EmitAsm("SBC", rightOperand);
+            return;
+        }
+
         // Multiplication by a constant:
         if (expr.Match(Tag.Multiply, out left, out right) &&
             TryGetOperand(left, out leftOperand) &&
