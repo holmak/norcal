@@ -701,7 +701,7 @@ class CodeGenerator
     }
 
     /// <summary>
-    /// Return true if the expression could be calculated and loaded into Y. Register A may also be overwritten.
+    /// Return true if the expression could be calculated and loaded into Y.
     /// </summary>
     void CompileIntoY(Expr expr)
     {
