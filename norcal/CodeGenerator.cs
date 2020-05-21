@@ -239,7 +239,7 @@ class CodeGenerator
         Expr init, test, induct, body;
         Expr[] block, parts;
         CType type;
-        string name, mnemonic, fieldName;
+        string name, mnemonic, fieldName, op;
         AsmOperand operand;
 
         // Don't print "block" expressions; the subexpressions will be handled individually.
@@ -348,16 +348,9 @@ class CodeGenerator
 
         if (expr.Match(Tag.Assign, out left, out right))
         {
-            int leftSize = SizeOf(left);
-            int rightSize = SizeOf(right);
-
-            if (leftSize == 0) Error(left, "void expressions cannot be used in assignment");
-            if (rightSize == 0) Error(right, "void expressions cannot be used in assignment");
-            if (leftSize > 2) Error(left, "type is too large for assignment");
-            if (rightSize > 2) Error(right, "type is too large for assignment");
-
-            // Expressions involving values wider than one byte are more difficult to compile.
-            bool wide = leftSize > 1 || rightSize > 1;
+            int leftSize, rightSize;
+            bool wide;
+            CheckBinaryOperandWidth(left, right, out leftSize, out rightSize, out wide);
 
             Expr loadExpr, pointerExpr, arrayExpr, indexExpr, structExpr;
             AsmOperand leftOperand, rightOperand, basePointer;
@@ -510,6 +503,46 @@ class CodeGenerator
             return;
         }
 
+        if (expr.Match(Tag.AssignModify, out op, out left, out right))
+        {
+            int leftSize, rightSize;
+            bool wide;
+            CheckBinaryOperandWidth(left, right, out leftSize, out rightSize, out wide);
+
+            AsmOperand leftOperand, rightOperand;
+
+            if (!wide && TryGetOperand(left, out leftOperand) && TryGetOperand(right, out rightOperand))
+            {
+                // Pattern:
+                // left @= right;
+                //
+                // LDA left
+                // OP@ right
+                // STA left
+
+                Speculate();
+                CompileIntoA(left);
+                if (op == Tag.Add)
+                {
+                    EmitAsm("CLC");
+                    EmitAsm("ADC", rightOperand);
+                }
+                else if (op == Tag.Subtract)
+                {
+                    EmitAsm("SEC");
+                    EmitAsm("SBC", rightOperand);
+                }
+                else
+                {
+                    Abort("unhandled binary operation");
+                }
+                EmitAsm("STA", leftOperand);
+                ReleaseA();
+                if (Commit()) return;
+            }
+
+        }
+
         if (expr.MatchTag(Tag.Call))
         {
             Speculate();
@@ -549,6 +582,20 @@ class CodeGenerator
         }
 
         NYI("unhandled expression");
+    }
+
+    void CheckBinaryOperandWidth(Expr left, Expr right, out int leftSize, out int rightSize, out bool wide)
+    {
+        leftSize = SizeOf(left);
+        rightSize = SizeOf(right);
+
+        if (leftSize == 0) Error(left, "void expressions cannot be used in assignment");
+        if (rightSize == 0) Error(right, "void expressions cannot be used in assignment");
+        if (leftSize > 2) Error(left, "type is too large for assignment");
+        if (rightSize > 2) Error(right, "type is too large for assignment");
+
+        // Expressions involving values wider than one byte are more difficult to compile.
+        wide = leftSize > 1 || rightSize > 1;
     }
 
     void CompileJumpIf(bool condition, Expr expr, AsmOperand target)
