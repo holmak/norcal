@@ -399,6 +399,7 @@ class CodeGenerator
                 CompileIntoA(right);
                 EmitAsm("STA", basePointer);
                 ReleaseA();
+                ReleaseY();
                 if (Commit()) return;
 
                 Speculate();
@@ -406,6 +407,7 @@ class CodeGenerator
                 CompileIntoY(indexExpr);
                 EmitAsm("STA", basePointer);
                 ReleaseA();
+                ReleaseY();
                 if (Commit()) return;
             }
 
@@ -512,6 +514,7 @@ class CodeGenerator
         {
             Speculate();
             CompileCall(expr);
+            ReleaseA();
             if (Commit()) return;
         }
 
@@ -535,6 +538,7 @@ class CodeGenerator
             Speculate();
             CompileIntoA(subexpr);
             ReturnFromFunction();
+            ReleaseA();
             if (Commit()) return;
         }
 
@@ -566,6 +570,7 @@ class CodeGenerator
             CompileIntoA(expr);
             string opcode = condition ? "BNE" : "BEQ";
             EmitAsm(opcode, target);
+            ReleaseA();
             if (Commit()) return;
         }
 
@@ -586,6 +591,7 @@ class CodeGenerator
             EmitAsm("CMP", rightOperand);
             string opcode = condition ? "BCC" : "BCS";
             EmitAsm(opcode, target);
+            ReleaseA();
             if (Commit()) return;
         }
 
@@ -1200,6 +1206,7 @@ class CodeGenerator
 
     bool Commit()
     {
+        if (Output.ReservedA || Output.ReservedY) Program.Panic("registers were not released");
         bool accept = !Output.SpeculationError;
         OutputTransaction latest = OutputStack.Pop();
         if (OutputStack.Count == 0) Program.Panic("output stack underflowed");
