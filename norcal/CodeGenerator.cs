@@ -533,6 +533,12 @@ class CodeGenerator
             return;
         }
 
+        if (expr.Match(Tag.Return))
+        {
+            ReturnFromFunction();
+            return;
+        }
+
         if (expr.Match(Tag.Return, out subexpr))
         {
             Speculate();
