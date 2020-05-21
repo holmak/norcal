@@ -634,7 +634,7 @@ class CodeGenerator
     {
         if (SizeOf(expr) != 1) Abort("too large for A");
 
-        Expr left, right, structExpr, pointerExpr;
+        Expr left, right, structExpr, pointerExpr, indexExpr;
         AsmOperand operand, leftOperand, rightOperand, basePointer;
         int number;
         string fieldName;
@@ -644,6 +644,17 @@ class CodeGenerator
         {
             ReserveA();
             EmitAsm("LDA", operand);
+            return;
+        }
+
+        // Index:
+        if (expr.Match(Tag.Index, out pointerExpr, out indexExpr) &&
+            TryGetPointerOperand(pointerExpr, out basePointer))
+        {
+            CompileIntoY(indexExpr);
+            ReserveA();
+            EmitAsm("LDA", basePointer);
+            ReleaseY();
             return;
         }
 
