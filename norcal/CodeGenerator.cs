@@ -886,6 +886,18 @@ class CodeGenerator
             return;
         }
 
+        // Modulus by a constant:
+        if (expr.Match(Tag.Modulus, out left, out right) &&
+            TryGetConstant(right, out number))
+        {
+            // By any number, via lookup table:
+            CompileIntoY(left);
+            ReserveA();
+            EmitAsm("LDA", GenerateModulusTable(number).WithMode(AddressMode.AbsoluteY));
+            ReleaseY();
+            return;
+        }
+
         // Call:
         if (expr.MatchTag(Tag.Call))
         {
@@ -1215,6 +1227,18 @@ class CodeGenerator
             table[i] = i / divisor;
         }
         string name = "_lookup_divide_by_" + divisor;
+        LookupTables[name] = table;
+        return new AsmOperand(name, AddressMode.Absolute);
+    }
+
+    AsmOperand GenerateModulusTable(int divisor)
+    {
+        int[] table = new int[256];
+        for (int i = 0; i < 256; i++)
+        {
+            table[i] = i % divisor;
+        }
+        string name = "_lookup_modulus_by_" + divisor;
         LookupTables[name] = table;
         return new AsmOperand(name, AddressMode.Absolute);
     }
