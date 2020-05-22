@@ -391,7 +391,6 @@ class CodeGenerator
                     // STA array,Y
 
                     Speculate();
-                    EmitComment("NEW-A");
                     CompileIntoY(indexExpr);
                     CompileIntoA(right);
                     EmitAsm("STA", baseAddress.WithMode(AddressMode.AbsoluteY));
@@ -400,7 +399,6 @@ class CodeGenerator
                     if (Commit()) return;
 
                     Speculate();
-                    EmitComment("NEW-B");
                     CompileIntoA(right);
                     CompileIntoY(indexExpr);
                     EmitAsm("STA", baseAddress.WithMode(AddressMode.AbsoluteY));
