@@ -690,7 +690,7 @@ class CodeGenerator
         if (SizeOf(expr) != 1) Abort("too large for A");
 
         Expr left, right, structExpr, pointerExpr, indexExpr;
-        AsmOperand operand, leftOperand, rightOperand, basePointer;
+        AsmOperand operand, leftOperand, rightOperand, baseAddress, basePointer;
         int number;
         string fieldName;
 
@@ -702,15 +702,26 @@ class CodeGenerator
             return;
         }
 
-        // Index:
-        if (expr.Match(Tag.Index, out pointerExpr, out indexExpr) &&
-            TryGetPointerOperand(pointerExpr, out basePointer))
+        // Index direct or indirect:
+        if (expr.Match(Tag.Index, out pointerExpr, out indexExpr))
         {
-            CompileIntoY(indexExpr);
-            ReserveA();
-            EmitAsm("LDA", basePointer);
-            ReleaseY();
-            return;
+            if (TryGetConstantBaseAddress(pointerExpr, out baseAddress))
+            {
+                CompileIntoY(indexExpr);
+                ReserveA();
+                EmitAsm("LDA", baseAddress.WithMode(AddressMode.AbsoluteY));
+                ReleaseY();
+                return;
+            }
+
+            if (TryGetPointerOperand(pointerExpr, out basePointer))
+            {
+                CompileIntoY(indexExpr);
+                ReserveA();
+                EmitAsm("LDA", basePointer);
+                ReleaseY();
+                return;
+            }
         }
 
         // Field via pointer to struct:
@@ -1046,6 +1057,24 @@ class CodeGenerator
             operand = null;
             return false;
         }
+    }
+
+    /// <summary>
+    /// True only if the expression is a compile-time constant base address.
+    /// </summary>
+    bool TryGetConstantBaseAddress(Expr expr, out AsmOperand baseAddress)
+    {
+        // Globally allocated arrays have a constant base address:
+        CType originalType = TypeOfWithoutDecay(expr);
+        WideOperand wideOperand;
+        if (TryGetWideOperand(expr, out wideOperand) && originalType.IsArray)
+        {
+            baseAddress = wideOperand.Low;
+            return true;
+        }
+
+        baseAddress = null;
+        return false;
     }
 
     bool TryGetPointerOperand(Expr expr, out AsmOperand baseAddress)
