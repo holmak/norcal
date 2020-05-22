@@ -737,13 +737,25 @@ class CodeGenerator
         }
 
         // Addition:
-        if (expr.Match(Tag.Add, out left, out right) &&
-            TryGetOperand(right, out rightOperand))
+        if (expr.Match(Tag.Add, out left, out right))
         {
-            CompileIntoA(left);
-            EmitAsm("CLC");
-            EmitAsm("ADC", rightOperand);
-            return;
+            // Try both orders, since we can only handle one complex operand.
+
+            if (TryGetOperand(right, out rightOperand))
+            {
+                CompileIntoA(left);
+                EmitAsm("CLC");
+                EmitAsm("ADC", rightOperand);
+                return;
+            }
+
+            if (TryGetOperand(left, out leftOperand))
+            {
+                CompileIntoA(right);
+                EmitAsm("CLC");
+                EmitAsm("ADC", leftOperand);
+                return;
+            }
         }
 
         // Subtraction:
