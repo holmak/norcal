@@ -768,26 +768,11 @@ class CodeGenerator
         }
 
         // Addition:
-        if (expr.Match(Tag.Add, out left, out right))
+        if (CompileCommutativeBinaryOperatorIntoA(expr, Tag.Add, other =>
         {
-            // Try both orders, since we can only handle one complex operand.
-
-            if (TryGetOperand(right, out rightOperand))
-            {
-                CompileIntoA(left);
-                EmitAsm("CLC");
-                EmitAsm("ADC", rightOperand);
-                return;
-            }
-
-            if (TryGetOperand(left, out leftOperand))
-            {
-                CompileIntoA(right);
-                EmitAsm("CLC");
-                EmitAsm("ADC", leftOperand);
-                return;
-            }
-        }
+            EmitAsm("CLC");
+            EmitAsm("ADC", other);
+        })) return;
 
         // Subtraction:
         if (expr.Match(Tag.Subtract, out left, out right) &&
@@ -808,31 +793,22 @@ class CodeGenerator
         }
 
         // Bitwise AND:
-        if (expr.Match(Tag.BitwiseAnd, out left, out right) &&
-            TryGetOperand(right, out rightOperand))
+        if (CompileCommutativeBinaryOperatorIntoA(expr, Tag.BitwiseAnd, other =>
         {
-            CompileIntoA(left);
-            EmitAsm("AND", rightOperand);
-            return;
-        }
+            EmitAsm("AND", other);
+        })) return;
 
         // Bitwise OR:
-        if (expr.Match(Tag.BitwiseOr, out left, out right) &&
-            TryGetOperand(right, out rightOperand))
+        if (CompileCommutativeBinaryOperatorIntoA(expr, Tag.BitwiseOr, other =>
         {
-            CompileIntoA(left);
-            EmitAsm("ORA", rightOperand);
-            return;
-        }
+            EmitAsm("ORA", other);
+        })) return;
 
         // Bitwise XOR:
-        if (expr.Match(Tag.BitwiseXor, out left, out right) &&
-            TryGetOperand(right, out rightOperand))
+        if (CompileCommutativeBinaryOperatorIntoA(expr, Tag.BitwiseXor, other =>
         {
-            CompileIntoA(left);
-            EmitAsm("EOR", rightOperand);
-            return;
-        }
+            EmitAsm("EOR", other);
+        })) return;
 
         // Multiplication by a constant:
         if (expr.Match(Tag.Multiply, out left, out right) &&
@@ -906,6 +882,33 @@ class CodeGenerator
         }
 
         Abort("too complex for A");
+    }
+
+    bool CompileCommutativeBinaryOperatorIntoA(Expr expr, string tag, Action<AsmOperand> generate)
+    {
+        Expr left, right;
+        AsmOperand otherOperand;
+
+        if (expr.Match(tag, out left, out right))
+        {
+            // Try both orders, since we can only handle one complex operand.
+
+            if (TryGetOperand(right, out otherOperand))
+            {
+                CompileIntoA(left);
+                generate(otherOperand);
+                return true;
+            }
+
+            if (TryGetOperand(left, out otherOperand))
+            {
+                CompileIntoA(right);
+                generate(otherOperand);
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
