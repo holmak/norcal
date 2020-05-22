@@ -214,10 +214,17 @@ class CodeGenerator
         AsmOperand operand;
 
         // Don't print "block" expressions; the subexpressions will be handled individually.
-        if (!expr.MatchTag(Tag.Sequence) && !expr.MatchTag(Tag.If) && !expr.MatchTag(Tag.For))
+        // Also don't print "empty" expressions.
+        if ( !expr.MatchTag(Tag.Sequence) && !expr.MatchTag(Tag.If) && !expr.MatchTag(Tag.For) && !expr.Match(Tag.Empty))
         {
             EmitComment("");
             EmitComment("{0}", ToSourceCode(expr));
+        }
+
+        if (expr.Match(Tag.Empty))
+        {
+            // Nothing!
+            return;
         }
 
         if (expr.MatchAny(Tag.Sequence, out block))
