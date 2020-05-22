@@ -11,6 +11,7 @@ class CodeGenerator
     OutputTransaction Output => OutputStack.Peek();
     Dictionary<string, CFunctionInfo> Functions = new Dictionary<string, CFunctionInfo>();
     Dictionary<string, AggregateInfo> AggregateTypes = new Dictionary<string, AggregateInfo>();
+    Dictionary<string, int[]> LookupTables = new Dictionary<string, int[]>();
 
     // Global allocation:
     // (Reserve the top half of zero page for the parameter stack.)
@@ -129,46 +130,7 @@ class CodeGenerator
             }
             else if (decl.Match(Tag.ReadonlyData, out type, out name, out values))
             {
-                if (type.IsArray)
-                {
-                    type = CalculateConstantArrayDimensions(type);
-
-                    // If the array size is unspecified, automatically make it match the number of provided values.
-                    if (type.Dimension == 0)
-                    {
-                        type = CType.MakeArray(type.Subtype, values.Length);
-                    }
-
-                    if (values.Length > type.Dimension)
-                    {
-                        Error(
-                            decl,
-                            "declared size of array ({0}) is too small for the number of specified values ({1})",
-                            type.Dimension, values.Length);
-                    }
-                }
-                else if (values.Length != 1)
-                {
-                    Program.Panic(decl.Source, "non-array initializers must contain exactly one value");
-                }
-
-                // Convert the data to raw bytes:
-                byte[] bytes = new byte[SizeOf(decl, type)];
-                if (type.IsArray && type.Subtype == CType.UInt8)
-                {
-                    for (int i = 0; i < type.Dimension; i++)
-                    {
-                        // Unspecified elements are initialized to zero.
-                        bytes[i] = (i < values.Length) ? (byte)values[i] : (byte)0;
-                    }
-                }
-                else
-                {
-                    Program.NYI();
-                }
-
-                DeclareSymbol(decl, new Symbol(SymbolTag.ReadonlyData, 0, type, name));
-                Emit(Tag.ReadonlyData, name, bytes);
+                DeclareReadonlyData(decl, type, name, values);
             }
         }
 
@@ -215,6 +177,13 @@ class CodeGenerator
                 ReturnFromFunction();
                 EndScope();
             }
+        }
+
+        // Pass: Emit all necessary lookup tables.
+        foreach (var entry in LookupTables)
+        {
+            int[] data = entry.Value;
+            DeclareReadonlyData(null, CType.MakeArray(CType.UInt8, data.Length), entry.Key, data);
         }
 
         // Put the interrupt vector table at the end of ROM:
@@ -816,16 +785,26 @@ class CodeGenerator
             return;
         }
 
-        // Division by a power of two:
+        // Division by a constant:
         if (expr.Match(Tag.Divide, out left, out right) &&
-            TryGetConstant(right, out number) &&
-            TryGetPowerOfTwo(number, out power))
+            TryGetConstant(right, out number))
         {
-            CompileIntoA(left);
-            for (int i = 0; i < power; i++)
+            // By a small power of two:
+            if (TryGetPowerOfTwo(number, out power) && power < 4)
             {
-                EmitAsm("LSR");
+                CompileIntoA(left);
+                for (int i = 0; i < power; i++)
+                {
+                    EmitAsm("LSR");
+                }
+                return;
             }
+
+            // By any number, via lookup table:
+            CompileIntoY(left);
+            ReserveA();
+            EmitAsm("LDA", GenerateDivisionTable(number).WithMode(AddressMode.AbsoluteY));
+            ReleaseY();
             return;
         }
 
@@ -1150,6 +1129,18 @@ class CodeGenerator
         }
     }
 
+    AsmOperand GenerateDivisionTable(int divisor)
+    {
+        int[] table = new int[256];
+        for (int i = 0; i < 256; i++)
+        {
+            table[i] = i / divisor;
+        }
+        string name = "_lookup_divide_by_" + divisor;
+        LookupTables[name] = table;
+        return new AsmOperand(name, AddressMode.Absolute);
+    }
+
     int SizeOfLocals(Expr expr)
     {
         CType type;
@@ -1456,6 +1447,50 @@ class CodeGenerator
 
         type = CalculateConstantArrayDimensions(type);
         return DeclareSymbol(origin, new Symbol(SymbolTag.Global, address, type, name));
+    }
+
+    void DeclareReadonlyData(Expr origin, CType type, string name, int[] values)
+    {
+        if (type.IsArray)
+        {
+            type = CalculateConstantArrayDimensions(type);
+
+            // If the array size is unspecified, automatically make it match the number of provided values.
+            if (type.Dimension == 0)
+            {
+                type = CType.MakeArray(type.Subtype, values.Length);
+            }
+
+            if (values.Length > type.Dimension)
+            {
+                Error(
+                    origin,
+                    "declared size of array ({0}) is too small for the number of specified values ({1})",
+                    type.Dimension, values.Length);
+            }
+        }
+        else if (values.Length != 1)
+        {
+            Program.Panic(origin.Source, "non-array initializers must contain exactly one value");
+        }
+
+        // Convert the data to raw bytes:
+        byte[] bytes = new byte[SizeOf(origin, type)];
+        if (type.IsArray && type.Subtype == CType.UInt8)
+        {
+            for (int i = 0; i < type.Dimension; i++)
+            {
+                // Unspecified elements are initialized to zero.
+                bytes[i] = (i < values.Length) ? (byte)values[i] : (byte)0;
+            }
+        }
+        else
+        {
+            Program.NYI();
+        }
+
+        DeclareSymbol(origin, new Symbol(SymbolTag.ReadonlyData, 0, type, name));
+        Emit(Tag.ReadonlyData, name, bytes);
     }
 
     /// <summary>
