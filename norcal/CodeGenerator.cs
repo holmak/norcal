@@ -125,12 +125,14 @@ class CodeGenerator
             }
             else if (decl.Match(Tag.Variable, out region, out type, out name))
             {
-                DeclareGlobal(decl, region, type, name);
+                DeclareGlobal(decl, region, CalculateConstantArrayDimensions(type), name);
             }
             else if (decl.Match(Tag.ReadonlyData, out type, out name, out values))
             {
                 if (type.IsArray)
                 {
+                    type = CalculateConstantArrayDimensions(type);
+
                     // If the array size is unspecified, automatically make it match the number of provided values.
                     if (type.Dimension == 0)
                     {
@@ -1406,7 +1408,16 @@ class CodeGenerator
     {
         if (type.Tag == CTypeTag.ArrayWithDimensionExpression)
         {
-            int dimension = CalculateConstantExpression(type.DimensionExpression);
+            int dimension;
+            if (type.DimensionExpression.Match(Tag.Empty))
+            {
+                // If no dimension is specified, it is implied by the assigned elements.
+                dimension = 0;
+            }
+            else
+            {
+                dimension = CalculateConstantExpression(type.DimensionExpression);
+            }
             type = CType.MakeArray(type.Subtype, dimension);
         }
         return type;
