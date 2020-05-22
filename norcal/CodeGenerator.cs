@@ -355,7 +355,7 @@ class CodeGenerator
             CheckBinaryOperandWidth(left, right, out leftSize, out rightSize, out wide);
 
             Expr loadExpr, pointerExpr, arrayExpr, indexExpr, structExpr;
-            AsmOperand leftOperand, rightOperand, basePointer;
+            AsmOperand leftOperand, rightOperand, baseAddress, basePointer;
             WideOperand leftWideOperand, rightWideOperand, pointerWideOperand;
 
             if (!wide && TryGetOperand(left, out leftOperand))
@@ -373,37 +373,67 @@ class CodeGenerator
                 if (Commit()) return;
             }
 
-            if (!wide &&
-                left.Match(Tag.Index, out arrayExpr, out indexExpr) &&
-                TryGetPointerOperand(arrayExpr, out basePointer))
+            if (!wide && left.Match(Tag.Index, out arrayExpr, out indexExpr))
             {
-                // Pattern:
-                // array[index] = right;
-                //
-                // LDY index
-                // LDA right
-                // STA (array),Y
-
-                // There are two subexpressions to compile here: the index and the right hand side.
+                // With an indexed expression, there are two subexpressions to compile:
+                // the index and the right hand side.
                 // Typically you want to compile the more complicated expression first so that
                 // you have more registers to work with; therefore, try compiling in both orders and
                 // hope that one works.
 
-                Speculate();
-                CompileIntoY(indexExpr);
-                CompileIntoA(right);
-                EmitAsm("STA", basePointer);
-                ReleaseA();
-                ReleaseY();
-                if (Commit()) return;
+                if (TryGetConstantBaseAddress(arrayExpr, out baseAddress))
+                {
+                    // Pattern:
+                    // array[index] = right;
+                    //
+                    // LDY index
+                    // LDA right
+                    // STA array,Y
 
-                Speculate();
-                CompileIntoA(right);
-                CompileIntoY(indexExpr);
-                EmitAsm("STA", basePointer);
-                ReleaseA();
-                ReleaseY();
-                if (Commit()) return;
+                    Speculate();
+                    EmitComment("NEW-A");
+                    CompileIntoY(indexExpr);
+                    CompileIntoA(right);
+                    EmitAsm("STA", baseAddress.WithMode(AddressMode.AbsoluteY));
+                    ReleaseA();
+                    ReleaseY();
+                    if (Commit()) return;
+
+                    Speculate();
+                    EmitComment("NEW-B");
+                    CompileIntoA(right);
+                    CompileIntoY(indexExpr);
+                    EmitAsm("STA", baseAddress.WithMode(AddressMode.AbsoluteY));
+                    ReleaseA();
+                    ReleaseY();
+                    if (Commit()) return;
+                }
+
+                if (TryGetPointerOperand(arrayExpr, out basePointer))
+                {
+                    // Pattern:
+                    // array[index] = right;
+                    //
+                    // LDY index
+                    // LDA right
+                    // STA (array),Y
+
+                    Speculate();
+                    CompileIntoY(indexExpr);
+                    CompileIntoA(right);
+                    EmitAsm("STA", basePointer);
+                    ReleaseA();
+                    ReleaseY();
+                    if (Commit()) return;
+
+                    Speculate();
+                    CompileIntoA(right);
+                    CompileIntoY(indexExpr);
+                    EmitAsm("STA", basePointer);
+                    ReleaseA();
+                    ReleaseY();
+                    if (Commit()) return;
+                }
             }
 
             if (!wide &&
