@@ -433,8 +433,9 @@ partial class Parser
                         AsmOperand operand = ParseAssemblyOperand(AddressMode.Absolute);
                         if (TryParse(TokenType.COMMA))
                         {
-                            ExpectKeyword("X");
-                            operand = operand.WithMode(AddressMode.AbsoluteX);
+                            if (TryParseName("X")) operand = operand.WithMode(AddressMode.AbsoluteX);
+                            else if (TryParseName("Y")) operand = operand.WithMode(AddressMode.AbsoluteY);
+                            else ParserError("expected 'X' or 'Y'");
                         }
                         Expect(TokenType.NEWLINE);
                         parts.Add(Expr.MakeAsm(symbol, operand));

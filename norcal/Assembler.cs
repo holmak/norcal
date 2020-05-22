@@ -306,6 +306,7 @@ class Assembler
         else if (mode == AddressMode.ZeroPageX) return AsmInfo.ZPX;
         else if (mode == AddressMode.Absolute) return AsmInfo.ABS;
         else if (mode == AddressMode.AbsoluteX) return AsmInfo.ABX;
+        else if (mode == AddressMode.AbsoluteY) return AsmInfo.ABY;
         else if (mode == AddressMode.Immediate) return AsmInfo.IMM;
         else if (mode == AddressMode.Indirect) return AsmInfo.INV;
         else if (mode == AddressMode.IndirectX) return AsmInfo.ZXI;
@@ -435,6 +436,7 @@ class AsmOperand
         else if (Mode == AddressMode.ZeroPageX) format = "{0},X";
         else if (Mode == AddressMode.Absolute) format = "{0}";
         else if (Mode == AddressMode.AbsoluteX) format = "{0},X";
+        else if (Mode == AddressMode.AbsoluteY) format = "{0},Y";
         else if (Mode == AddressMode.Indirect) format = "({0})";
         else if (Mode == AddressMode.IndirectX) format = "({0},X)";
         else if (Mode == AddressMode.IndirectY) format = "({0}),Y";
@@ -456,6 +458,7 @@ enum AddressMode
     ZeroPageX,
     Absolute,
     AbsoluteX,
+    AbsoluteY,
     Indirect,
     IndirectX,
     IndirectY,
