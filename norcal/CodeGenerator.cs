@@ -717,7 +717,7 @@ class CodeGenerator
     {
         if (SizeOf(expr) != 1) Abort("too large for A");
 
-        Expr left, right, structExpr, pointerExpr, indexExpr;
+        Expr left, right, subexpr, structExpr, pointerExpr, indexExpr;
         AsmOperand operand, leftOperand, rightOperand, baseAddress, basePointer;
         int number;
         string fieldName;
@@ -796,6 +796,41 @@ class CodeGenerator
             CompileIntoA(left);
             EmitAsm("SEC");
             EmitAsm("SBC", rightOperand);
+            return;
+        }
+
+        // Bitwise NOT:
+        if (expr.Match(Tag.BitwiseNot, out subexpr))
+        {
+            CompileIntoA(subexpr);
+            EmitAsm("EOR", new AsmOperand(0xFF, AddressMode.Immediate));
+            return;
+        }
+
+        // Bitwise AND:
+        if (expr.Match(Tag.BitwiseAnd, out left, out right) &&
+            TryGetOperand(right, out rightOperand))
+        {
+            CompileIntoA(left);
+            EmitAsm("AND", rightOperand);
+            return;
+        }
+
+        // Bitwise OR:
+        if (expr.Match(Tag.BitwiseOr, out left, out right) &&
+            TryGetOperand(right, out rightOperand))
+        {
+            CompileIntoA(left);
+            EmitAsm("ORA", rightOperand);
+            return;
+        }
+
+        // Bitwise XOR:
+        if (expr.Match(Tag.BitwiseXor, out left, out right) &&
+            TryGetOperand(right, out rightOperand))
+        {
+            CompileIntoA(left);
+            EmitAsm("EOR", rightOperand);
             return;
         }
 
