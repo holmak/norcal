@@ -1733,13 +1733,13 @@ void reset()
 // If a function call should not be made, due to short-circuiting,
 // the caller passes TRUE as the "explode" parameter.
 
-uint8_t yes(uint16_t explode)
+u8 yes(u8 explode)
 {
     if (explode) OUT = 8;
     return 1;
 }
 
-uint8_t no(uint16_t explode)
+u8 no(u8 explode)
 {
     if (explode) OUT = 8;
     return 0;
