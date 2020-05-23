@@ -730,6 +730,49 @@ class CodeGenerator
             if (Commit()) return;
         }
 
+        // Jump if equal:
+        if (expr.Match(Tag.Equal, out left, out right))
+        {
+            // Pattern:
+            // if (a == b) ...
+            //
+            // LDA b
+            // CMP a
+            // BEQ/BNE target
+
+            // Try both orderings of operands.
+
+            if (TryGetOperand(right, out rightOperand))
+            {
+                Speculate();
+                CompileIntoA(left);
+                EmitAsm("CMP", rightOperand);
+                string opcode = condition ? "BEQ" : "BNE";
+                EmitAsm(opcode, target);
+                ReleaseA();
+                if (Commit()) return;
+            }
+
+            if (TryGetOperand(left, out leftOperand))
+            {
+                Speculate();
+                CompileIntoA(right);
+                EmitAsm("CMP", leftOperand);
+                string opcode = condition ? "BEQ" : "BNE";
+                EmitAsm(opcode, target);
+                ReleaseA();
+                if (Commit()) return;
+            }
+        }
+
+        // (a != b) === !(a == b)
+        if (expr.Match(Tag.NotEqual, out left, out right))
+        {
+            CompileJumpIf(!condition, Expr.Make(Tag.Equal, left, right), target);
+            return;
+        }
+
+
         // Jump if less than:
         if (expr.Match(Tag.LessThan, out left, out right) &&
             TryGetOperand(right, out rightOperand))
