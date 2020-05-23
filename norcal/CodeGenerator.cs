@@ -186,6 +186,86 @@ class CodeGenerator
             DeclareReadonlyData(null, CType.MakeArray(CType.UInt8, data.Length), entry.Key, data);
         }
 
+        // Pass: Convert excessively long branches to branch-jump sequences:
+        {
+            // This is not totally accurate, and may underestimate the branch distance.
+            // Fortunately, if we estimate incorrectly, the assembler will throw an error
+            // instead of silently generating bad code.
+            const int ApproximateInstructionSize = 2;
+
+            // First, determine the approximate address of every label:
+            Dictionary<string, int> roughLabels = new Dictionary<string, int>();
+            string scope = "(global)";
+            int roughAddress = 0;
+            foreach (Expr line in Output.Lines)
+            {
+                string label;
+
+                if (line.Match(Tag.Function, out label))
+                {
+                    scope = label;
+                }
+                else if (line.Match(Tag.Label, out label))
+                {
+                    roughLabels.Add(scope + ":" + label, roughAddress);
+                }
+
+                if (line.MatchTag(Tag.Asm))
+                {
+                    roughAddress += ApproximateInstructionSize;
+                }
+            }
+
+            // Second, calculate the estimated distance from each branch to its target label.
+            // If the distance is too large, convert it to a branch-jump sequence, which has unlimited range.
+            List<Expr> adjustedOutput = new List<Expr>();
+            scope = "(global)";
+            roughAddress = 0;
+            foreach (Expr line in Output.Lines)
+            {
+                string mnemonic, label;
+                AsmOperand operand;
+                bool altered = false;
+
+                if (line.Match(Tag.Function, out label))
+                {
+                    scope = label;
+                }
+                else if (line.Match(Tag.Asm, out mnemonic, out operand))
+                {
+                    string opposite;
+                    if (GetOppositeBranchOp(mnemonic).TryGet(out opposite) &&
+                        operand.Mode == AddressMode.Absolute &&
+                        operand.Base.HasValue)
+                    {
+                        int targetAddress = roughLabels[scope + ":" + operand.Base.Value];
+                        int distance = Math.Abs(targetAddress - roughAddress);
+
+                        // The range of relative branches is roughly +/-127.
+                        if (distance > 120)
+                        {
+                            adjustedOutput.Add(Expr.Make(Tag.Comment, "long branch"));
+                            adjustedOutput.Add(Expr.MakeAsm(opposite, new AsmOperand(3, AddressMode.Relative)));
+                            adjustedOutput.Add(Expr.MakeAsm("JMP", operand));
+                            altered = true;
+                        }
+                    }
+                }
+
+                if (!altered)
+                {
+                    adjustedOutput.Add(line);
+                }
+
+                if (line.MatchTag(Tag.Asm))
+                {
+                    roughAddress += ApproximateInstructionSize;
+                }
+            }
+
+            Output.Lines = adjustedOutput;
+        }
+
         // Put the interrupt vector table at the end of ROM:
         Emit(Tag.SkipTo, 0xFFFA);
         Emit(Tag.Word, "nmi");
@@ -1926,6 +2006,15 @@ class CodeGenerator
         Tag.LessThanOrEqual,
         Tag.GreaterThanOrEqual,
     };
+
+    static Maybe<string> GetOppositeBranchOp(string op)
+    {
+        if (op == "BEQ") return "BNE";
+        if (op == "BNE") return "BEQ";
+        if (op == "BCC") return "BCS";
+        if (op == "BCS") return "BCC";
+        return Maybe.Nothing;
+    }
 }
 
 class Symbol
