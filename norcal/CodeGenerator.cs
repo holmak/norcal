@@ -244,7 +244,6 @@ class CodeGenerator
                         // The range of relative branches is roughly +/-127.
                         if (distance > 120)
                         {
-                            adjustedOutput.Add(Expr.Make(Tag.Comment, "long branch"));
                             adjustedOutput.Add(Expr.MakeAsm(opposite, new AsmOperand(3, AddressMode.Relative)));
                             adjustedOutput.Add(Expr.MakeAsm("JMP", operand));
                             altered = true;
