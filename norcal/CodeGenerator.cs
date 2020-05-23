@@ -191,7 +191,7 @@ class CodeGenerator
             // This is not totally accurate, and may underestimate the branch distance.
             // Fortunately, if we estimate incorrectly, the assembler will throw an error
             // instead of silently generating bad code.
-            const int ApproximateInstructionSize = 2;
+            const int ApproximateInstructionSize = 3;
 
             // First, determine the approximate address of every label:
             Dictionary<string, int> roughLabels = new Dictionary<string, int>();
@@ -393,11 +393,11 @@ class CodeGenerator
             {
                 test = parts[i];
                 body = parts[i + 1];
-                AsmOperand nextClause = MakeUniqueLabel("next_clause");
-                CompileJumpIf(false, test, nextClause);
+                AsmOperand elseLabel = MakeUniqueLabel("else");
+                CompileJumpIf(false, test, elseLabel);
                 CompileStatement(body);
                 EmitAsm("JMP", endIf);
-                EmitLabel(nextClause);
+                EmitLabel(elseLabel);
             }
             EmitLabel(endIf);
             return;
@@ -707,7 +707,7 @@ class CodeGenerator
         EmitComment("jump if {0}: {1}", condition.ToString().ToLower(), ToSourceCode(expr));
 
         AsmOperand operand, leftOperand, rightOperand;
-        Expr left, right;
+        Expr subexpr, left, right;
         int number;
 
         // Jump (or not) unconditionally when the condition is a constant:
@@ -815,7 +815,24 @@ class CodeGenerator
             return;
         }
 
+        // Jump if !a:
+        if (expr.Match(Tag.LogicalNot, out subexpr))
+        {
+            CompileJumpIf(!condition, subexpr, target);
+            return;
+        }
+
         // Jump if (a && b):
+        if (condition && expr.Match(Tag.LogicalAnd, out left, out right))
+        {
+            AsmOperand skip = MakeUniqueLabel("skip");
+            CompileJumpIf(false, left, skip);
+            CompileJumpIf(true, right, target);
+            EmitLabel(skip);
+            return;
+        }
+
+        // Jump if !(a && b):
         if (!condition && expr.Match(Tag.LogicalAnd, out left, out right))
         {
             CompileJumpIf(false, left, target);
@@ -823,7 +840,23 @@ class CodeGenerator
             return;
         }
 
-        // (a || b) === (!a && !b)
+        // Jump if (a || b):
+        if (condition && expr.Match(Tag.LogicalOr, out left, out right))
+        {
+            CompileJumpIf(true, left, target);
+            CompileJumpIf(true, right, target);
+            return;
+        }
+
+        // Jump if !(a || b):
+        if (!condition && expr.Match(Tag.LogicalOr, out left, out right))
+        {
+            AsmOperand skip = MakeUniqueLabel("skip");
+            CompileJumpIf(true, left, skip);
+            CompileJumpIf(false, right, target);
+            EmitLabel(skip);
+            return;
+        }
 
         // Wide comparison:
         // aa < bb === if (ah == bh) then (al < bl); else (ah < bh)
