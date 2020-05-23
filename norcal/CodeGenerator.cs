@@ -872,7 +872,7 @@ class CodeGenerator
     {
         if (SizeOf(expr) != 1) Abort("too large for A");
 
-        Expr left, right, subexpr, structExpr, pointerExpr, indexExpr;
+        Expr left, right, subexpr, structExpr, pointerExpr, indexExpr, test;
         AsmOperand operand, leftOperand, rightOperand, baseAddress, basePointer;
         int number;
         string fieldName;
@@ -1033,6 +1033,22 @@ class CodeGenerator
         if (expr.MatchTag(Tag.Call))
         {
             CompileCall(expr);
+            return;
+        }
+
+        // Conditional expression:
+        if (expr.Match(Tag.Conditional, out test, out left, out right))
+        {
+            AsmOperand elseLabel = MakeUniqueLabel("cond_else");
+            AsmOperand endLabel = MakeUniqueLabel("cond_end");
+            CompileJumpIf(false, test, elseLabel);
+            CompileIntoA(left);
+            // Note: We aren't really releasing A here, but we need to compile into A in both branches.
+            ReleaseA();
+            EmitAsm("JMP", endLabel);
+            EmitLabel(elseLabel);
+            CompileIntoA(right);
+            EmitLabel(endLabel);
             return;
         }
 
