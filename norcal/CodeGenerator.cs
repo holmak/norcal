@@ -585,21 +585,33 @@ class CodeGenerator
 
                 FieldInfo field = GetFieldInfo(loadExpr, fieldName);
 
-                if (!field.Type.IsArray)
+                if (field.Type.IsArray)
                 {
-                    Program.Panic("only arrays are supported");
+                    ReserveA();
+                    EmitAsm("LDA", pointerWideOperand.Low);
+                    EmitAsm("CLC");
+                    EmitAsm("ADC", new AsmOperand(LowByte(field.Offset), AddressMode.Immediate));
+                    EmitAsm("STA", leftWideOperand.Low);
+                    EmitAsm("LDA", pointerWideOperand.High);
+                    EmitAsm("ADC", new AsmOperand(HighByte(field.Offset), AddressMode.Immediate));
+                    EmitAsm("STA", leftWideOperand.High);
+                    ReleaseA();
+                    return;
                 }
-
-                ReserveA();
-                EmitAsm("LDA", pointerWideOperand.Low);
-                EmitAsm("CLC");
-                EmitAsm("ADC", new AsmOperand(LowByte(field.Offset), AddressMode.Immediate));
-                EmitAsm("STA", leftWideOperand.Low);
-                EmitAsm("LDA", pointerWideOperand.High);
-                EmitAsm("ADC", new AsmOperand(HighByte(field.Offset), AddressMode.Immediate));
-                EmitAsm("STA", leftWideOperand.High);
-                ReleaseA();
-                return;
+                else if (field.Offset < 256 && TryGetPointerOperand(pointerExpr, out baseAddress))
+                {
+                    ReserveA();
+                    ReserveY();
+                    EmitAsm("LDY", new AsmOperand(field.Offset, AddressMode.Immediate));
+                    EmitAsm("LDA", baseAddress);
+                    EmitAsm("STA", leftWideOperand.Low);
+                    EmitAsm("INY");
+                    EmitAsm("LDA", baseAddress);
+                    EmitAsm("STA", leftWideOperand.High);
+                    ReleaseA();
+                    ReleaseY();
+                    return;
+                }
             }
 
             NYI(wide ? "WIDE" : "NARROW");
