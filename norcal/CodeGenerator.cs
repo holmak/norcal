@@ -347,8 +347,8 @@ class CodeGenerator
                 }
                 else if (sym.Tag == SymbolTag.Local)
                 {
-                    // Use the offset of the local variable plus any offset specified by the assembly source code:
-                    baseValue = OffsetOfLocal(sym) + operand.Offset;
+                    // Get the actual offset assigned to this local variable:
+                    baseValue = OffsetOfLocal(sym);
 
                     // Convert the address mode to an appropriate stack-relative mode:
                     if (operand.Mode == AddressMode.Absolute) actualMode = AddressMode.ZeroPageX;
