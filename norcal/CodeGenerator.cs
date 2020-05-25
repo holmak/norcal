@@ -299,12 +299,13 @@ class CodeGenerator
         Expr init, test, induct, body;
         Expr[] block, parts;
         CType type;
-        string name, mnemonic, fieldName, op;
+        string name, mnemonic, fieldName, op, tag;
         AsmOperand operand;
+        WideOperand wideOperand;
 
         // Don't print "block" expressions; the subexpressions will be handled individually.
         // Also don't print "empty" expressions.
-        if ( !expr.MatchTag(Tag.Sequence) && !expr.MatchTag(Tag.If) && !expr.MatchTag(Tag.For) && !expr.Match(Tag.Empty))
+        if (!expr.MatchTag(Tag.Sequence) && !expr.MatchTag(Tag.If) && !expr.MatchTag(Tag.For) && !expr.Match(Tag.Empty))
         {
             EmitComment("");
             EmitComment("{0}", ToSourceCode(expr));
@@ -766,19 +767,67 @@ class CodeGenerator
             if (Commit()) return;
         }
 
-        if ((expr.Match(Tag.PreIncrement, out subexpr) || expr.Match(Tag.PostIncrement, out subexpr)) &&
-            TryGetOperand(subexpr, out operand))
+        // Increment/decrement, discarding the result:
+        if (expr.MatchAnyTag(out tag, out subexpr))
         {
-            EmitAsm("INC", operand);
-            return;
-        }
+            bool isDecrement = (tag == Tag.PreDecrement) || (tag == Tag.PostDecrement);
+            bool isIncrement = (tag == Tag.PreIncrement) || (tag == Tag.PostIncrement);
 
-        if ((expr.Match(Tag.PreDecrement, out subexpr) || expr.Match(Tag.PostDecrement, out subexpr)) &&
-            TryGetOperand(subexpr, out operand) &&
-            SizeOf(subexpr) == 1)
-        {
-            EmitAsm("DEC", operand);
-            return;
+            // Narrow:
+            if ((isIncrement || isDecrement) && TryGetOperand(subexpr, out operand))
+            {
+                string opcode = isIncrement ? "INC" : "DEC";
+                EmitAsm(opcode, operand);
+                return;
+            }
+
+            // Wide:
+            if ((isIncrement || isDecrement) && TryGetWideOperand(subexpr, out wideOperand))
+            {
+                type = TypeOf(subexpr);
+                int size = SizeOf(subexpr);
+
+                int amount = 1;
+                if (type.IsPointer)
+                {
+                    amount = SizeOf(expr, type.Subtype);
+                }
+
+                if (amount == 1)
+                {
+                    AsmOperand skip = MakeUniqueLabel("skip");
+
+                    if (isDecrement)
+                    {
+                        // Decrement the high byte only if the low byte is initially zero:
+                        EmitAsm("LDA", wideOperand.Low);
+                        EmitAsm("BNE", skip);
+                        EmitAsm("DEC", wideOperand.High);
+                        EmitLabel(skip);
+                        EmitAsm("DEC", wideOperand.Low);
+                    }
+                    else
+                    {
+                        // Increment the high byte only if the low byte rolls over to zero:
+                        EmitAsm("INC", wideOperand.Low);
+                        EmitAsm("BNE", skip);
+                        EmitAsm("INC", wideOperand.High);
+                        EmitLabel(skip);
+                    }
+                }
+                else
+                {
+                    if (isDecrement) amount = ushort.MaxValue - amount;
+                    EmitAsm("LDA", wideOperand.Low);
+                    EmitAsm("CLC");
+                    EmitAsm("ADC", new AsmOperand(LowByte(amount), AddressMode.Immediate));
+                    EmitAsm("STA", wideOperand.Low);
+                    EmitAsm("LDA", wideOperand.High);
+                    EmitAsm("ADC", new AsmOperand(HighByte(amount), AddressMode.Immediate));
+                    EmitAsm("STA", wideOperand.High);
+                }
+                return;
+            }
         }
 
         if (expr.Match(Tag.Return))
