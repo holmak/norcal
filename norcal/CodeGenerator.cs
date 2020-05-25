@@ -413,7 +413,9 @@ class CodeGenerator
                 body = parts[i + 1];
                 AsmOperand elseLabel = MakeUniqueLabel("else");
                 CompileJumpIf(false, test, elseLabel);
+                BeginScope();
                 CompileStatement(body);
+                EndScope();
                 EmitAsm("JMP", endIf);
                 EmitLabel(elseLabel);
             }
