@@ -385,16 +385,20 @@ class CodeGenerator
         if (expr.Match(Tag.For, out init, out test, out induct, out body))
         {
             AsmOperand top = MakeUniqueLabel("for");
-            AsmOperand bottom = MakeUniqueLabel("for_break");
+            AsmOperand testFor = MakeUniqueLabel("for_test");
+            AsmOperand continueFor = MakeUniqueLabel("for_continue");
+            AsmOperand breakFor = MakeUniqueLabel("for_break");
 
             BeginScope();
             CompileStatement(init);
+            EmitAsm("JMP", testFor);
             EmitLabel(top);
-            CompileJumpIf(false, test, bottom);
             CompileStatement(body);
+            EmitLabel(continueFor);
             CompileStatement(induct);
-            EmitAsm("JMP", top);
-            EmitLabel(bottom);
+            EmitLabel(testFor);
+            CompileJumpIf(true, test, top);
+            EmitLabel(breakFor);
             EndScope();
             return;
         }
