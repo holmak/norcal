@@ -763,6 +763,8 @@ class CodeGenerator
         }
 
         // Jump if nonzero:
+        // HACK: Don't attempt this is the expression is logical; it will cause endless mutual recursion with CompileIntoA().
+        if (!OperatorsThatReturnBools.Contains(expr.GetTag()))
         {
             Speculate();
             CompileIntoA(expr);
@@ -1111,6 +1113,21 @@ class CodeGenerator
             {
                 Abort("return expression is too large");
             }
+            return;
+        }
+
+        // Evaluate a logical expression and produce a one or a zero:
+        if (OperatorsThatReturnBools.Contains(expr.GetTag()))
+        {
+            AsmOperand skip = MakeUniqueLabel("bool_false");
+            AsmOperand end = MakeUniqueLabel("bool_end");
+            CompileJumpIf(false, expr, skip);
+            Reserve(Register.A);
+            EmitAsm("LDA", new AsmOperand(1, AddressMode.Immediate));
+            EmitAsm("JMP", end);
+            EmitLabel(skip);
+            EmitAsm("LDA", new AsmOperand(0, AddressMode.Immediate));
+            EmitLabel(end);
             return;
         }
 
@@ -1699,13 +1716,27 @@ class CodeGenerator
             }
             return functionInfo.ReturnType;
         }
-        else if (expr.MatchAnyTag(out op, out subexpr) && UnaryOperatorsThatAlwaysProduceIntegers.Contains(op))
+        else if (expr.MatchAnyTag(out op, out subexpr))
         {
-            return TypeOf(subexpr);
+            if (OperatorsThatReturnIntegers.Contains(op))
+            {
+                return TypeOf(subexpr);
+            }
+            else if (OperatorsThatReturnBools.Contains(op))
+            {
+                return CType.UInt8;
+            }
         }
-        else if (expr.MatchAnyTag(out op, out left, out right) && BinaryOperatorsThatAlwaysProduceIntegers.Contains(op))
+        else if (expr.MatchAnyTag(out op, out left, out right))
         {
-            return FindCommonType(TypeOf(left), TypeOf(right));
+            if (OperatorsThatReturnIntegers.Contains(op))
+            {
+                return FindCommonType(TypeOf(left), TypeOf(right));
+            }
+            else if (OperatorsThatReturnBools.Contains(op))
+            {
+                return CType.UInt8;
+            }
         }
         else if (expr.Match(Tag.ReadonlyData, out type, out name, out data))
         {
@@ -1715,40 +1746,32 @@ class CodeGenerator
         {
             return type;
         }
-        else
-        {
-            Program.UnhandledCase();
-            return null;
-        }
+
+        Program.UnhandledCase();
+        return null;
     }
 
-    /// <summary>
-    /// Unary operators that always return an integer.
-    /// </summary>
-    static readonly string[] UnaryOperatorsThatAlwaysProduceIntegers = new string[]
+    static readonly string[] OperatorsThatReturnIntegers = new string[]
     {
         Tag.BitwiseNot,
-        Tag.LogicalNot,
-    };
-
-    /// <summary>
-    /// Binary operators that always return an integer.
-    /// </summary>
-    static readonly string[] BinaryOperatorsThatAlwaysProduceIntegers = new string[]
-    {
         Tag.Multiply,
         Tag.Divide,
         Tag.Modulus,
         Tag.ShiftLeft,
         Tag.ShiftRight,
+        Tag.BitwiseOr,
+        Tag.BitwiseAnd,
+    };
+
+    static readonly string[] OperatorsThatReturnBools = new string[]
+    {
+        Tag.LogicalNot,
         Tag.Equal,
         Tag.NotEqual,
         Tag.LessThan,
         Tag.LessThanOrEqual,
         Tag.GreaterThan,
         Tag.GreaterThanOrEqual,
-        Tag.BitwiseOr,
-        Tag.BitwiseAnd,
         Tag.LogicalOr,
         Tag.LogicalAnd,
     };
