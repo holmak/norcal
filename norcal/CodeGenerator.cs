@@ -837,6 +837,36 @@ class CodeGenerator
             if (Commit()) return;
         }
 
+        // WIDE: Jump if less than:
+        if (expr.Match(Tag.LessThan, out left, out right) &&
+            TryGetWideOperand(right, out wideRightOperand))
+        {
+            // Wide comparison:
+            // aa < bb === if (ah != bh) then (ah < bh); else (al < bl)
+
+            Speculate();
+
+            AsmOperand lowLabel = MakeUniqueLabel("compare_low");
+            AsmOperand endLabel = MakeUniqueLabel("compare_end");
+            string opcode = condition ? "BCC" : "BCS";
+
+            CompileIntoHL(left);
+            Reserve(Register.A);
+            EmitAsm("LDA", RegisterH);
+            EmitAsm("CMP", wideRightOperand.High);
+            EmitAsm("BEQ", lowLabel);
+            EmitAsm(opcode, target);
+            EmitAsm("JMP", endLabel);
+            EmitLabel(lowLabel);
+            EmitAsm("LDA", RegisterL);
+            EmitAsm("CMP", wideRightOperand.Low);
+            EmitAsm(opcode, target);
+            EmitLabel(endLabel);
+            Release(Register.A | Register.H | Register.L);
+
+            if (Commit()) return;
+        }
+
         // (a <= b) === !(b < a)
         if (expr.Match(Tag.LessThanOrEqual, out left, out right))
         {
@@ -900,10 +930,6 @@ class CodeGenerator
             EmitLabel(skip);
             return;
         }
-
-        // Wide comparison:
-        // aa < bb === if (ah == bh) then (al < bl); else (ah < bh)
-        // aa < bb === (ah < bh) || ((ah == bh) && (al < bl)))
 
         NYI("unhandled jump expression");
     }
