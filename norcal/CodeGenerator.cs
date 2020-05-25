@@ -656,8 +656,8 @@ class CodeGenerator
             bool wide;
             CheckBinaryOperandWidth(left, right, out leftSize, out rightSize, out wide);
 
-            Expr structExpr, pointerExpr;
-            AsmOperand leftOperand, rightOperand, basePointer;
+            Expr structExpr, pointerExpr, arrayExpr, indexExpr;
+            AsmOperand leftOperand, rightOperand, baseAddress, basePointer;
             WideOperand wideLeftOperand, wideRightOperand;
 
             if (!wide &&
@@ -690,6 +690,42 @@ class CodeGenerator
                 EmitAsm("STA", leftOperand);
                 ReleaseA();
                 if (Commit()) return;
+            }
+
+            // Modify an array element by index.
+            if (!wide &&
+                left.Match(Tag.Index, out arrayExpr, out indexExpr) &&
+                TryGetOperand(right, out rightOperand))
+            {
+                // array[index] @= right;
+                if (TryGetConstantBaseAddress(arrayExpr, out baseAddress))
+                {
+                    AsmOperand element = baseAddress.WithMode(AddressMode.AbsoluteY);
+
+                    Speculate();
+                    CompileIntoY(indexExpr);
+                    Reserve(Register.A);
+                    EmitAsm("LDA", element);
+
+                    if (op == Tag.Add)
+                    {
+                        EmitAsm("CLC");
+                        EmitAsm("ADC", rightOperand);
+                    }
+                    else if (op == Tag.Subtract)
+                    {
+                        EmitAsm("SEC");
+                        EmitAsm("SBC", rightOperand);
+                    }
+                    else
+                    {
+                        Abort("unhandled binary operation");
+                    }
+
+                    EmitAsm("STA", element);
+                    Release(Register.A | Register.Y);
+                    if (Commit()) return;
+                }
             }
 
             // Modify a field through a pointer.
