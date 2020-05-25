@@ -426,6 +426,12 @@ class CodeGenerator
             return;
         }
 
+        if (expr.Match(Tag.Jump, out name))
+        {
+            EmitAsm("JMP", new AsmOperand(name, AddressMode.Absolute));
+            return;
+        }
+
         if (expr.MatchAny(Tag.If, out parts))
         {
             AsmOperand endIf = MakeUniqueLabel("end_if");
