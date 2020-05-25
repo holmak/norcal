@@ -446,24 +446,6 @@ class CodeGenerator
                 if (Commit()) return;
             }
 
-            if (!wide &&
-                left.Match(Tag.Load, out pointerExpr) &&
-                TryGetWideOperand(pointerExpr, out pointerWideOperand) &&
-                pointerWideOperand.Low.Mode == AddressMode.ZeroPageX)
-            {
-                // Pattern:
-                // *p = right;  (where p is a local)
-                //
-                // LDA right
-                // STA (p,X)
-
-                Speculate();
-                CompileIntoA(right);
-                EmitAsm("STA", pointerWideOperand.Low.WithMode(AddressMode.IndirectX));
-                ReleaseA();
-                if (Commit()) return;
-            }
-
             if (!wide && left.Match(Tag.Index, out arrayExpr, out indexExpr))
             {
                 // With an indexed expression, there are two subexpressions to compile:
@@ -1632,6 +1614,18 @@ class CodeGenerator
                 Program.UnhandledCase();
                 operand = null;
             }
+            return true;
+        }
+
+        Expr subexpr;
+        WideOperand pointer;
+
+        // Local variables can be used as pointers directly:
+        if (expr.Match(Tag.Load, out subexpr) &&
+            TryGetWideOperand(subexpr, out pointer) &&
+            pointer.Low.Mode == AddressMode.ZeroPageX)
+        {
+            operand = pointer.Low.WithMode(AddressMode.IndirectX).WithComment("*" + pointer.Low.Comment);
             return true;
         }
 
