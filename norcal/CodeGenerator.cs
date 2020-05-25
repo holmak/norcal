@@ -814,10 +814,10 @@ class CodeGenerator
                         EmitAsm("INC", wideOperand.High);
                         EmitLabel(skip);
                     }
+                    return;
                 }
-                else
+                else if (isIncrement)
                 {
-                    if (isDecrement) amount = ushort.MaxValue - amount;
                     EmitAsm("LDA", wideOperand.Low);
                     EmitAsm("CLC");
                     EmitAsm("ADC", new AsmOperand(LowByte(amount), AddressMode.Immediate));
@@ -825,8 +825,8 @@ class CodeGenerator
                     EmitAsm("LDA", wideOperand.High);
                     EmitAsm("ADC", new AsmOperand(HighByte(amount), AddressMode.Immediate));
                     EmitAsm("STA", wideOperand.High);
+                    return;
                 }
-                return;
             }
         }
 
