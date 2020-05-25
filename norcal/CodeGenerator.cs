@@ -840,7 +840,7 @@ class CodeGenerator
         // (a <= b) === !(b < a)
         if (expr.Match(Tag.LessThanOrEqual, out left, out right))
         {
-            CompileJumpIf(condition, Expr.Make(Tag.LessThan, right, left), target);
+            CompileJumpIf(!condition, Expr.Make(Tag.LessThan, right, left), target);
             return;
         }
 
