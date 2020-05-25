@@ -19,6 +19,11 @@ class CodeGenerator
     AllocationRegion OamRegion = new AllocationRegion("OAM", 0x100, 0x200);
     AllocationRegion RamRegion = new AllocationRegion("RAM", 0x300, 0x800);
 
+    // A wide temporary register:
+    AsmOperand RegisterHL;
+    AsmOperand RegisterH;
+    AsmOperand RegisterL;
+
     // The current function:
     string CurrentFunctionName = null;
     CType ReturnType = null;
@@ -44,6 +49,11 @@ class CodeGenerator
     {
         OutputStack.Push(new OutputTransaction());
         CurrentScope = new LexicalScope(null);
+
+        Symbol symbolHL = DeclareGlobal(null, MemoryRegion.ZeroPage, CType.UInt16, "_hl");
+        RegisterHL = new AsmOperand(symbolHL.Value, AddressMode.ZeroPage).WithComment("HL");
+        RegisterL = new AsmOperand(symbolHL.Value, AddressMode.ZeroPage).WithComment("L");
+        RegisterH = new AsmOperand(symbolHL.Value + 1, AddressMode.ZeroPage).WithComment("H");
 
         Expr[] declarations;
         if (!program.MatchAny(Tag.Sequence, out declarations))
@@ -614,6 +624,22 @@ class CodeGenerator
                 }
             }
 
+            if (wide && TryGetWideOperand(left, out leftWideOperand))
+            {
+                Speculate();
+                CompileIntoHL(right);
+                Reserve(Register.A);
+                EmitAsm("LDA", RegisterL);
+                EmitAsm("STA", leftWideOperand.Low);
+                if (SizeOf(left) > 1)
+                {
+                    EmitAsm("LDA", RegisterH);
+                    EmitAsm("STA", leftWideOperand.High);
+                }
+                Release(Register.A | Register.H | Register.L);
+                if (Commit()) return;
+            }
+
             NYI(wide ? "WIDE" : "NARROW");
             return;
         }
@@ -719,6 +745,7 @@ class CodeGenerator
         EmitComment("jump if {0}: {1}", condition.ToString().ToLower(), ToSourceCode(expr));
 
         AsmOperand operand, leftOperand, rightOperand;
+        WideOperand wideRightOperand;
         Expr subexpr, left, right;
         int number;
 
@@ -783,7 +810,6 @@ class CodeGenerator
             CompileJumpIf(!condition, Expr.Make(Tag.Equal, left, right), target);
             return;
         }
-
 
         // Jump if less than:
         if (expr.Match(Tag.LessThan, out left, out right) &&
@@ -877,9 +903,6 @@ class CodeGenerator
         NYI("unhandled jump expression");
     }
 
-    /// <summary>
-    /// Return true if the expression could be calculated and loaded into A.
-    /// </summary>
     void CompileIntoA(Expr expr)
     {
         if (SizeOf(expr) != 1) Abort("too large for A");
@@ -888,6 +911,7 @@ class CodeGenerator
         AsmOperand operand, leftOperand, rightOperand, baseAddress, basePointer;
         int number;
         string fieldName;
+        CType type;
 
         // Simple value:
         if (TryGetOperand(expr, out operand))
@@ -1064,7 +1088,118 @@ class CodeGenerator
             return;
         }
 
+        // Cast to u8:
+        if (expr.Match(Tag.Cast, out type, out subexpr) &&
+            type == CType.UInt8)
+        {
+            int oldSize = SizeOf(subexpr);
+            if (oldSize == 1)
+            {
+                CompileIntoA(subexpr);
+            }
+            else if (oldSize == 2)
+            {
+                CompileIntoHL(subexpr);
+                Reserve(Register.A);
+                EmitAsm("LDA", RegisterL);
+                Release(Register.H | Register.L);
+            }
+            else
+            {
+                Abort("return expression is too large");
+            }
+            return;
+        }
+
         Abort("too complex for A");
+    }
+
+    void CompileIntoHL(Expr expr)
+    {
+        if (SizeOf(expr) != 2) Abort("word-sized values only");
+
+        Expr left, right;
+        WideOperand wideOperand;
+        int number;
+
+        // Simple value:
+        if (TryGetWideOperand(expr, out wideOperand))
+        {
+            Reserve(Register.A | Register.H | Register.L);
+            EmitAsm("LDA", wideOperand.Low);
+            EmitAsm("STA", RegisterL);
+            EmitAsm("LDA", wideOperand.High);
+            EmitAsm("STA", RegisterH);
+            Release(Register.A);
+            return;
+        }
+
+        // Addition:
+        if (expr.Match(Tag.Add, out left, out right) &&
+            TryGetWideOperand(right, out wideOperand))
+        {
+            CompileIntoHL(left);
+            Reserve(Register.A);
+            EmitAsm("LDA", RegisterL);
+            EmitAsm("CLC");
+            EmitAsm("ADC", wideOperand.Low);
+            EmitAsm("STA", RegisterL);
+            EmitAsm("LDA", RegisterH);
+            EmitAsm("ADC", wideOperand.High);
+            EmitAsm("STA", RegisterH);
+            Release(Register.A);
+            return;
+        }
+
+        // Subtraction:
+        if (expr.Match(Tag.Subtract, out left, out right) &&
+            TryGetWideOperand(right, out wideOperand))
+        {
+            CompileIntoHL(left);
+            Reserve(Register.A);
+            EmitAsm("LDA", RegisterL);
+            EmitAsm("SEC");
+            EmitAsm("SBC", wideOperand.Low);
+            EmitAsm("STA", RegisterL);
+            EmitAsm("LDA", RegisterH);
+            EmitAsm("SBC", wideOperand.High);
+            EmitAsm("STA", RegisterH);
+            Release(Register.A);
+            return;
+        }
+
+        // Right shift:
+        if (expr.Match(Tag.ShiftRight, out left, out right))
+        {
+            if (TryGetConstant(right, out number))
+            {
+                CompileIntoHL(left);
+
+                // If shifting by at least a byte, start by copying the high byte down.
+                if (number >= 8)
+                {
+                    Reserve(Register.A);
+                    EmitAsm("LDA", RegisterH);
+                    EmitAsm("STA", RegisterL);
+                    EmitAsm("LDA", new AsmOperand(0, AddressMode.Immediate));
+                    EmitAsm("STA", RegisterH);
+                    Release(Register.A);
+                    number -= 8;
+                }
+
+                for (int i = 0; i < number; i++)
+                {
+                    EmitAsm("LSR", RegisterH);
+                    EmitAsm("ROR", RegisterL);
+                }
+                return;
+            }
+
+            Abort("variable-width shifts are not supported");
+            return;
+        }
+
+        Abort("too complex for HA");
     }
 
     bool CompileCommutativeBinaryOperatorIntoA(Expr expr, string tag, Action<AsmOperand> generate)
@@ -1094,9 +1229,6 @@ class CodeGenerator
         return false;
     }
 
-    /// <summary>
-    /// Return true if the expression could be calculated and loaded into Y.
-    /// </summary>
     void CompileIntoY(Expr expr)
     {
         if (SizeOf(expr) != 1) Abort("too large for Y");
@@ -1556,6 +1688,10 @@ class CodeGenerator
         {
             return type;
         }
+        else if (expr.Match(Tag.Cast, out type, out subexpr))
+        {
+            return type;
+        }
         else
         {
             Program.UnhandledCase();
@@ -1608,7 +1744,7 @@ class CodeGenerator
 
     bool Commit()
     {
-        if (Output.ReservedA || Output.ReservedY) Program.Panic("registers were not released");
+        if (Output.Reserved != Register.None) Program.Panic("registers were not released");
         bool accept = !Output.SpeculationError;
         OutputTransaction latest = OutputStack.Pop();
         if (OutputStack.Count == 0) Program.Panic("output stack underflowed");
@@ -1617,30 +1753,30 @@ class CodeGenerator
         return accept;
     }
 
-    void ReserveA()
+    void Reserve(Register set)
     {
-        if (OutputStack.Any(x => x.ReservedA)) Abort("register A is already in use");
-        Output.ReservedA = true;
+        if (OutputStack.Any(x => (x.Reserved & set) != 0))
+        {
+            Abort(string.Format("some registers already in use: {0}", set));
+        }
+        Output.Reserved |= set;
     }
 
-    void ReserveY()
-    {
-        if (OutputStack.Any(x => x.ReservedY)) Abort("register Y is already in use");
-        Output.ReservedY = true;
-    }
+    void ReserveA() => Reserve(Register.A);
+    void ReserveY() => Reserve(Register.Y);
 
-    void ReleaseA()
+    void Release(Register set)
     {
         // Don't report errors if a speculation error has occurred, since reserve/release pairs will be unbalanced.
-        if (!Output.SpeculationError && !Output.ReservedA) Program.Panic("register A is not reserved in the current transaction");
-        Output.ReservedA = false;
+        if (!Output.SpeculationError && (Output.Reserved & set) != set)
+        {
+            Program.Panic("register A is not reserved in the current transaction");
+        }
+        Output.Reserved &= ~set;
     }
 
-    void ReleaseY()
-    {
-        if (!Output.SpeculationError && !Output.ReservedY) Program.Panic("register Y is not reserved in the current transaction");
-        Output.ReservedY = false;
-    }
+    void ReleaseA() => Release(Register.A);
+    void ReleaseY() => Release(Register.Y);
 
     void Emit(params object[] args)
     {
@@ -2022,6 +2158,12 @@ class CodeGenerator
             return string.Format("({0}).{1}", ToSourceCode(structExpr), fieldName);
         }
 
+        CType type;
+        if (expr.Match(Tag.Cast, out type, out subexpr))
+        {
+            return string.Format("({0})({1})", type.Show(), ToSourceCode(subexpr));
+        }
+
         if (expr.Match(Tag.Return))
         {
             return "return;";
@@ -2032,7 +2174,6 @@ class CodeGenerator
             return string.Format("return {0};", ToSourceCode(subexpr));
         }
 
-        CType type;
         if (expr.Match(Tag.Variable, out type, out name))
         {
             return string.Format("{0} {1};", type.Show(), name);
@@ -2199,5 +2340,15 @@ class OutputTransaction
     public List<Expr> Lines = new List<Expr>();
     public bool SpeculationError;
     public string AbortReason = "";
-    public bool ReservedA, ReservedY;
+    public Register Reserved;
+}
+
+[Flags]
+enum Register
+{
+    None = 0,
+    A = 1,
+    Y = 2,
+    H = 4,
+    L = 8,
 }

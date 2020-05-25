@@ -704,13 +704,7 @@ partial class Parser
             { TokenType.PERCENT, Tag.Modulus },
         };
 
-        return ParseInfixOperators(ParseCastExpr, operators);
-    }
-
-    // (casts)
-    Expr ParseCastExpr()
-    {
-        return ParseUnaryPrefixExpr();
+        return ParseInfixOperators(ParseUnaryPrefixExpr, operators);
     }
 
     // Unary prefix operators
@@ -828,9 +822,19 @@ partial class Parser
         }
         else if (TryParse(TokenType.LPAREN))
         {
-            Expr e = ParseExpr();
-            Expect(TokenType.RPAREN);
-            return e;
+            CType type;
+            if (TryParseType(out type))
+            {
+                Expect(TokenType.RPAREN);
+                Expr e = ParseUnaryPrefixExpr();
+                return Make(Tag.Cast, type, e);
+            }
+            else
+            {
+                Expr e = ParseExpr();
+                Expect(TokenType.RPAREN);
+                return e;
+            }
         }
         else
         {
