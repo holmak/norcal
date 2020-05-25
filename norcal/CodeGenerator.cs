@@ -310,6 +310,9 @@ class CodeGenerator
             EmitComment("{0}", ToSourceCode(expr));
         }
 
+        Expr originalExpr = expr;
+        expr = FoldConstants(originalExpr);
+
         if (expr.Match(Tag.Empty))
         {
             // Nothing!
@@ -1356,6 +1359,26 @@ class CodeGenerator
         }
 
         Abort("call is too complex");
+    }
+
+    Expr FoldConstants(Expr expr)
+    {
+        Expr subexpr, left, right;
+        int a, b;
+
+        if (expr.Match(Tag.Assign, out left, out right))
+        {
+            return Expr.Make(Tag.Assign, FoldConstants(left), FoldConstants(right)).WithSource(expr.Source);
+        }
+
+        if (expr.Match(Tag.Subtract, out left, out right) &&
+            TryGetConstant(FoldConstants(left), out a) &&
+            TryGetConstant(FoldConstants(right), out b))
+        {
+            return Expr.Make(Tag.Integer, (int)(ushort)(a - b)).WithSource(expr.Source);
+        }
+
+        return expr;
     }
 
     /// <summary>
