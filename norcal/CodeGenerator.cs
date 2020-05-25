@@ -33,7 +33,7 @@ class CodeGenerator
 
     // Local scope info:
     LexicalScope CurrentScope;
-    LoopScope Loop;
+    LoopScope Loop = null;
 
     // Option: Show more information.
     static readonly bool ShowVerboseComments = false;
@@ -387,20 +387,42 @@ class CodeGenerator
         {
             AsmOperand top = MakeUniqueLabel("for");
             AsmOperand testFor = MakeUniqueLabel("for_test");
-            AsmOperand continueFor = MakeUniqueLabel("for_continue");
-            AsmOperand breakFor = MakeUniqueLabel("for_break");
+
+            Loop = new LoopScope
+            {
+                Outer = Loop,
+                ContinueLabel = MakeUniqueLabel("for_continue"),
+                BreakLabel = MakeUniqueLabel("for_break"),
+            };
 
             BeginScope();
             CompileStatement(init);
             EmitAsm("JMP", testFor);
             EmitLabel(top);
             CompileStatement(body);
-            EmitLabel(continueFor);
+            EmitLabel(Loop.ContinueLabel);
             CompileStatement(induct);
             EmitLabel(testFor);
             CompileJumpIf(true, test, top);
-            EmitLabel(breakFor);
+            EmitLabel(Loop.BreakLabel);
             EndScope();
+
+            Loop = Loop.Outer;
+
+            return;
+        }
+
+        if (expr.Match(Tag.Continue))
+        {
+            if (Loop == null) Error(expr, "no loop here");
+            EmitAsm("JMP", Loop.ContinueLabel);
+            return;
+        }
+
+        if (expr.Match(Tag.Break))
+        {
+            if (Loop == null) Error(expr, "no loop here");
+            EmitAsm("JMP", Loop.BreakLabel);
             return;
         }
 
@@ -2520,8 +2542,8 @@ enum SymbolTag
 class LoopScope
 {
     public LoopScope Outer;
-    public string ContinueLabel;
-    public string BreakLabel;
+    public AsmOperand ContinueLabel;
+    public AsmOperand BreakLabel;
 }
 
 class LexicalScope
