@@ -720,6 +720,45 @@ class CodeGenerator
                 if (Commit()) return;
             }
 
+            // Wide: Modify a field through a pointer.
+            if (wide &&
+                left.Match(Tag.Field, out structExpr, out fieldName) &&
+                structExpr.Match(Tag.Load, out pointerExpr) &&
+                TryGetPointerOperand(pointerExpr, out basePointer) &&
+                TryGetWideOperand(right, out wideRightOperand) &&
+                SizeOf(left) == 2)
+            {
+                // Pattern:
+                // record->field @= right;
+
+                FieldInfo field = GetFieldInfo(structExpr, fieldName);
+                if (field.Offset > 255) Abort("field offset is too large");
+
+                Speculate();
+                Reserve(Register.A | Register.Y);
+                EmitAsm("LDY", new AsmOperand(field.Offset, AddressMode.Immediate).WithComment("offset of .{0}", fieldName));
+
+                if (op == Tag.Add)
+                {
+                    EmitAsm("LDA", basePointer);
+                    EmitAsm("CLC");
+                    EmitAsm("ADC", wideRightOperand.Low);
+                    EmitAsm("STA", basePointer);
+                    EmitAsm("INY");
+                    EmitAsm("LDA", basePointer);
+                    EmitAsm("ADC", wideRightOperand.High);
+                    EmitAsm("STA", basePointer);
+                }
+                else
+                {
+                    Abort("unhandled wide binary operation");
+                }
+
+                Release(Register.A | Register.Y);
+                if (Commit()) return;
+            }
+
+            // Wide: Simple operands.
             if (wide &&
                 TryGetWideOperand(left, out wideLeftOperand) &&
                 TryGetWideOperand(right, out wideRightOperand))
