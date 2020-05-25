@@ -20,7 +20,7 @@ class CodeGenerator
     AllocationRegion RamRegion = new AllocationRegion("RAM", 0x300, 0x800);
 
     // A wide temporary register:
-    AsmOperand RegisterHL;
+    WideOperand RegisterHL;
     AsmOperand RegisterH;
     AsmOperand RegisterL;
 
@@ -51,9 +51,9 @@ class CodeGenerator
         CurrentScope = new LexicalScope(null);
 
         Symbol symbolHL = DeclareGlobal(null, MemoryRegion.ZeroPage, CType.UInt16, "_hl");
-        RegisterHL = new AsmOperand(symbolHL.Value, AddressMode.ZeroPage).WithComment("HL");
         RegisterL = new AsmOperand(symbolHL.Value, AddressMode.ZeroPage).WithComment("L");
         RegisterH = new AsmOperand(symbolHL.Value + 1, AddressMode.ZeroPage).WithComment("H");
+        RegisterHL = new WideOperand(RegisterL, RegisterH);
 
         Expr[] declarations;
         if (!program.MatchAny(Tag.Sequence, out declarations))
@@ -585,16 +585,9 @@ class CodeGenerator
                 SizeOf(left) == 2 &&
                 SizeOf(right) == 2)
             {
-                // Pattern:
+                // Patterns:
                 // u8 *p = board->array;
-                //
-                // LDA board
-                // CLC
-                // ADC <offsetof(array)
-                // STA p
-                // LDA board+1
-                // ADC >offsetof(array)
-                // STA p+1
+                // u8 *q = board->field;
 
                 if (leftWideOperand.Low.Mode == AddressMode.Immediate)
                 {
@@ -605,15 +598,8 @@ class CodeGenerator
 
                 if (field.Type.IsArray)
                 {
-                    ReserveA();
-                    EmitAsm("LDA", pointerWideOperand.Low);
-                    EmitAsm("CLC");
-                    EmitAsm("ADC", new AsmOperand(LowByte(field.Offset), AddressMode.Immediate));
-                    EmitAsm("STA", leftWideOperand.Low);
-                    EmitAsm("LDA", pointerWideOperand.High);
-                    EmitAsm("ADC", new AsmOperand(HighByte(field.Offset), AddressMode.Immediate));
-                    EmitAsm("STA", leftWideOperand.High);
-                    ReleaseA();
+                    WideOperand offset = WideOperand.MakeImmediate(field.Offset, "offset of ." + fieldName);
+                    CompileWideAddition(leftWideOperand, pointerWideOperand, offset);
                     return;
                 }
                 else if (field.Offset < 256 && TryGetPointerOperand(pointerExpr, out baseAddress))
@@ -739,22 +725,14 @@ class CodeGenerator
                 TryGetWideOperand(right, out wideRightOperand))
             {
                 Speculate();
-                Reserve(Register.A);
                 if (op == Tag.Add)
                 {
-                    EmitAsm("LDA", wideLeftOperand.Low);
-                    EmitAsm("CLC");
-                    EmitAsm("ADC", wideRightOperand.Low);
-                    EmitAsm("STA", wideLeftOperand.Low);
-                    EmitAsm("LDA", wideLeftOperand.High);
-                    EmitAsm("ADC", wideRightOperand.High);
-                    EmitAsm("STA", wideLeftOperand.High);
+                    CompileWideAddition(wideLeftOperand, wideLeftOperand, wideRightOperand);
                 }
                 else
                 {
                     Abort("unhandled wide binary operation");
                 }
-                Release(Register.A);
                 if (Commit()) return;
             }
         }
@@ -788,9 +766,11 @@ class CodeGenerator
                 int size = SizeOf(subexpr);
 
                 int amount = 1;
+                string comment = "1";
                 if (type.IsPointer)
                 {
                     amount = SizeOf(expr, type.Subtype);
+                    comment = "sizeof(" + type.Subtype.Show() + ")";
                 }
 
                 if (amount == 1)
@@ -818,13 +798,7 @@ class CodeGenerator
                 }
                 else if (isIncrement)
                 {
-                    EmitAsm("LDA", wideOperand.Low);
-                    EmitAsm("CLC");
-                    EmitAsm("ADC", new AsmOperand(LowByte(amount), AddressMode.Immediate));
-                    EmitAsm("STA", wideOperand.Low);
-                    EmitAsm("LDA", wideOperand.High);
-                    EmitAsm("ADC", new AsmOperand(HighByte(amount), AddressMode.Immediate));
-                    EmitAsm("STA", wideOperand.High);
+                    CompileWideAddition(wideOperand, wideOperand, WideOperand.MakeImmediate(amount, comment));
                     return;
                 }
             }
@@ -1327,15 +1301,7 @@ class CodeGenerator
             TryGetWideOperand(right, out wideOperand))
         {
             CompileIntoHL(left);
-            Reserve(Register.A);
-            EmitAsm("LDA", RegisterL);
-            EmitAsm("CLC");
-            EmitAsm("ADC", wideOperand.Low);
-            EmitAsm("STA", RegisterL);
-            EmitAsm("LDA", RegisterH);
-            EmitAsm("ADC", wideOperand.High);
-            EmitAsm("STA", RegisterH);
-            Release(Register.A);
+            CompileWideAddition(RegisterHL, RegisterHL, wideOperand);
             return;
         }
 
@@ -1448,6 +1414,19 @@ class CodeGenerator
         ReserveY();
         EmitAsm("TAY");
         ReleaseA();
+    }
+
+    void CompileWideAddition(WideOperand dest, WideOperand a, WideOperand b)
+    {
+        Reserve(Register.A);
+        EmitAsm("LDA", a.Low);
+        EmitAsm("CLC");
+        EmitAsm("ADC", b.Low);
+        EmitAsm("STA", dest.Low);
+        EmitAsm("LDA", a.High);
+        EmitAsm("ADC", b.High);
+        EmitAsm("STA", dest.High);
+        Release(Register.A);
     }
 
     int CalculateConstantExpression(Expr expr)
@@ -1629,17 +1608,16 @@ class CodeGenerator
         int size = SizeOf(expr);
         if (size < 1) Program.Panic("expression must have size of at least 1");
 
-        operand = new WideOperand();
         int number;
         string name;
         if (expr.Match(Tag.Integer, out number))
         {
-            operand.Low = new AsmOperand(LowByte(number), AddressMode.Immediate).WithComment("<'literal'");
-            operand.High = new AsmOperand(HighByte(number), AddressMode.Immediate).WithComment(">'literal'");
+            operand = WideOperand.MakeImmediate(number, "'literal'");
             return true;
         }
         else if (expr.Match(Tag.Name, out name))
         {
+            operand = new WideOperand();
             Symbol sym = FindSymbol(expr, name);
 
             if (sym.Tag == SymbolTag.Constant)
@@ -1806,12 +1784,12 @@ class CodeGenerator
         return sym.Value;
     }
 
-    static int LowByte(int n)
+    public static int LowByte(int n)
     {
         return n & 0xFF;
     }
 
-    static int HighByte(int n)
+    public static int HighByte(int n)
     {
         return (n >> 8) & 0xFF;
     }
@@ -2547,6 +2525,23 @@ class AllocationRegion
 class WideOperand
 {
     public AsmOperand Low, High;
+
+    public WideOperand()
+    {
+    }
+
+    public WideOperand(AsmOperand low, AsmOperand high)
+    {
+        Low = low;
+        High = high;
+    }
+
+    public static WideOperand MakeImmediate(int number, string comment)
+    {
+        return new WideOperand(
+            new AsmOperand(CodeGenerator.LowByte(number), AddressMode.Immediate).WithComment("#<" + comment),
+            new AsmOperand(CodeGenerator.HighByte(number), AddressMode.Immediate).WithComment("#>" + comment));
+    }
 }
 
 class OutputTransaction
