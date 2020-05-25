@@ -997,24 +997,53 @@ class CodeGenerator
             return;
         }
 
-        // Jump if less than:
-        if (expr.Match(Tag.LessThan, out left, out right) &&
-            TryGetOperand(right, out rightOperand))
+        // (a == 0) === (!a)
+        if (expr.Match(Tag.Equal, out left, out right) &&
+            TryGetConstant(right, out number) &&
+            number == 0)
         {
-            // Pattern:
-            // if (a < b) ...
-            //
-            // LDA b
-            // CMP a
-            // (carry is *clear* if a < b)
-            // BCC/BCS target
+            CompileJumpIf(!condition, left, target);
+            return;
+        }
+
+        // (0 < b) === (b != 0) === b, if b is unsigned
+        if (expr.Match(Tag.LessThan, out left, out right) &&
+            TryGetConstant(left, out number) &&
+            number == 0)
+        {
+            CType rightType = TypeOf(right);
+            if (rightType.IsUnsigned)
+            {
+                CompileJumpIf(condition, right, target);
+                return;
+            }
+        }
+
+        // Jump if less than:
+        if (expr.Match(Tag.LessThan, out left, out right))
+        {
+            // There are a few strategies that we can try to fit everything into registers.
+
+            if (TryGetOperand(right, out rightOperand))
+            {
+                Speculate();
+                CompileIntoA(left);
+                EmitAsm("CMP", rightOperand);
+                string opcode = condition ? "BCC" : "BCS";
+                EmitAsm(opcode, target);
+                ReleaseA();
+                if (Commit()) return;
+            }
 
             Speculate();
+            CompileIntoA(right);
+            Reserve(Register.L);
+            EmitAsm("STA", RegisterL);
+            Release(Register.A);
             CompileIntoA(left);
-            EmitAsm("CMP", rightOperand);
-            string opcode = condition ? "BCC" : "BCS";
-            EmitAsm(opcode, target);
-            ReleaseA();
+            EmitAsm("CMP", RegisterL);
+            EmitAsm(condition ? "BCC" : "BCS", target);
+            Release(Register.A | Register.L);
             if (Commit()) return;
         }
 
@@ -1067,28 +1096,6 @@ class CodeGenerator
         {
             CompileJumpIf(!condition, Expr.Make(Tag.LessThan, left, right), target);
             return;
-        }
-
-        // (a == 0) === (!a)
-        if (expr.Match(Tag.Equal, out left, out right) &&
-            TryGetConstant(right, out number) &&
-            number == 0)
-        {
-            CompileJumpIf(!condition, left, target);
-            return;
-        }
-
-        // (0 < b) === (b != 0) === b, if b is unsigned
-        if (expr.Match(Tag.LessThan, out left, out right) &&
-            TryGetConstant(left, out number) &&
-            number == 0)
-        {
-            CType rightType = TypeOf(right);
-            if (rightType.IsUnsigned)
-            {
-                CompileJumpIf(condition, right, target);
-                return;
-            }
         }
 
         // Jump if !a:
