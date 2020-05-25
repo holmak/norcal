@@ -657,9 +657,13 @@ class CodeGenerator
             bool wide;
             CheckBinaryOperandWidth(left, right, out leftSize, out rightSize, out wide);
 
-            AsmOperand leftOperand, rightOperand;
+            Expr structExpr, pointerExpr;
+            AsmOperand leftOperand, rightOperand, basePointer;
+            WideOperand wideLeftOperand, wideRightOperand;
 
-            if (!wide && TryGetOperand(left, out leftOperand) && TryGetOperand(right, out rightOperand))
+            if (!wide &&
+                TryGetOperand(left, out leftOperand) &&
+                TryGetOperand(right, out rightOperand))
             {
                 // Pattern:
                 // left @= right;
@@ -689,6 +693,69 @@ class CodeGenerator
                 if (Commit()) return;
             }
 
+            // Modify a field through a pointer.
+            if (!wide &&
+                left.Match(Tag.Field, out structExpr, out fieldName) &&
+                structExpr.Match(Tag.Load, out pointerExpr) &&
+                TryGetPointerOperand(pointerExpr, out basePointer) &&
+                TryGetOperand(right, out rightOperand))
+            {
+                // Pattern:
+                // record->field @= right;
+
+                FieldInfo field = GetFieldInfo(structExpr, fieldName);
+                if (field.Offset > 255) Abort("field offset is too large");
+
+                Speculate();
+                Reserve(Register.A | Register.Y);
+                EmitAsm("LDY", new AsmOperand(field.Offset, AddressMode.Immediate).WithComment("offset of .{0}", fieldName));
+
+                if (op == Tag.Add)
+                {
+                    EmitAsm("LDA", basePointer);
+                    EmitAsm("CLC");
+                    EmitAsm("ADC", rightOperand);
+                    EmitAsm("STA", basePointer);
+                }
+                else if (op == Tag.Subtract)
+                {
+                    EmitAsm("LDA", basePointer);
+                    EmitAsm("SEC");
+                    EmitAsm("SBC", rightOperand);
+                    EmitAsm("STA", basePointer);
+                }
+                else
+                {
+                    Abort("unhandled binary operation");
+                }
+
+                Release(Register.A | Register.Y);
+                if (Commit()) return;
+            }
+
+            if (wide &&
+                TryGetWideOperand(left, out wideLeftOperand) &&
+                TryGetWideOperand(right, out wideRightOperand))
+            {
+                Speculate();
+                Reserve(Register.A);
+                if (op == Tag.Add)
+                {
+                    EmitAsm("LDA", wideLeftOperand.Low);
+                    EmitAsm("CLC");
+                    EmitAsm("ADC", wideRightOperand.Low);
+                    EmitAsm("STA", wideLeftOperand.Low);
+                    EmitAsm("LDA", wideLeftOperand.High);
+                    EmitAsm("ADC", wideRightOperand.High);
+                    EmitAsm("STA", wideLeftOperand.High);
+                }
+                else
+                {
+                    Abort("unhandled wide binary operation");
+                }
+                Release(Register.A);
+                if (Commit()) return;
+            }
         }
 
         if (expr.MatchTag(Tag.Call))
