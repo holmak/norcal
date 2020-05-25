@@ -102,6 +102,8 @@ class CType : IEquatable<CType>
     public bool IsArray => Tag == CTypeTag.Array || Tag == CTypeTag.ArrayWithDimensionExpression;
     public bool IsInteger => IsSimple && (SimpleType == CSimpleType.UInt8 || SimpleType == CSimpleType.UInt16);
 
+    public bool IsUnsigned => IsInteger && (SimpleType == CSimpleType.UInt8 || SimpleType == CSimpleType.UInt16);
+
     public override bool Equals(object obj)
     {
         // Don't bother supporting equality-testing with arbitrary other types.

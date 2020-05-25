@@ -892,6 +892,28 @@ class CodeGenerator
             return;
         }
 
+        // (a == 0) === (!a)
+        if (expr.Match(Tag.Equal, out left, out right) &&
+            TryGetConstant(right, out number) &&
+            number == 0)
+        {
+            CompileJumpIf(!condition, left, target);
+            return;
+        }
+
+        // (0 < b) === (b != 0) === b, if b is unsigned
+        if (expr.Match(Tag.LessThan, out left, out right) &&
+            TryGetConstant(left, out number) &&
+            number == 0)
+        {
+            CType rightType = TypeOf(right);
+            if (rightType.IsUnsigned)
+            {
+                CompileJumpIf(condition, right, target);
+                return;
+            }
+        }
+
         // Jump if !a:
         if (expr.Match(Tag.LogicalNot, out subexpr))
         {
