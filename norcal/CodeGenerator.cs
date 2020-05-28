@@ -559,6 +559,37 @@ class CodeGenerator
                 if (Commit()) return;
             }
 
+            if (!wide &&
+                left.Match(Tag.Index, out arrayExpr, out indexExpr) &&
+                arrayExpr.Match(Tag.Field, out structExpr, out fieldName) &&
+                structExpr.Match(Tag.Load, out pointerExpr) &&
+                TryGetPointerOperand(pointerExpr, out basePointer))
+            {
+                // Pattern:
+                // record->array[index] = right;
+
+                // The combined field offset and (dynamic) index value must fit in a byte.
+                // Assume that the index will never point beyond the end of the array.
+
+                AsmOperand fieldOffset = GetFieldOffsetIfSmall(structExpr, fieldName);
+
+                CType arrayType = TypeOfWithoutDecay(arrayExpr);
+                if (!arrayType.IsArray) Error(arrayExpr, "an array is required");
+                if (arrayType.Dimension + fieldOffset.Offset > 255) Abort("combined offset is too large");
+
+                Speculate();
+                CompileIntoA(indexExpr);
+                EmitAsm("CLC");
+                EmitAsm("ADC", fieldOffset);
+                Reserve(Register.Y);
+                EmitAsm("TAY");
+                Release(Register.A);
+                CompileIntoA(right);
+                EmitAsm("STA", basePointer);
+                Release(Register.A | Register.Y);
+                if (Commit()) return;
+            }
+
             if (wide &&
                 TryGetWideOperand(left, out leftWideOperand) &&
                 TryGetWideOperand(right, out rightWideOperand))
@@ -2081,7 +2112,7 @@ class CodeGenerator
         // Don't report errors if a speculation error has occurred, since reserve/release pairs will be unbalanced.
         if (!Output.SpeculationError && (Output.Reserved & set) != set)
         {
-            Program.Panic("register A is not reserved in the current transaction");
+            Program.Panic("some of these registers are not reserved in the current transaction: {0}", set);
         }
         Output.Reserved &= ~set;
     }
