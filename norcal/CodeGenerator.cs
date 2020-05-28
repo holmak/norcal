@@ -1587,6 +1587,18 @@ class CodeGenerator
                 generate(otherOperand);
                 return true;
             }
+
+            // Use a temporary:
+            {
+                CompileIntoA(right);
+                Reserve(Register.L);
+                EmitAsm("STA", RegisterL);
+                Release(Register.A);
+                CompileIntoA(left);
+                generate(RegisterL);
+                Release(Register.L);
+                return true;
+            }
         }
 
         return false;
