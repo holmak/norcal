@@ -1206,7 +1206,7 @@ class CodeGenerator
     {
         if (SizeOf(expr) != 1) Abort("too large for A");
 
-        Expr left, right, subexpr, structExpr, pointerExpr, indexExpr, test;
+        Expr left, right, subexpr, structExpr, pointerExpr, indexExpr, test, arrayExpr;
         AsmOperand operand, leftOperand, rightOperand, baseAddress, basePointer;
         int number;
         string fieldName;
@@ -1252,6 +1252,31 @@ class CodeGenerator
             ReserveA();
             EmitAsm("LDA", basePointer);
             ReleaseY();
+            return;
+        }
+
+        // record->array[index]
+        if (expr.Match(Tag.Index, out arrayExpr, out indexExpr) &&
+            arrayExpr.Match(Tag.Field, out structExpr, out fieldName) &&
+            structExpr.Match(Tag.Load, out pointerExpr) &&
+            TryGetPointerOperand(pointerExpr, out basePointer))
+        {
+            // The combined field offset and (dynamic) index value must fit in a byte.
+            // Assume that the index will never point beyond the end of the array.
+
+            AsmOperand fieldOffset = GetFieldOffsetIfSmall(structExpr, fieldName);
+
+            CType arrayType = TypeOfWithoutDecay(arrayExpr);
+            if (!arrayType.IsArray) Error(arrayExpr, "an array is required");
+            if (arrayType.Dimension + fieldOffset.Offset > 255) Abort("combined offset is too large");
+
+            CompileIntoA(indexExpr);
+            EmitAsm("CLC");
+            EmitAsm("ADC", fieldOffset);
+            Reserve(Register.Y);
+            EmitAsm("TAY");
+            EmitAsm("LDA", basePointer);
+            Release(Register.Y);
             return;
         }
 
