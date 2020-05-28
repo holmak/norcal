@@ -1456,9 +1456,11 @@ class CodeGenerator
         int size = SizeOf(expr);
         bool wide = (size == 2);
 
-        Expr left, right;
+        Expr left, right, structExpr, pointerExpr;
+        AsmOperand basePointer;
         WideOperand wideOperand;
         int number;
+        string fieldName;
 
         // Simple value:
         if (TryGetWideOperand(expr, out wideOperand))
@@ -1469,6 +1471,23 @@ class CodeGenerator
             EmitAsm("LDA", wideOperand.High);
             EmitAsm("STA", RegisterH);
             Release(Register.A);
+            return;
+        }
+
+        // record->field
+        if (expr.Match(Tag.Field, out structExpr, out fieldName) &&
+            structExpr.Match(Tag.Load, out pointerExpr) &&
+            TryGetPointerOperand(pointerExpr, out basePointer))
+        {
+            Reserve(Register.Y);
+            EmitAsm("LDY", GetFieldOffsetIfSmall(structExpr, fieldName));
+            Reserve(Register.A | Register.H | Register.L);
+            EmitAsm("LDA", basePointer);
+            EmitAsm("STA", RegisterL);
+            EmitAsm("INY");
+            EmitAsm("LDA", basePointer);
+            EmitAsm("STA", RegisterH);
+            Release(Register.A | Register.Y);
             return;
         }
 
