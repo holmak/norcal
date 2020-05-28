@@ -1110,7 +1110,9 @@ class CodeGenerator
             TryGetWideOperand(right, out wideRightOperand))
         {
             // Wide comparison:
-            // aa < bb === if (ah != bh) then (ah < bh); else (al < bl)
+            // Subtract the right value from the left and check the final carry result.
+            // NOTE: The "CMP" of the low byte is equivalent to subtraction with "SEC, SBC".
+            // See http://6502.org/tutorials/compare_beyond.html#4.3
 
             Speculate();
 
@@ -1120,14 +1122,10 @@ class CodeGenerator
 
             CompileIntoHL(left);
             Reserve(Register.A);
-            EmitAsm("LDA", RegisterH);
-            EmitAsm("CMP", wideRightOperand.High);
-            EmitAsm("BEQ", lowLabel);
-            EmitAsm(opcode, target);
-            EmitAsm("JMP", endLabel);
-            EmitLabel(lowLabel);
             EmitAsm("LDA", RegisterL);
             EmitAsm("CMP", wideRightOperand.Low);
+            EmitAsm("LDA", RegisterH);
+            EmitAsm("SBC", wideRightOperand.High);
             EmitAsm(opcode, target);
             EmitLabel(endLabel);
             Release(Register.A | Register.H | Register.L);
