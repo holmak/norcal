@@ -1030,6 +1030,22 @@ class CodeGenerator
                 ReleaseA();
                 if (Commit()) return;
             }
+
+            // Also try compiling one operand into a temporary:
+
+            {
+                Speculate();
+                CompileIntoA(right);
+                Reserve(Register.L);
+                EmitAsm("STA", RegisterL);
+                Release(Register.A);
+                CompileIntoA(left);
+                EmitAsm("CMP", RegisterL);
+                string opcode = condition ? "BEQ" : "BNE";
+                EmitAsm(opcode, target);
+                Release(Register.A | Register.L);
+                if (Commit()) return;
+            }
         }
 
         // (a != b) === !(a == b)
