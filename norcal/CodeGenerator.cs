@@ -1363,7 +1363,8 @@ class CodeGenerator
 
     void CompileIntoHL(Expr expr)
     {
-        if (SizeOf(expr) != 2) Abort("word-sized values only");
+        int size = SizeOf(expr);
+        bool wide = (size == 2);
 
         Expr left, right;
         WideOperand wideOperand;
@@ -1382,7 +1383,8 @@ class CodeGenerator
         }
 
         // Addition:
-        if (expr.Match(Tag.Add, out left, out right) &&
+        if (wide &&
+            expr.Match(Tag.Add, out left, out right) &&
             TryGetWideOperand(right, out wideOperand))
         {
             CompileIntoHL(left);
@@ -1391,7 +1393,8 @@ class CodeGenerator
         }
 
         // Subtraction:
-        if (expr.Match(Tag.Subtract, out left, out right) &&
+        if (wide &&
+            expr.Match(Tag.Subtract, out left, out right) &&
             TryGetWideOperand(right, out wideOperand))
         {
             CompileIntoHL(left);
@@ -1408,7 +1411,8 @@ class CodeGenerator
         }
 
         // Right shift:
-        if (expr.Match(Tag.ShiftRight, out left, out right))
+        if (wide &&
+            expr.Match(Tag.ShiftRight, out left, out right))
         {
             if (TryGetConstant(right, out number))
             {
