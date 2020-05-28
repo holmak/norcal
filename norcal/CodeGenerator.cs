@@ -645,6 +645,24 @@ class CodeGenerator
                 if (Commit()) return;
             }
 
+            if (wide &&
+                left.Match(Tag.Field, out structExpr, out fieldName) &&
+                structExpr.Match(Tag.Load, out pointerExpr) &&
+                TryGetPointerOperand(pointerExpr, out basePointer))
+            {
+                Speculate();
+                CompileIntoHL(right);
+                Reserve(Register.A | Register.Y);
+                EmitAsm("LDY", GetFieldOffsetIfSmall(structExpr, fieldName));
+                EmitAsm("LDA", RegisterL);
+                EmitAsm("STA", basePointer);
+                EmitAsm("INY");
+                EmitAsm("LDA", RegisterH);
+                EmitAsm("STA", basePointer);
+                Release(Register.A | Register.Y | Register.H | Register.L);
+                if (Commit()) return;
+            }
+
             NYI(wide ? "WIDE" : "NARROW");
             return;
         }
