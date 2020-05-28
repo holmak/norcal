@@ -550,9 +550,9 @@ class CodeGenerator
                 // STA (record),Y
 
                 Speculate();
+                CompileIntoA(right);
                 ReserveY();
                 EmitAsm("LDY", GetFieldOffsetIfSmall(structExpr, fieldName));
-                CompileIntoA(right);
                 EmitAsm("STA", basePointer);
                 ReleaseA();
                 ReleaseY();
