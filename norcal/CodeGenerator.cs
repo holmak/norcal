@@ -1604,6 +1604,12 @@ class CodeGenerator
         Expr[] args;
         string function;
 
+        if (Output.Reserved != Register.None)
+        {
+            Abort("all registers must be free before making a call");
+            return;
+        }
+
         if (expr.MatchAny(Tag.Call, out functionExpr, out args) &&
             functionExpr.Match(Tag.Name, out function))
         {
