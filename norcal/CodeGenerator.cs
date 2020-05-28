@@ -458,7 +458,7 @@ class CodeGenerator
             CheckBinaryOperandWidth(left, right, out leftSize, out rightSize, out wide);
 
             Expr loadExpr, pointerExpr, arrayExpr, indexExpr, structExpr;
-            AsmOperand leftOperand, rightOperand, baseAddress, basePointer;
+            AsmOperand leftOperand, baseAddress, basePointer;
             WideOperand leftWideOperand, rightWideOperand, pointerWideOperand;
 
             if (!wide && TryGetOperand(left, out leftOperand))
@@ -970,7 +970,7 @@ class CodeGenerator
         EmitComment("");
         EmitComment("jump if {0}: {1}", condition.ToString().ToLower(), ToSourceCode(expr));
 
-        AsmOperand operand, leftOperand, rightOperand;
+        AsmOperand leftOperand, rightOperand;
         WideOperand wideRightOperand;
         Expr subexpr, left, right;
         int number;
@@ -1665,7 +1665,7 @@ class CodeGenerator
 
     Expr FoldConstants(Expr expr)
     {
-        Expr subexpr, left, right;
+        Expr left, right;
         int a, b;
 
         if (expr.Match(Tag.Assign, out left, out right))
