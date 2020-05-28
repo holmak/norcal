@@ -707,6 +707,7 @@ class CodeGenerator
             Expr structExpr, pointerExpr, arrayExpr, indexExpr;
             AsmOperand leftOperand, rightOperand, baseAddress, basePointer;
             WideOperand wideLeftOperand, wideRightOperand;
+            int amount;
 
             if (!wide &&
                 TryGetOperand(left, out leftOperand) &&
@@ -720,23 +721,33 @@ class CodeGenerator
                 // STA left
 
                 Speculate();
-                CompileIntoA(left);
                 if (op == Tag.Add)
                 {
+                    CompileIntoA(left);
                     EmitAsm("CLC");
                     EmitAsm("ADC", rightOperand);
+                    EmitAsm("STA", leftOperand);
+                    ReleaseA();
                 }
                 else if (op == Tag.Subtract)
                 {
+                    CompileIntoA(left);
                     EmitAsm("SEC");
                     EmitAsm("SBC", rightOperand);
+                    EmitAsm("STA", leftOperand);
+                    ReleaseA();
+                }
+                else if (op == Tag.ShiftLeft && TryGetConstant(right, out amount))
+                {
+                    for (int i = 0; i < amount; i++)
+                    {
+                        EmitAsm("ASL", leftOperand);
+                    }
                 }
                 else
                 {
                     Abort("unhandled binary operation");
                 }
-                EmitAsm("STA", leftOperand);
-                ReleaseA();
                 if (Commit()) return;
             }
 
