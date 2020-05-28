@@ -459,7 +459,7 @@ class CodeGenerator
 
             Expr loadExpr, pointerExpr, arrayExpr, indexExpr, structExpr;
             AsmOperand leftOperand, baseAddress, basePointer;
-            WideOperand leftWideOperand, rightWideOperand, pointerWideOperand;
+            WideOperand wideLeftOperand, wideRightOperand, pointerWideOperand;
 
             if (!wide && TryGetOperand(left, out leftOperand))
             {
@@ -591,28 +591,28 @@ class CodeGenerator
             }
 
             if (wide &&
-                TryGetWideOperand(left, out leftWideOperand) &&
-                TryGetWideOperand(right, out rightWideOperand))
+                TryGetWideOperand(left, out wideLeftOperand) &&
+                TryGetWideOperand(right, out wideRightOperand))
             {
                 // Pattern:
                 // a = b;
                 // (for operands that can be addressed directly)
 
-                if (leftWideOperand.Low.Mode == AddressMode.Immediate)
+                if (wideLeftOperand.Low.Mode == AddressMode.Immediate)
                 {
                     Error(left, "an assignable expression is required");
                 }
 
                 ReserveA();
-                EmitAsm("LDA", rightWideOperand.Low);
-                EmitAsm("STA", leftWideOperand.Low);
+                EmitAsm("LDA", wideRightOperand.Low);
+                EmitAsm("STA", wideLeftOperand.Low);
                 ReleaseA();
 
                 if (leftSize == 2)
                 {
                     ReserveA();
-                    EmitAsm("LDA", rightWideOperand.High);
-                    EmitAsm("STA", leftWideOperand.High);
+                    EmitAsm("LDA", wideRightOperand.High);
+                    EmitAsm("STA", wideLeftOperand.High);
                     ReleaseA();
                 }
 
@@ -620,7 +620,7 @@ class CodeGenerator
             }
 
             if (wide &&
-                TryGetWideOperand(left, out leftWideOperand) &&
+                TryGetWideOperand(left, out wideLeftOperand) &&
                 right.Match(Tag.Field, out loadExpr, out fieldName) &&
                 loadExpr.Match(Tag.Load, out pointerExpr) &&
                 TryGetWideOperand(pointerExpr, out pointerWideOperand) &&
@@ -631,7 +631,7 @@ class CodeGenerator
                 // u8 *p = board->array;
                 // u8 *q = board->field;
 
-                if (leftWideOperand.Low.Mode == AddressMode.Immediate)
+                if (wideLeftOperand.Low.Mode == AddressMode.Immediate)
                 {
                     Error(left, "an assignable expression is required");
                 }
@@ -641,7 +641,7 @@ class CodeGenerator
                 if (field.Type.IsArray)
                 {
                     WideOperand offset = WideOperand.MakeImmediate(field.Offset, "offset of ." + fieldName);
-                    CompileWideAddition(leftWideOperand, pointerWideOperand, offset);
+                    CompileWideAddition(wideLeftOperand, pointerWideOperand, offset);
                     return;
                 }
                 else if (field.Offset < 256 && TryGetPointerOperand(pointerExpr, out baseAddress))
@@ -650,27 +650,27 @@ class CodeGenerator
                     ReserveY();
                     EmitAsm("LDY", new AsmOperand(field.Offset, AddressMode.Immediate));
                     EmitAsm("LDA", baseAddress);
-                    EmitAsm("STA", leftWideOperand.Low);
+                    EmitAsm("STA", wideLeftOperand.Low);
                     EmitAsm("INY");
                     EmitAsm("LDA", baseAddress);
-                    EmitAsm("STA", leftWideOperand.High);
+                    EmitAsm("STA", wideLeftOperand.High);
                     ReleaseA();
                     ReleaseY();
                     return;
                 }
             }
 
-            if (wide && TryGetWideOperand(left, out leftWideOperand))
+            if (wide && TryGetWideOperand(left, out wideLeftOperand))
             {
                 Speculate();
                 CompileIntoHL(right);
                 Reserve(Register.A);
                 EmitAsm("LDA", RegisterL);
-                EmitAsm("STA", leftWideOperand.Low);
+                EmitAsm("STA", wideLeftOperand.Low);
                 if (SizeOf(left) > 1)
                 {
                     EmitAsm("LDA", RegisterH);
-                    EmitAsm("STA", leftWideOperand.High);
+                    EmitAsm("STA", wideLeftOperand.High);
                 }
                 Release(Register.A | Register.H | Register.L);
                 if (Commit()) return;
