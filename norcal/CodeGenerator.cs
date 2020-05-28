@@ -549,12 +549,9 @@ class CodeGenerator
                 // LDA right
                 // STA (record),Y
 
-                FieldInfo field = GetFieldInfo(structExpr, fieldName);
-
                 Speculate();
-                if (field.Offset > 255) Abort("field offset is too large");
                 ReserveY();
-                EmitAsm("LDY", new AsmOperand(field.Offset, AddressMode.Immediate).WithComment("offset of .{0}", fieldName));
+                EmitAsm("LDY", GetFieldOffsetIfSmall(structExpr, fieldName));
                 CompileIntoA(right);
                 EmitAsm("STA", basePointer);
                 ReleaseA();
@@ -562,7 +559,9 @@ class CodeGenerator
                 if (Commit()) return;
             }
 
-            if (wide && TryGetWideOperand(left, out leftWideOperand) && TryGetWideOperand(right, out rightWideOperand))
+            if (wide &&
+                TryGetWideOperand(left, out leftWideOperand) &&
+                TryGetWideOperand(right, out rightWideOperand))
             {
                 // Pattern:
                 // a = b;
@@ -738,12 +737,9 @@ class CodeGenerator
                 // Pattern:
                 // record->field @= right;
 
-                FieldInfo field = GetFieldInfo(structExpr, fieldName);
-                if (field.Offset > 255) Abort("field offset is too large");
-
                 Speculate();
                 Reserve(Register.A | Register.Y);
-                EmitAsm("LDY", new AsmOperand(field.Offset, AddressMode.Immediate).WithComment("offset of .{0}", fieldName));
+                EmitAsm("LDY", GetFieldOffsetIfSmall(structExpr, fieldName));
 
                 if (op == Tag.Add)
                 {
@@ -779,12 +775,9 @@ class CodeGenerator
                 // Pattern:
                 // record->field @= right;
 
-                FieldInfo field = GetFieldInfo(structExpr, fieldName);
-                if (field.Offset > 255) Abort("field offset is too large");
-
                 Speculate();
                 Reserve(Register.A | Register.Y);
-                EmitAsm("LDY", new AsmOperand(field.Offset, AddressMode.Immediate).WithComment("offset of .{0}", fieldName));
+                EmitAsm("LDY", GetFieldOffsetIfSmall(structExpr, fieldName));
 
                 if (op == Tag.Add)
                 {
@@ -1189,10 +1182,8 @@ class CodeGenerator
             structExpr.Match(Tag.Load, out pointerExpr) &&
             TryGetPointerOperand(pointerExpr, out basePointer))
         {
-            FieldInfo field = GetFieldInfo(structExpr, fieldName);
-            if (field.Offset > 255) Abort("field offset is too large");
             ReserveY();
-            EmitAsm("LDY", new AsmOperand(field.Offset, AddressMode.Immediate).WithComment("offset of .{0}", fieldName));
+            EmitAsm("LDY", GetFieldOffsetIfSmall(structExpr, fieldName));
             ReserveA();
             EmitAsm("LDA", basePointer);
             ReleaseY();
@@ -2324,6 +2315,13 @@ class CodeGenerator
         }
         Error(structExpr, "invalid field name: " + fieldName);
         return null;
+    }
+
+    AsmOperand GetFieldOffsetIfSmall(Expr structExpr, string fieldName)
+    {
+        FieldInfo field = GetFieldInfo(structExpr, fieldName);
+        if (field.Offset > 255) Abort("field offset is too large");
+        return new AsmOperand(field.Offset, AddressMode.Immediate).WithComment("offset of .{0}", fieldName);
     }
 
     static string AggregateLayoutToString(AggregateLayout layout)
