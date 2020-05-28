@@ -1204,6 +1204,8 @@ class CodeGenerator
 
     void CompileIntoA(Expr expr)
     {
+        expr = FoldConstants(expr);
+
         if (SizeOf(expr) != 1) Abort("too large for A");
 
         Expr left, right, subexpr, structExpr, pointerExpr, indexExpr, test, arrayExpr;
@@ -1720,11 +1722,25 @@ class CodeGenerator
             return Expr.Make(Tag.Assign, FoldConstants(left), FoldConstants(right)).WithSource(expr.Source);
         }
 
+        if (expr.Match(Tag.Add, out left, out right) &&
+            TryGetConstant(FoldConstants(left), out a) &&
+            TryGetConstant(FoldConstants(right), out b))
+        {
+            return Expr.Make(Tag.Integer, (int)(ushort)(a + b)).WithSource(expr.Source);
+        }
+
         if (expr.Match(Tag.Subtract, out left, out right) &&
             TryGetConstant(FoldConstants(left), out a) &&
             TryGetConstant(FoldConstants(right), out b))
         {
             return Expr.Make(Tag.Integer, (int)(ushort)(a - b)).WithSource(expr.Source);
+        }
+
+        if (expr.Match(Tag.Multiply, out left, out right) &&
+            TryGetConstant(FoldConstants(left), out a) &&
+            TryGetConstant(FoldConstants(right), out b))
+        {
+            return Expr.Make(Tag.Integer, (int)(ushort)(a * b)).WithSource(expr.Source);
         }
 
         return expr;
