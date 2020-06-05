@@ -16,7 +16,7 @@ class CodeGenerator
     // Global allocation:
     // (Reserve the top half of zero page for the parameter stack.)
     AllocationRegion ZeroPageRegion = new AllocationRegion("zero page RAM", 0, 0x80);
-    AllocationRegion OamRegion = new AllocationRegion("OAM", 0x100, 0x200);
+    AllocationRegion OamRegion = new AllocationRegion("OAM", 0x200, 0x300);
     AllocationRegion RamRegion = new AllocationRegion("RAM", 0x300, 0x800);
 
     // A wide temporary register:
