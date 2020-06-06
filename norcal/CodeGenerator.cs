@@ -460,7 +460,7 @@ class CodeGenerator
             Expr loadExpr, pointerExpr, arrayExpr, indexExpr, structExpr;
             AsmOperand leftOperand, baseAddress, basePointer;
             WideOperand wideLeftOperand, wideRightOperand, pointerWideOperand;
-            int offset;
+            int offset, index;
 
             if (!wide && TryGetOperand(left, out leftOperand))
             {
@@ -599,6 +599,33 @@ class CodeGenerator
                 EmitAsm("STA", new AsmOperand(offset, AddressMode.Absolute).WithComment(offsetComment));
                 Release(Register.A);
                 if (Commit()) return;
+            }
+
+            // pointer[index].field = right;
+            if (!wide &&
+                left.Match(Tag.Field, out structExpr, out fieldName))
+            {
+                if (structExpr.Match(Tag.Index, out arrayExpr, out indexExpr) &&
+                    TryGetPointerOperand(arrayExpr, out basePointer) &&
+                    TryGetConstant(indexExpr, out index))
+                {
+                    CType arrayType = TypeOf(arrayExpr);
+                    if (!arrayType.IsPointer) Error(arrayExpr, "a pointer or array is required");
+                    CType elementType = arrayType.Subtype;
+                    int elementSize = SizeOf(expr, elementType);
+
+                    Speculate();
+                    CompileIntoA(right);
+                    AsmOperand fieldOffset = GetFieldOffsetIfSmall(structExpr, fieldName);
+                    // TODO: Make sure the offset can't be larger than UINT8_MAX.
+                    AsmOperand totalOffset = new AsmOperand(fieldOffset.Offset + index * elementSize, AddressMode.Immediate)
+                        .WithComment(string.Format("[{0}].{1}", index, fieldName));
+                    Reserve(Register.Y);
+                    EmitAsm("LDY", totalOffset);
+                    EmitAsm("STA", basePointer);
+                    Release(Register.A | Register.Y);
+                    if (Commit()) return;
+                }
             }
 
             if (wide &&
