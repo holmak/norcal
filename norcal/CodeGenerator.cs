@@ -1478,7 +1478,7 @@ class CodeGenerator
         int size = SizeOf(expr);
         bool wide = (size == 2);
 
-        Expr left, right, structExpr, pointerExpr;
+        Expr left, right, structExpr, pointerExpr, test;
         AsmOperand basePointer;
         WideOperand wideOperand;
         int number;
@@ -1572,6 +1572,22 @@ class CodeGenerator
             }
 
             Abort("variable-width shifts are not supported");
+            return;
+        }
+
+        // Conditional expression:
+        if (expr.Match(Tag.Conditional, out test, out left, out right))
+        {
+            AsmOperand elseLabel = MakeUniqueLabel("cond_else");
+            AsmOperand endLabel = MakeUniqueLabel("cond_end");
+            CompileJumpIf(false, test, elseLabel);
+            CompileIntoHL(left);
+            // Note: We aren't really releasing these registers, but we need to use them in both branches.
+            Release(Register.H | Register.L);
+            EmitAsm("JMP", endLabel);
+            EmitLabel(elseLabel);
+            CompileIntoHL(right);
+            EmitLabel(endLabel);
             return;
         }
 
