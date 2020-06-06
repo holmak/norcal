@@ -299,7 +299,7 @@ class CodeGenerator
         Expr init, test, induct, body;
         Expr[] block, parts;
         CType type;
-        string name, mnemonic, fieldName, op, tag;
+        string name, mnemonic, fieldName, op, tag, offsetComment;
         AsmOperand operand;
         WideOperand wideOperand;
 
@@ -460,6 +460,7 @@ class CodeGenerator
             Expr loadExpr, pointerExpr, arrayExpr, indexExpr, structExpr;
             AsmOperand leftOperand, baseAddress, basePointer;
             WideOperand wideLeftOperand, wideRightOperand, pointerWideOperand;
+            int offset;
 
             if (!wide && TryGetOperand(left, out leftOperand))
             {
@@ -590,6 +591,16 @@ class CodeGenerator
                 if (Commit()) return;
             }
 
+            if (!wide &&
+                left.Match(Tag.RawOffset, out type, out offset, out offsetComment))
+            {
+                Speculate();
+                CompileIntoA(right);
+                EmitAsm("STA", new AsmOperand(offset, AddressMode.Absolute).WithComment(offsetComment));
+                Release(Register.A);
+                if (Commit()) return;
+            }
+
             if (wide &&
                 TryGetWideOperand(left, out wideLeftOperand) &&
                 TryGetWideOperand(right, out wideRightOperand))
@@ -640,8 +651,8 @@ class CodeGenerator
 
                 if (field.Type.IsArray)
                 {
-                    WideOperand offset = WideOperand.MakeImmediate(field.Offset, "offset of ." + fieldName);
-                    CompileWideAddition(wideLeftOperand, pointerWideOperand, offset);
+                    WideOperand wideOffset = WideOperand.MakeImmediate(field.Offset, "offset of ." + fieldName);
+                    CompileWideAddition(wideLeftOperand, pointerWideOperand, wideOffset);
                     return;
                 }
                 else if (field.Offset < 256 && TryGetPointerOperand(pointerExpr, out baseAddress))
@@ -1473,6 +1484,8 @@ class CodeGenerator
         int number;
         string fieldName;
 
+        expr = FoldConstants(expr);
+
         // Simple value:
         if (TryGetWideOperand(expr, out wideOperand))
         {
@@ -1754,8 +1767,9 @@ class CodeGenerator
 
     Expr FoldConstants(Expr expr)
     {
-        Expr left, right;
+        Expr left, right, structExpr;
         int a, b;
+        string name, fieldName;
 
         if (expr.Match(Tag.Assign, out left, out right))
         {
@@ -1781,6 +1795,31 @@ class CodeGenerator
             TryGetConstant(FoldConstants(right), out b))
         {
             return Expr.Make(Tag.Integer, (int)(ushort)(a * b)).WithSource(expr.Source);
+        }
+
+        if (expr.Match(Tag.Field, out structExpr, out fieldName))
+        {
+            // Simplify the base expression before trying to analyze it:
+            structExpr = FoldConstants(structExpr);
+
+            if (structExpr.Match(Tag.Name, out name))
+            {
+                Symbol sym = FindSymbol(structExpr, name);
+                if (sym.Tag == SymbolTag.Global)
+                {
+                    FieldInfo field = GetFieldInfo(structExpr, fieldName);
+                    return Expr.Make(Tag.RawOffset, field.Type, sym.Value + field.Offset, name + "." + fieldName).WithSource(expr.Source);
+                }
+            }
+
+            CType type;
+            int offset;
+            string offsetComment;
+            if (structExpr.Match(Tag.RawOffset, out type, out offset, out offsetComment))
+            {
+                FieldInfo field = GetFieldInfo(structExpr, fieldName);
+                return Expr.Make(Tag.RawOffset, field.Type, offset + field.Offset, offsetComment + "." + fieldName).WithSource(expr.Source);
+            }
         }
 
         return expr;
@@ -1837,6 +1876,15 @@ class CodeGenerator
             return true;
         }
 
+        CType type;
+        int offset;
+        string offsetComment;
+        if (expr.Match(Tag.RawOffset, out type, out offset, out offsetComment))
+        {
+            operand = new AsmOperand(offset, AddressMode.Absolute).WithComment(offsetComment);
+            return true;
+        }
+
         Expr subexpr;
         WideOperand pointer;
 
@@ -1861,14 +1909,17 @@ class CodeGenerator
         int size = SizeOf(expr);
         if (size < 1) Program.Panic("expression must have size of at least 1");
 
+        Expr structExpr;
         int number;
-        string name;
+        string name, fieldName;
+
         if (expr.Match(Tag.Integer, out number))
         {
             operand = WideOperand.MakeImmediate(number, "'literal'");
             return true;
         }
-        else if (expr.Match(Tag.Name, out name))
+
+        if (expr.Match(Tag.Name, out name))
         {
             operand = new WideOperand();
             Symbol sym = FindSymbol(expr, name);
@@ -1906,11 +1957,9 @@ class CodeGenerator
 
             return true;
         }
-        else
-        {
-            operand = null;
-            return false;
-        }
+
+        operand = null;
+        return false;
     }
 
     /// <summary>
@@ -2057,7 +2106,7 @@ class CodeGenerator
 
     CType TypeOfWithoutDecay(Expr expr)
     {
-        string name, fieldName, functionName, op;
+        string name, fieldName, functionName, op, offsetComment;
         int number;
         int[] data;
         CType type;
@@ -2144,6 +2193,14 @@ class CodeGenerator
         else if (expr.Match(Tag.Cast, out type, out subexpr))
         {
             return type;
+        }
+        else if (expr.Match(Tag.RawOffset, out type, out number, out offsetComment))
+        {
+            return type;
+        }
+        else if (expr.MatchTag(Tag.Sequence))
+        {
+            return CType.Void;
         }
 
         Program.UnhandledCase();

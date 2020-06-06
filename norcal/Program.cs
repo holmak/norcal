@@ -287,6 +287,7 @@ static class Tag
     public static readonly string Load = "$load";
     public static readonly string Store = "$store";
     public static readonly string Cast = "$cast";
+    public static readonly string RawOffset = "$raw_offset";
 
     public static readonly string Equal = "$equal";
     public static readonly string NotEqual = "$not_equal";
