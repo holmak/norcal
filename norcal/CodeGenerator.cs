@@ -1909,9 +1909,9 @@ class CodeGenerator
         int size = SizeOf(expr);
         if (size < 1) Program.Panic("expression must have size of at least 1");
 
-        Expr structExpr;
-        int number;
-        string name, fieldName;
+        CType type;
+        int number, offset;
+        string name, offsetComment;
 
         if (expr.Match(Tag.Integer, out number))
         {
@@ -1955,6 +1955,23 @@ class CodeGenerator
                 operand.High = new AsmOperand(0, AddressMode.Immediate).WithComment("...zero-extended");
             }
 
+            return true;
+        }
+
+        if (expr.Match(Tag.RawOffset, out type, out offset, out offsetComment))
+        {
+            operand = new WideOperand();
+            // References to arrays produce the address of the array, they don't try to read from it.
+            if (type.IsArray)
+            {
+                operand.Low = new AsmOperand(offset, ImmediateModifier.LowByte).WithComment("#<" + offsetComment);
+                operand.High = new AsmOperand(offset, ImmediateModifier.HighByte).WithComment("#>" + offsetComment);
+            }
+            else
+            {
+                operand.Low = new AsmOperand(offset, AddressMode.Absolute).WithComment(offsetComment);
+                operand.High = new AsmOperand(offset + 1, AddressMode.Absolute).WithComment(offsetComment + "+1");
+            }
             return true;
         }
 
