@@ -473,7 +473,7 @@ class CodeGenerator
                 Speculate();
                 CompileIntoA(right);
                 EmitAsm("STA", leftOperand);
-                ReleaseA();
+                Release(Register.A);
                 if (Commit()) return;
             }
 
@@ -498,16 +498,14 @@ class CodeGenerator
                     CompileIntoY(indexExpr);
                     CompileIntoA(right);
                     EmitAsm("STA", baseAddress.WithMode(AddressMode.AbsoluteY));
-                    ReleaseA();
-                    ReleaseY();
+                    Release(Register.A | Register.Y);
                     if (Commit()) return;
 
                     Speculate();
                     CompileIntoA(right);
                     CompileIntoY(indexExpr);
                     EmitAsm("STA", baseAddress.WithMode(AddressMode.AbsoluteY));
-                    ReleaseA();
-                    ReleaseY();
+                    Release(Register.A | Register.Y);
                     if (Commit()) return;
                 }
 
@@ -524,16 +522,14 @@ class CodeGenerator
                     CompileIntoY(indexExpr);
                     CompileIntoA(right);
                     EmitAsm("STA", basePointer);
-                    ReleaseA();
-                    ReleaseY();
+                    Release(Register.A | Register.Y);
                     if (Commit()) return;
 
                     Speculate();
                     CompileIntoA(right);
                     CompileIntoY(indexExpr);
                     EmitAsm("STA", basePointer);
-                    ReleaseA();
-                    ReleaseY();
+                    Release(Register.A | Register.Y);
                     if (Commit()) return;
                 }
             }
@@ -552,11 +548,10 @@ class CodeGenerator
 
                 Speculate();
                 CompileIntoA(right);
-                ReserveY();
+                Reserve(Register.Y);
                 EmitAsm("LDY", GetFieldOffsetIfSmall(structExpr, fieldName));
                 EmitAsm("STA", basePointer);
-                ReleaseA();
-                ReleaseY();
+                Release(Register.A | Register.Y);
                 if (Commit()) return;
             }
 
@@ -641,17 +636,17 @@ class CodeGenerator
                     Error(left, "an assignable expression is required");
                 }
 
-                ReserveA();
+                Reserve(Register.A);
                 EmitAsm("LDA", wideRightOperand.Low);
                 EmitAsm("STA", wideLeftOperand.Low);
-                ReleaseA();
+                Release(Register.A);
 
                 if (leftSize == 2)
                 {
-                    ReserveA();
+                    Reserve(Register.A);
                     EmitAsm("LDA", wideRightOperand.High);
                     EmitAsm("STA", wideLeftOperand.High);
-                    ReleaseA();
+                    Release(Register.A);
                 }
 
                 return;
@@ -684,16 +679,14 @@ class CodeGenerator
                 }
                 else if (field.Offset < 256 && TryGetPointerOperand(pointerExpr, out baseAddress))
                 {
-                    ReserveA();
-                    ReserveY();
+                    Reserve(Register.A | Register.Y);
                     EmitAsm("LDY", new AsmOperand(field.Offset, AddressMode.Immediate));
                     EmitAsm("LDA", baseAddress);
                     EmitAsm("STA", wideLeftOperand.Low);
                     EmitAsm("INY");
                     EmitAsm("LDA", baseAddress);
                     EmitAsm("STA", wideLeftOperand.High);
-                    ReleaseA();
-                    ReleaseY();
+                    Release(Register.A | Register.Y);
                     return;
                 }
             }
@@ -765,7 +758,7 @@ class CodeGenerator
                     EmitAsm("CLC");
                     EmitAsm("ADC", rightOperand);
                     EmitAsm("STA", leftOperand);
-                    ReleaseA();
+                    Release(Register.A);
                 }
                 else if (op == Tag.Subtract)
                 {
@@ -773,7 +766,7 @@ class CodeGenerator
                     EmitAsm("SEC");
                     EmitAsm("SBC", rightOperand);
                     EmitAsm("STA", leftOperand);
-                    ReleaseA();
+                    Release(Register.A);
                 }
                 else if (op == Tag.ShiftLeft && TryGetConstant(right, out amount))
                 {
@@ -919,7 +912,7 @@ class CodeGenerator
         {
             Speculate();
             CompileCall(expr);
-            ReleaseA();
+            Release(Register.A);
             if (Commit()) return;
         }
 
@@ -993,7 +986,7 @@ class CodeGenerator
             Speculate();
             CompileIntoA(subexpr);
             ReturnFromFunction();
-            ReleaseA();
+            Release(Register.A);
             if (Commit()) return;
         }
 
@@ -1042,7 +1035,7 @@ class CodeGenerator
             CompileIntoA(expr);
             string opcode = condition ? "BNE" : "BEQ";
             EmitAsm(opcode, target);
-            ReleaseA();
+            Release(Register.A);
             if (Commit()) return;
         }
 
@@ -1065,7 +1058,7 @@ class CodeGenerator
                 EmitAsm("CMP", rightOperand);
                 string opcode = condition ? "BEQ" : "BNE";
                 EmitAsm(opcode, target);
-                ReleaseA();
+                Release(Register.A);
                 if (Commit()) return;
             }
 
@@ -1076,7 +1069,7 @@ class CodeGenerator
                 EmitAsm("CMP", leftOperand);
                 string opcode = condition ? "BEQ" : "BNE";
                 EmitAsm(opcode, target);
-                ReleaseA();
+                Release(Register.A);
                 if (Commit()) return;
             }
 
@@ -1138,7 +1131,7 @@ class CodeGenerator
                 EmitAsm("CMP", rightOperand);
                 string opcode = condition ? "BCC" : "BCS";
                 EmitAsm(opcode, target);
-                ReleaseA();
+                Release(Register.A);
                 if (Commit()) return;
             }
 
@@ -1264,7 +1257,7 @@ class CodeGenerator
         // Simple value:
         if (TryGetOperand(expr, out operand))
         {
-            ReserveA();
+            Reserve(Register.A);
             EmitAsm("LDA", operand);
             return;
         }
@@ -1275,18 +1268,18 @@ class CodeGenerator
             if (TryGetConstantBaseAddress(pointerExpr, out baseAddress))
             {
                 CompileIntoY(indexExpr);
-                ReserveA();
+                Reserve(Register.A);
                 EmitAsm("LDA", baseAddress.WithMode(AddressMode.AbsoluteY));
-                ReleaseY();
+                Release(Register.Y);
                 return;
             }
 
             if (TryGetPointerOperand(pointerExpr, out basePointer))
             {
                 CompileIntoY(indexExpr);
-                ReserveA();
+                Reserve(Register.A);
                 EmitAsm("LDA", basePointer);
-                ReleaseY();
+                Release(Register.Y);
                 return;
             }
         }
@@ -1296,11 +1289,11 @@ class CodeGenerator
             structExpr.Match(Tag.Load, out pointerExpr) &&
             TryGetPointerOperand(pointerExpr, out basePointer))
         {
-            ReserveY();
+            Reserve(Register.Y);
             EmitAsm("LDY", GetFieldOffsetIfSmall(structExpr, fieldName));
-            ReserveA();
+            Reserve(Register.A);
             EmitAsm("LDA", basePointer);
-            ReleaseY();
+            Release(Register.Y);
             return;
         }
 
@@ -1377,7 +1370,7 @@ class CodeGenerator
             TryGetOperand(left, out leftOperand) &&
             TryGetConstant(right, out number))
         {
-            ReserveA();
+            Reserve(Register.A);
             EmitAsm("LDA", new AsmOperand(0, AddressMode.Immediate));
             EmitAsm("CLC");
             for (int i = 0; i < number; i++)
@@ -1418,9 +1411,9 @@ class CodeGenerator
 
             // By any number, via lookup table:
             CompileIntoY(left);
-            ReserveA();
+            Reserve(Register.A);
             EmitAsm("LDA", GenerateDivisionTable(number).WithMode(AddressMode.AbsoluteY));
-            ReleaseY();
+            Release(Register.Y);
             return;
         }
 
@@ -1430,9 +1423,9 @@ class CodeGenerator
         {
             // By any number, via lookup table:
             CompileIntoY(left);
-            ReserveA();
+            Reserve(Register.A);
             EmitAsm("LDA", GenerateModulusTable(number).WithMode(AddressMode.AbsoluteY));
-            ReleaseY();
+            Release(Register.Y);
             return;
         }
 
@@ -1451,7 +1444,7 @@ class CodeGenerator
             CompileJumpIf(false, test, elseLabel);
             CompileIntoA(left);
             // Note: We aren't really releasing A here, but we need to compile into A in both branches.
-            ReleaseA();
+            Release(Register.A);
             EmitAsm("JMP", endLabel);
             EmitLabel(elseLabel);
             CompileIntoA(right);
@@ -1671,7 +1664,7 @@ class CodeGenerator
         // Simple value:
         if (TryGetOperand(expr, out operand))
         {
-            ReserveY();
+            Reserve(Register.Y);
             EmitAsm("LDY", operand);
             return;
         }
@@ -1688,9 +1681,9 @@ class CodeGenerator
 
         // See if the value can be calculated in A:
         CompileIntoA(expr);
-        ReserveY();
+        Reserve(Register.Y);
         EmitAsm("TAY");
-        ReleaseA();
+        Release(Register.A);
     }
 
     void CompileWideAddition(WideOperand dest, WideOperand a, WideOperand b)
@@ -1773,19 +1766,19 @@ class CodeGenerator
                 {
                     CompileIntoA(arg);
                     EmitAsm("STA", new AsmOperand(offset, AddressMode.ZeroPageX));
-                    ReleaseA();
+                    Release(Register.A);
                 }
                 else if (paramSize == 2)
                 {
                     WideOperand w;
                     if (TryGetWideOperand(arg, out w))
                     {
-                        ReserveA();
+                        Reserve(Register.A);
                         EmitAsm("LDA", w.Low);
                         EmitAsm("STA", new AsmOperand(offset, AddressMode.ZeroPageX));
                         EmitAsm("LDA", w.High);
                         EmitAsm("STA", new AsmOperand(offset + 1, AddressMode.ZeroPageX));
-                        ReleaseA();
+                        Release(Register.A);
                     }
                     else
                     {
@@ -1800,7 +1793,7 @@ class CodeGenerator
             }
 
             // The return value will be stored in A.
-            ReserveA();
+            Reserve(Register.A);
             EmitAsm("JSR", new AsmOperand(function, AddressMode.Absolute));
             return;
         }
@@ -2324,9 +2317,6 @@ class CodeGenerator
         Output.Reserved |= set;
     }
 
-    void ReserveA() => Reserve(Register.A);
-    void ReserveY() => Reserve(Register.Y);
-
     void Release(Register set)
     {
         // Don't report errors if a speculation error has occurred, since reserve/release pairs will be unbalanced.
@@ -2337,8 +2327,6 @@ class CodeGenerator
         Output.Reserved &= ~set;
     }
 
-    void ReleaseA() => Release(Register.A);
-    void ReleaseY() => Release(Register.Y);
 
     void Emit(params object[] args)
     {
