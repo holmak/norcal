@@ -714,7 +714,7 @@ class CodeGenerator
             Expr structExpr, pointerExpr, arrayExpr, indexExpr;
             AsmOperand leftOperand, rightOperand, baseAddress, basePointer;
             WideOperand wideLeftOperand, wideRightOperand;
-            int amount;
+            int amount, index;
 
             // left @= right;
             if (!wide &&
@@ -818,6 +818,50 @@ class CodeGenerator
                 }
 
                 Release(Register.A | Register.Y);
+                if (Commit()) return;
+            }
+
+            // pointer[index].field @= right;
+            if (!wide &&
+                left.Match(Tag.Field, out structExpr, out fieldName) &&
+                structExpr.Match(Tag.Index, out arrayExpr, out indexExpr) &&
+                TryGetPointerOperand(arrayExpr, out basePointer) &&
+                TryGetConstant(indexExpr, out index) &&
+                TryGetOperand(right, out rightOperand))
+            {
+                CType arrayType = TypeOf(arrayExpr);
+                if (!arrayType.IsPointer) Error(arrayExpr, "a pointer or array is required");
+                CType elementType = arrayType.Subtype;
+                int elementSize = SizeOf(expr, elementType);
+
+                Speculate();
+                AsmOperand fieldOffset = GetFieldOffsetIfSmall(structExpr, fieldName);
+                // TODO: Make sure the offset can't be larger than UINT8_MAX.
+                AsmOperand totalOffset = new AsmOperand(fieldOffset.Offset + index * elementSize, AddressMode.Immediate)
+                    .WithComment(string.Format("[{0}].{1}", index, fieldName));
+                Reserve(Register.Y);
+                EmitAsm("LDY", totalOffset);
+
+                if (op == Tag.Add)
+                {
+                    EmitAsm("LDA", basePointer);
+                    EmitAsm("CLC");
+                    EmitAsm("ADC", rightOperand);
+                    EmitAsm("STA", basePointer);
+                }
+                else if (op == Tag.Subtract)
+                {
+                    EmitAsm("LDA", basePointer);
+                    EmitAsm("SEC");
+                    EmitAsm("SBC", rightOperand);
+                    EmitAsm("STA", basePointer);
+                }
+                else
+                {
+                    Abort("unhandled binary operation");
+                }
+
+                Release(Register.Y);
                 if (Commit()) return;
             }
 
