@@ -462,14 +462,9 @@ class CodeGenerator
             WideOperand wideLeftOperand, wideRightOperand, pointerWideOperand;
             int offset, index;
 
+            // left = right
             if (!wide && TryGetOperand(left, out leftOperand))
             {
-                // Pattern:
-                // left = right;
-                //
-                // LDA right
-                // STA left
-
                 Speculate();
                 CompileIntoA(right);
                 EmitAsm("STA", leftOperand);
@@ -477,6 +472,7 @@ class CodeGenerator
                 if (Commit()) return;
             }
 
+            // array[index] = right;
             if (!wide && left.Match(Tag.Index, out arrayExpr, out indexExpr))
             {
                 // With an indexed expression, there are two subexpressions to compile:
@@ -485,15 +481,9 @@ class CodeGenerator
                 // you have more registers to work with; therefore, try compiling in both orders and
                 // hope that one works.
 
+                // ...where 'array' is constant
                 if (TryGetConstantBaseAddress(arrayExpr, out baseAddress))
                 {
-                    // Pattern:
-                    // array[index] = right;
-                    //
-                    // LDY index
-                    // LDA right
-                    // STA array,Y
-
                     Speculate();
                     CompileIntoY(indexExpr);
                     CompileIntoA(right);
@@ -509,15 +499,9 @@ class CodeGenerator
                     if (Commit()) return;
                 }
 
+                // ...where 'array' is a pointer
                 if (TryGetPointerOperand(arrayExpr, out basePointer))
                 {
-                    // Pattern:
-                    // array[index] = right;
-                    //
-                    // LDY index
-                    // LDA right
-                    // STA (array),Y
-
                     Speculate();
                     CompileIntoY(indexExpr);
                     CompileIntoA(right);
@@ -534,18 +518,12 @@ class CodeGenerator
                 }
             }
 
+            // record->field = right;
             if (!wide &&
                 left.Match(Tag.Field, out structExpr, out fieldName) &&
                 structExpr.Match(Tag.Load, out pointerExpr) &&
                 TryGetPointerOperand(pointerExpr, out basePointer))
             {
-                // Pattern:
-                // record->field = right;
-                //
-                // LDY #offsetof(field)
-                // LDA right
-                // STA (record),Y
-
                 Speculate();
                 CompileIntoA(right);
                 Reserve(Register.Y);
@@ -555,15 +533,13 @@ class CodeGenerator
                 if (Commit()) return;
             }
 
+            // record->array[index] = right;
             if (!wide &&
                 left.Match(Tag.Index, out arrayExpr, out indexExpr) &&
                 arrayExpr.Match(Tag.Field, out structExpr, out fieldName) &&
                 structExpr.Match(Tag.Load, out pointerExpr) &&
                 TryGetPointerOperand(pointerExpr, out basePointer))
             {
-                // Pattern:
-                // record->array[index] = right;
-
                 // The combined field offset and (dynamic) index value must fit in a byte.
                 // Assume that the index will never point beyond the end of the array.
 
@@ -623,14 +599,13 @@ class CodeGenerator
                 }
             }
 
+            // WIDE:
+            // left = right
+            // (for operands that can be addressed directly)
             if (wide &&
                 TryGetWideOperand(left, out wideLeftOperand) &&
                 TryGetWideOperand(right, out wideRightOperand))
             {
-                // Pattern:
-                // a = b;
-                // (for operands that can be addressed directly)
-
                 if (wideLeftOperand.Low.Mode == AddressMode.Immediate)
                 {
                     Error(left, "an assignable expression is required");
@@ -652,6 +627,9 @@ class CodeGenerator
                 return;
             }
 
+            // WIDE:
+            // u8 *p = board->array;
+            // u8 *q = board->field;
             if (wide &&
                 TryGetWideOperand(left, out wideLeftOperand) &&
                 right.Match(Tag.Field, out loadExpr, out fieldName) &&
@@ -660,10 +638,6 @@ class CodeGenerator
                 SizeOf(left) == 2 &&
                 SizeOf(right) == 2)
             {
-                // Patterns:
-                // u8 *p = board->array;
-                // u8 *q = board->field;
-
                 if (wideLeftOperand.Low.Mode == AddressMode.Immediate)
                 {
                     Error(left, "an assignable expression is required");
@@ -691,6 +665,8 @@ class CodeGenerator
                 }
             }
 
+            // WIDE:
+            // left = right
             if (wide && TryGetWideOperand(left, out wideLeftOperand))
             {
                 Speculate();
@@ -707,6 +683,8 @@ class CodeGenerator
                 if (Commit()) return;
             }
 
+            // WIDE:
+            // record->field = right
             if (wide &&
                 left.Match(Tag.Field, out structExpr, out fieldName) &&
                 structExpr.Match(Tag.Load, out pointerExpr) &&
@@ -740,17 +718,11 @@ class CodeGenerator
             WideOperand wideLeftOperand, wideRightOperand;
             int amount;
 
+            // left @= right;
             if (!wide &&
                 TryGetOperand(left, out leftOperand) &&
                 TryGetOperand(right, out rightOperand))
             {
-                // Pattern:
-                // left @= right;
-                //
-                // LDA left
-                // OP@ right
-                // STA left
-
                 Speculate();
                 if (op == Tag.Add)
                 {
@@ -782,12 +754,11 @@ class CodeGenerator
                 if (Commit()) return;
             }
 
-            // Modify an array element by index.
+            // array[index] @= right;
             if (!wide &&
                 left.Match(Tag.Index, out arrayExpr, out indexExpr) &&
                 TryGetOperand(right, out rightOperand))
             {
-                // array[index] @= right;
                 if (TryGetConstantBaseAddress(arrayExpr, out baseAddress))
                 {
                     AsmOperand element = baseAddress.WithMode(AddressMode.AbsoluteY);
@@ -818,16 +789,13 @@ class CodeGenerator
                 }
             }
 
-            // Modify a field through a pointer.
+            // record->field @= right;
             if (!wide &&
                 left.Match(Tag.Field, out structExpr, out fieldName) &&
                 structExpr.Match(Tag.Load, out pointerExpr) &&
                 TryGetPointerOperand(pointerExpr, out basePointer) &&
                 TryGetOperand(right, out rightOperand))
             {
-                // Pattern:
-                // record->field @= right;
-
                 Speculate();
                 Reserve(Register.A | Register.Y);
                 EmitAsm("LDY", GetFieldOffsetIfSmall(structExpr, fieldName));
@@ -855,7 +823,8 @@ class CodeGenerator
                 if (Commit()) return;
             }
 
-            // Wide: Modify a field through a pointer.
+            // WIDE:
+            // record->field @= right;
             if (wide &&
                 left.Match(Tag.Field, out structExpr, out fieldName) &&
                 structExpr.Match(Tag.Load, out pointerExpr) &&
@@ -863,9 +832,6 @@ class CodeGenerator
                 TryGetWideOperand(right, out wideRightOperand) &&
                 SizeOf(left) == 2)
             {
-                // Pattern:
-                // record->field @= right;
-
                 Speculate();
                 Reserve(Register.A | Register.Y);
                 EmitAsm("LDY", GetFieldOffsetIfSmall(structExpr, fieldName));
@@ -890,7 +856,8 @@ class CodeGenerator
                 if (Commit()) return;
             }
 
-            // Wide: Simple operands.
+            // WIDE:
+            // left @= right
             if (wide &&
                 TryGetWideOperand(left, out wideLeftOperand) &&
                 TryGetWideOperand(right, out wideRightOperand))
@@ -1039,16 +1006,9 @@ class CodeGenerator
             if (Commit()) return;
         }
 
-        // Jump if equal:
+        // if (a == b) ...
         if (expr.Match(Tag.Equal, out left, out right))
         {
-            // Pattern:
-            // if (a == b) ...
-            //
-            // LDA b
-            // CMP a
-            // BEQ/BNE target
-
             // Try both orderings of operands.
 
             if (TryGetOperand(right, out rightOperand))
@@ -1074,7 +1034,6 @@ class CodeGenerator
             }
 
             // Also try compiling one operand into a temporary:
-
             {
                 Speculate();
                 CompileIntoA(right);
@@ -1262,7 +1221,7 @@ class CodeGenerator
             return;
         }
 
-        // Index direct or indirect:
+        // pointer[index]
         if (expr.Match(Tag.Index, out pointerExpr, out indexExpr))
         {
             if (TryGetConstantBaseAddress(pointerExpr, out baseAddress))
@@ -1284,7 +1243,7 @@ class CodeGenerator
             }
         }
 
-        // Field via pointer to struct:
+        // record->field
         if (expr.Match(Tag.Field, out structExpr, out fieldName) &&
             structExpr.Match(Tag.Load, out pointerExpr) &&
             TryGetPointerOperand(pointerExpr, out basePointer))
