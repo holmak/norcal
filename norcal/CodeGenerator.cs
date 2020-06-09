@@ -1670,6 +1670,16 @@ class CodeGenerator
             return;
         }
 
+        // Addition by a small constant:
+        if (expr.Match(Tag.Add, out left, out right) &&
+            right.Match(Tag.Integer, out number) &&
+            number >= 0 && number < 4)
+        {
+            CompileIntoY(left);
+            for (int i = 0; i < number; i++) EmitAsm("INY");
+            return;
+        }
+
         // Subtract one:
         if (expr.Match(Tag.Subtract, out left, out right) &&
             right.Match(Tag.Integer, out number) &&
