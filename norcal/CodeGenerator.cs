@@ -1023,7 +1023,7 @@ class CodeGenerator
         EmitComment("jump if {0}: {1}", condition.ToString().ToLower(), ToSourceCode(expr));
 
         AsmOperand leftOperand, rightOperand;
-        WideOperand wideRightOperand;
+        WideOperand wideOperand, wideRightOperand;
         Expr subexpr, left, right;
         int number;
 
@@ -1043,6 +1043,20 @@ class CodeGenerator
         {
             Speculate();
             CompileIntoA(expr);
+            string opcode = condition ? "BNE" : "BEQ";
+            EmitAsm(opcode, target);
+            Release(Register.A);
+            if (Commit()) return;
+        }
+
+        // WIDE:
+        // Jump if nonzero:
+        if (TryGetWideOperand(expr, out wideOperand))
+        {
+            Speculate();
+            Reserve(Register.A);
+            EmitAsm("LDA", wideOperand.Low);
+            EmitAsm("ORA", wideOperand.High);
             string opcode = condition ? "BNE" : "BEQ";
             EmitAsm(opcode, target);
             Release(Register.A);
