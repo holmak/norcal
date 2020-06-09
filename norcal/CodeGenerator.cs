@@ -1946,6 +1946,7 @@ class CodeGenerator
         int size = SizeOf(expr);
         if (size < 1) Program.Panic("expression must have size of at least 1");
 
+        Expr subexpr;
         CType type;
         int number, offset;
         string name, offsetComment;
@@ -1993,6 +1994,24 @@ class CodeGenerator
             }
 
             return true;
+        }
+
+        // &expr
+        if (expr.Match(Tag.AddressOf, out subexpr) && subexpr.Match(Tag.Name, out name))
+        {
+            operand = new WideOperand();
+            Symbol sym = FindSymbol(expr, name);
+
+            if (sym.Tag == SymbolTag.Constant)
+            {
+                Error(expr, "cannot take address of constant");
+            }
+            else if (sym.Tag == SymbolTag.Global)
+            {
+                operand.Low = new AsmOperand(LowByte(sym.Value), AddressMode.Immediate).WithComment("#<" + name);
+                operand.High = new AsmOperand(HighByte(sym.Value), AddressMode.Immediate).WithComment("#>" + name);
+                return true;
+            }
         }
 
         if (expr.Match(Tag.RawOffset, out type, out offset, out offsetComment))
