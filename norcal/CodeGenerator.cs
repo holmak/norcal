@@ -688,6 +688,7 @@ class CodeGenerator
                 structExpr.Match(Tag.Load, out pointerExpr) &&
                 TryGetPointerOperand(pointerExpr, out basePointer))
             {
+                // TODO: If the target field is small, the value must be truncated.
                 Speculate();
                 CompileIntoHL(right);
                 Reserve(Register.A | Register.Y);
@@ -1781,21 +1782,21 @@ class CodeGenerator
                 }
                 else if (paramSize == 2)
                 {
-                    WideOperand w;
-                    if (TryGetWideOperand(arg, out w))
+                    WideOperand src;
+                    Register others = Register.None;
+                    if (!TryGetWideOperand(arg, out src))
                     {
-                        Reserve(Register.A);
-                        EmitAsm("LDA", w.Low);
-                        EmitAsm("STA", new AsmOperand(offset, AddressMode.ZeroPageX));
-                        EmitAsm("LDA", w.High);
-                        EmitAsm("STA", new AsmOperand(offset + 1, AddressMode.ZeroPageX));
-                        Release(Register.A);
+                        CompileIntoHL(arg);
+                        src = RegisterHL;
+                        others = Register.H | Register.L;
                     }
-                    else
-                    {
-                        // TODO: Handle more complex wide arguments.
-                        Abort("wide argument is too complex");
-                    }
+
+                    Reserve(Register.A);
+                    EmitAsm("LDA", src.Low);
+                    EmitAsm("STA", new AsmOperand(offset, AddressMode.ZeroPageX));
+                    EmitAsm("LDA", src.High);
+                    EmitAsm("STA", new AsmOperand(offset + 1, AddressMode.ZeroPageX));
+                    Release(Register.A | others);
                 }
                 else
                 {
