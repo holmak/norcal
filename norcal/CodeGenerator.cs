@@ -2078,6 +2078,9 @@ class CodeGenerator
         return false;
     }
 
+    /// <summary>
+    /// Translate an expression into an operand that can be used for Y-based indexing.
+    /// </summary>
     bool TryGetPointerOperand(Expr expr, out AsmOperand baseAddress)
     {
         WideOperand operand;
