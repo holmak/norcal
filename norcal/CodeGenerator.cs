@@ -1687,7 +1687,7 @@ class CodeGenerator
     {
         if (SizeOf(expr) != 1) Abort("too large for Y");
 
-        Expr left, right;
+        Expr left, right, subexpr;
         AsmOperand operand;
         int number;
 
@@ -1716,6 +1716,15 @@ class CodeGenerator
         {
             CompileIntoY(left);
             EmitAsm("DEY");
+            return;
+        }
+
+        // Post-increment:
+        if (expr.Match(Tag.PostIncrement, out subexpr) &&
+            TryGetOperand(subexpr, out operand))
+        {
+            CompileIntoY(subexpr);
+            EmitAsm("INC", operand);
             return;
         }
 
