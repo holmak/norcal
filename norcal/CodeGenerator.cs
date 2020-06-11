@@ -1511,13 +1511,10 @@ class CodeGenerator
 
     void CompileIntoHL(Expr expr)
     {
-        int size = SizeOf(expr);
-        bool wide = (size == 2);
-
         Expr left, right, structExpr, pointerExpr, test;
         AsmOperand basePointer;
         WideOperand wideOperand;
-        int number;
+        int number, power;
         string fieldName;
 
         expr = FoldConstants(expr);
@@ -1552,8 +1549,7 @@ class CodeGenerator
         }
 
         // Addition:
-        if (wide &&
-            expr.Match(Tag.Add, out left, out right) &&
+        if (expr.Match(Tag.Add, out left, out right) &&
             TryGetWideOperand(right, out wideOperand))
         {
             CompileIntoHL(left);
@@ -1562,8 +1558,7 @@ class CodeGenerator
         }
 
         // Subtraction:
-        if (wide &&
-            expr.Match(Tag.Subtract, out left, out right) &&
+        if (expr.Match(Tag.Subtract, out left, out right) &&
             TryGetWideOperand(right, out wideOperand))
         {
             CompileIntoHL(left);
@@ -1579,9 +1574,28 @@ class CodeGenerator
             return;
         }
 
+        // Multiplication:
+        if (expr.Match(Tag.Multiply, out left, out right))
+        {
+            if (TryGetConstant(right, out number) &&
+                TryGetPowerOfTwo(number, out power))
+            {
+                CompileIntoHL(left);
+
+                for (int i = 0; i < power; i++)
+                {
+                    EmitAsm("ASL", RegisterL);
+                    EmitAsm("ROL", RegisterH);
+                }
+                return;
+            }
+
+            Abort("unsupported wide multiplication");
+            return;
+        }
+
         // Right shift:
-        if (wide &&
-            expr.Match(Tag.ShiftRight, out left, out right))
+        if (expr.Match(Tag.ShiftRight, out left, out right))
         {
             if (TryGetConstant(right, out number))
             {
@@ -1627,7 +1641,7 @@ class CodeGenerator
             return;
         }
 
-        Abort("too complex for HA");
+        Abort("too complex for HL");
     }
 
     bool CompileCommutativeBinaryOperatorIntoA(Expr expr, string tag, Action<AsmOperand> generate)
