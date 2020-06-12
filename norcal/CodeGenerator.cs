@@ -2160,6 +2160,15 @@ class CodeGenerator
             return true;
         }
 
+        int offset;
+        string offsetComment;
+
+        if (expr.Match(Tag.RawOffset, out originalType, out offset, out offsetComment) && originalType.IsArray)
+        {
+            baseAddress = new AsmOperand(offset, AddressMode.Absolute).WithComment(offsetComment);
+            return true;
+        }
+
         baseAddress = null;
         return false;
     }
