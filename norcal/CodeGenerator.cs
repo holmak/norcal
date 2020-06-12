@@ -2562,6 +2562,9 @@ class CodeGenerator
             address = -1;
         }
 
+        // We don't need this to assemble, but we do need it to emit debug information about global variables:
+        Emit(Tag.Variable, name, address, size);
+
         type = CalculateConstantArrayDimensions(type);
         return DeclareSymbol(origin, new Symbol(SymbolTag.Global, address, type, name));
     }

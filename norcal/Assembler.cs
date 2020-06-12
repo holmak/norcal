@@ -44,7 +44,7 @@ class Assembler
         foreach (Expr e in assembly)
         {
             string label, name, mnemonic;
-            int skipTarget;
+            int skipTarget, address, size;
             byte[] bytes;
             AsmOperand operand;
 
@@ -54,7 +54,7 @@ class Assembler
             }
             else if (e.Match(Tag.Function, out label))
             {
-                int address = PrgRomBase + prg.Count;
+                address = PrgRomBase + prg.Count;
                 DefineSymbol(prg, label, address, isLabel: false);
                 Debug.AddFunction(label, address);
 
@@ -67,7 +67,7 @@ class Assembler
             }
             else if (e.Match(Tag.Label, out label))
             {
-                int address = PrgRomBase + prg.Count;
+                address = PrgRomBase + prg.Count;
                 DefineSymbol(prg, label, address, isLabel: true);
                 Debug.AddFunction(label, address);
             }
@@ -86,7 +86,6 @@ class Assembler
             else if (e.Match(Tag.Word, out label))
             {
                 AsmSymbol sym;
-                int address;
                 if (Symbols.TryGetValue(label, out sym))
                 {
                     address = sym.Value;
@@ -100,9 +99,13 @@ class Assembler
                 prg.Add(LowByte(address));
                 prg.Add(HighByte(address));
             }
+            else if (e.Match(Tag.Variable, out name, out address, out size))
+            {
+                Debug.AddVariable(name, address, size);
+            }
             else if (e.Match(Tag.ReadonlyData, out name, out bytes))
             {
-                int address = PrgRomBase + prg.Count;
+                address = PrgRomBase + prg.Count;
                 DefineSymbol(prg, name, address, isLabel: false);
                 prg.AddRange(bytes);
                 Debug.AddVariable(name, address, bytes.Length);
