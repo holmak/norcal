@@ -2119,7 +2119,8 @@ class CodeGenerator
         // Globally allocated arrays have a constant base address:
         CType originalType = TypeOfWithoutDecay(expr);
         WideOperand wideOperand;
-        if (TryGetWideOperand(expr, out wideOperand) && originalType.IsArray)
+        if (TryGetWideOperand(expr, out wideOperand) && originalType.IsArray &&
+            wideOperand.Low.Mode == AddressMode.Absolute)
         {
             baseAddress = wideOperand.Low;
             return true;
