@@ -138,10 +138,9 @@ class CodeGenerator
             {
                 DeclareGlobal(decl, region, CalculateConstantArrayDimensions(type), name);
             }
-            else if (decl.Match(Tag.ReadonlyData, out type, out name, out values))
-            {
-                DeclareReadonlyData(decl, type, name, values);
-            }
+
+            // Also find all of the readonly data embedded in expressions. (string literals)
+            CompileReadonlyData(decl);
         }
 
         // Pass: Generate code for function bodies.
@@ -290,6 +289,25 @@ class CodeGenerator
         foreach (AllocationRegion allocator in new[] { ZeroPageRegion, OamRegion, RamRegion })
         {
             Console.WriteLine("    {0}: {1} bytes free", allocator.Name, allocator.Top - allocator.Next);
+        }
+    }
+
+    void CompileReadonlyData(Expr expr)
+    {
+        CType type;
+        string name;
+        int[] values;
+
+        if (expr.Match(Tag.ReadonlyData, out type, out name, out values))
+        {
+            DeclareReadonlyData(expr, type, name, values);
+        }
+        else
+        {
+            foreach (Expr subexpr in expr.GetArgs().OfType<Expr>())
+            {
+                CompileReadonlyData(subexpr);
+            }
         }
     }
 
@@ -1997,6 +2015,7 @@ class CodeGenerator
         Expr subexpr;
         CType type;
         int number, offset;
+        int[] values;
         string name, offsetComment;
 
         if (expr.Match(Tag.Integer, out number))
@@ -2076,6 +2095,15 @@ class CodeGenerator
                 operand.Low = new AsmOperand(offset, AddressMode.Absolute).WithComment(offsetComment);
                 operand.High = new AsmOperand(offset + 1, AddressMode.Absolute).WithComment(offsetComment + "+1");
             }
+            return true;
+        }
+
+        // String literals:
+        if (expr.Match(Tag.ReadonlyData, out type, out name, out values))
+        {
+            operand = new WideOperand();
+            operand.Low = new AsmOperand(name, ImmediateModifier.LowByte);
+            operand.High = new AsmOperand(name, ImmediateModifier.HighByte);
             return true;
         }
 
