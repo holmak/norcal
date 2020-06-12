@@ -928,6 +928,10 @@ class CodeGenerator
                 {
                     CompileWideAddition(wideLeftOperand, wideLeftOperand, wideRightOperand);
                 }
+                else if (op == Tag.Subtract)
+                {
+                    CompileWideSubtraction(wideLeftOperand, wideLeftOperand, wideRightOperand);
+                }
                 else
                 {
                     Abort("unhandled wide binary operation");
@@ -1597,15 +1601,7 @@ class CodeGenerator
             TryGetWideOperand(right, out wideOperand))
         {
             CompileIntoHL(left);
-            Reserve(Register.A);
-            EmitAsm("LDA", RegisterL);
-            EmitAsm("SEC");
-            EmitAsm("SBC", wideOperand.Low);
-            EmitAsm("STA", RegisterL);
-            EmitAsm("LDA", RegisterH);
-            EmitAsm("SBC", wideOperand.High);
-            EmitAsm("STA", RegisterH);
-            Release(Register.A);
+            CompileWideSubtraction(RegisterHL, RegisterHL, wideOperand);
             return;
         }
 
@@ -1779,6 +1775,19 @@ class CodeGenerator
         EmitAsm("STA", dest.Low);
         EmitAsm("LDA", a.High);
         EmitAsm("ADC", b.High);
+        EmitAsm("STA", dest.High);
+        Release(Register.A);
+    }
+
+    void CompileWideSubtraction(WideOperand dest, WideOperand a, WideOperand b)
+    {
+        Reserve(Register.A);
+        EmitAsm("LDA", a.Low);
+        EmitAsm("SEC");
+        EmitAsm("SBC", b.Low);
+        EmitAsm("STA", dest.Low);
+        EmitAsm("LDA", a.High);
+        EmitAsm("SBC", b.High);
         EmitAsm("STA", dest.High);
         Release(Register.A);
     }
