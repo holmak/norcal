@@ -1324,14 +1324,25 @@ class CodeGenerator
 
         // record->field
         if (expr.Match(Tag.Field, out structExpr, out fieldName) &&
-            structExpr.Match(Tag.Load, out pointerExpr) &&
-            TryGetPointerOperand(pointerExpr, out basePointer))
+            structExpr.Match(Tag.Load, out pointerExpr))
         {
-            Reserve(Register.Y);
-            EmitAsm("LDY", GetFieldOffsetIfSmall(structExpr, fieldName));
-            Reserve(Register.A);
-            EmitAsm("LDA", basePointer);
-            Release(Register.Y);
+            if (TryGetPointerOperand(pointerExpr, out basePointer))
+            {
+                Reserve(Register.Y);
+                EmitAsm("LDY", GetFieldOffsetIfSmall(structExpr, fieldName));
+                Reserve(Register.A);
+                EmitAsm("LDA", basePointer);
+                Release(Register.Y);
+                return;
+            }
+
+            CompileIntoHL(pointerExpr);
+            FieldInfo field = GetFieldInfo(structExpr, fieldName);
+            CompileWideAddition(RegisterHL, RegisterHL, WideOperand.MakeImmediate(field.Offset, "." + fieldName));
+            Reserve(Register.A | Register.Y);
+            EmitAsm("LDY", new AsmOperand(0, AddressMode.Immediate));
+            EmitAsm("LDA", RegisterL.WithMode(AddressMode.IndirectY));
+            Release(Register.Y | Register.H | Register.L);
             return;
         }
 
