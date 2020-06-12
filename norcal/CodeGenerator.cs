@@ -1045,6 +1045,15 @@ class CodeGenerator
         Expr subexpr, left, right;
         int number;
 
+        // (a == 0) === (!a)
+        if (expr.Match(Tag.Equal, out left, out right) &&
+            TryGetConstant(right, out number) &&
+            number == 0)
+        {
+            CompileJumpIf(!condition, left, target);
+            return;
+        }
+
         // Jump (or not) unconditionally when the condition is a constant:
         if (TryGetConstant(expr, out number))
         {
@@ -1128,15 +1137,6 @@ class CodeGenerator
         if (expr.Match(Tag.NotEqual, out left, out right))
         {
             CompileJumpIf(!condition, Expr.Make(Tag.Equal, left, right), target);
-            return;
-        }
-
-        // (a == 0) === (!a)
-        if (expr.Match(Tag.Equal, out left, out right) &&
-            TryGetConstant(right, out number) &&
-            number == 0)
-        {
-            CompileJumpIf(!condition, left, target);
             return;
         }
 
