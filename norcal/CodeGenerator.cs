@@ -1182,31 +1182,35 @@ class CodeGenerator
         }
 
         // WIDE: Jump if less than:
-        if (expr.Match(Tag.LessThan, out left, out right) &&
-            TryGetWideOperand(right, out wideRightOperand))
+        if (expr.Match(Tag.LessThan, out left, out right))
         {
-            // Wide comparison:
-            // Subtract the right value from the left and check the final carry result.
-            // NOTE: The "CMP" of the low byte is equivalent to subtraction with "SEC, SBC".
-            // See http://6502.org/tutorials/compare_beyond.html#4.3
+            right = FoldConstants(right);
 
-            Speculate();
+            if (TryGetWideOperand(right, out wideRightOperand))
+            {
+                // Wide comparison:
+                // Subtract the right value from the left and check the final carry result.
+                // NOTE: The "CMP" of the low byte is equivalent to subtraction with "SEC, SBC".
+                // See http://6502.org/tutorials/compare_beyond.html#4.3
 
-            AsmOperand lowLabel = MakeUniqueLabel("compare_low");
-            AsmOperand endLabel = MakeUniqueLabel("compare_end");
-            string opcode = condition ? "BCC" : "BCS";
+                Speculate();
 
-            CompileIntoHL(left);
-            Reserve(Register.A);
-            EmitAsm("LDA", RegisterL);
-            EmitAsm("CMP", wideRightOperand.Low);
-            EmitAsm("LDA", RegisterH);
-            EmitAsm("SBC", wideRightOperand.High);
-            EmitAsm(opcode, target);
-            EmitLabel(endLabel);
-            Release(Register.A | Register.H | Register.L);
+                AsmOperand lowLabel = MakeUniqueLabel("compare_low");
+                AsmOperand endLabel = MakeUniqueLabel("compare_end");
+                string opcode = condition ? "BCC" : "BCS";
 
-            if (Commit()) return;
+                CompileIntoHL(left);
+                Reserve(Register.A);
+                EmitAsm("LDA", RegisterL);
+                EmitAsm("CMP", wideRightOperand.Low);
+                EmitAsm("LDA", RegisterH);
+                EmitAsm("SBC", wideRightOperand.High);
+                EmitAsm(opcode, target);
+                EmitLabel(endLabel);
+                Release(Register.A | Register.H | Register.L);
+
+                if (Commit()) return;
+            }
         }
 
         // (a <= b) === !(b < a)
