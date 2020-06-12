@@ -321,16 +321,16 @@ class CodeGenerator
         AsmOperand operand;
         WideOperand wideOperand;
 
-        // Don't print "block" expressions; the subexpressions will be handled individually.
+        // Don't print or simplify "block" expressions; the subexpressions will be handled individually.
         // Also don't print "empty" expressions.
         if (!expr.MatchTag(Tag.Sequence) && !expr.MatchTag(Tag.If) && !expr.MatchTag(Tag.For) && !expr.Match(Tag.Empty))
         {
             EmitComment("");
             EmitComment("{0}", ToSourceCode(expr));
-        }
 
-        Expr originalExpr = expr;
-        expr = FoldConstants(originalExpr);
+            Expr originalExpr = expr;
+            expr = FoldConstants(originalExpr);
+        }
 
         if (expr.Match(Tag.Empty))
         {
@@ -1942,7 +1942,15 @@ class CodeGenerator
             }
         }
 
-        return expr;
+        // Apply recursively:
+        object[] args = expr.GetArgs();
+        object[] newArgs = new object[args.Length];
+        for (int i = 0; i < args.Length; i++)
+        {
+            Expr subexpr = args[i] as Expr;
+            newArgs[i] = (subexpr != null) ? FoldConstants(subexpr) : args[i];
+        }
+        return Expr.Make(newArgs).WithSource(expr.Source);
     }
 
     /// <summary>
