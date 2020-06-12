@@ -1070,6 +1070,8 @@ class CodeGenerator
         {
             Speculate();
             CompileIntoA(expr);
+            // TODO: This CMP can be omitted if loading A was the very last operation.
+            EmitAsm("CMP", new AsmOperand(0, AddressMode.Immediate));
             string opcode = condition ? "BNE" : "BEQ";
             EmitAsm(opcode, target);
             Release(Register.A);
