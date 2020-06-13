@@ -11,7 +11,6 @@ class Program
 {
     private static readonly string TestHeader = "test.h";
     private static readonly string TestsFile = "tests.txt";
-    private static readonly string RuntimeFile = "runtime.c";
     private static readonly string ReportFile = "results.html";
     private static readonly string CompilerPath = "norcal/bin/Debug/norcal.exe";
     private static readonly string SimulatorPath = "sim6502/x64/Debug/sim6502.exe";
@@ -83,7 +82,7 @@ class Program
                 // Run the compiler:
                 File.WriteAllText(sourceFile, test.Source);
                 List<string> compilerArgs = new List<string>(
-                    new[] { RuntimeFile, TestHeader, sourceFile, "-o", imageFile });
+                    new[] { TestHeader, sourceFile, "-o", imageFile });
                 Process process = RunProcess(CompilerPath, compilerArgs.ToArray());
 
                 if (!process.HasExited)
