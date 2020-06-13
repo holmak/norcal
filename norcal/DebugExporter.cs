@@ -10,6 +10,8 @@ class DebugExporter
     List<SegmentInfo> Segments = new List<SegmentInfo>();
     List<SpanInfo> Spans = new List<SpanInfo>();
     List<SymbolInfo> Symbols = new List<SymbolInfo>();
+    List<LineInfo> Lines = new List<LineInfo>();
+    List<string> Comments = new List<string>();
 
     public DebugExporter()
     {
@@ -33,17 +35,21 @@ class DebugExporter
         });
     }
 
-    void AddSpan(int address, int size, bool isData)
+    int AddSpan(int address, int size, bool isData)
     {
         SegmentInfo segment = GetSegment(address);
+        int spanID = Spans.Count;
+
         Spans.Add(new SpanInfo()
         {
-            ID = Spans.Count,
+            ID = spanID,
             SegmentID = segment.ID,
             Offset = address - segment.Start,
             Size = size,
             IsData = isData,
         });
+
+        return spanID;
     }
 
     public void AddVariable(string name, int address, int size)
@@ -72,9 +78,27 @@ class DebugExporter
         });
     }
 
-    public void TagInstruction(int address, int size)
+    public void TagInstruction(int address, int size, List<string> localComments)
     {
-        AddSpan(address, size, false);
+        int spanID = AddSpan(address, size, false);
+
+        if (localComments.Count > 0)
+        {
+            foreach (string comment in localComments)
+            {
+                Comments.Add("; " + comment);
+            }
+
+            Comments.Add("NOP");
+
+            Lines.Add(new LineInfo()
+            {
+                ID = Lines.Count,
+                FileID = 0,
+                LineNumber = Comments.Count - 1,
+                SpanID = spanID,
+            });
+        }
     }
 
     string SanitizeName(string name)
@@ -114,7 +138,8 @@ class DebugExporter
         lines.Add(string.Format("version\tmajor=2,minor=0"));
         lines.Add(string.Format(
             "info\tcsym={0},file={1},lib={2},line={3},mod={4},scope={5},seg={6},span={7},sym={8},type={9}", 
-            0, 0, 0, 0, 0, 0, Segments.Count, Spans.Count, Symbols.Count, 0));
+            0, 1, 0, 0, 0, 0, Segments.Count, Spans.Count, Symbols.Count, 0));
+        lines.Add(string.Format("file\tid=0,name=\"{0}\"", Path.ChangeExtension(Path.GetFileName(path), ".dbc")));
 
         foreach (SegmentInfo segment in Segments)
         {
@@ -131,7 +156,15 @@ class DebugExporter
             lines.Add(string.Format("sym\tid={0},name=\"{1}\",size={2},val=0x{3:X4},seg={4}", symbol.ID, symbol.Name, symbol.Size, symbol.Address, symbol.SegmentID));
         }
 
+        foreach (LineInfo line in Lines)
+        {
+            lines.Add(string.Format("line\tid={0},file={1},line={2},span={3}", line.ID, line.FileID, line.LineNumber, line.SpanID));
+        }
+
         File.WriteAllLines(path, lines);
+
+        // Write a separate file with comment text that our DBG file can reference:
+        File.WriteAllLines(Path.ChangeExtension(path, ".dbc"), Comments);
     }
 
     class SegmentInfo
@@ -159,5 +192,13 @@ class DebugExporter
         public int Address;
         public int SegmentID;
         public int Size;
+    }
+
+    class LineInfo
+    {
+        public int ID;
+        public int FileID;
+        public int LineNumber;
+        public int SpanID;
     }
 }

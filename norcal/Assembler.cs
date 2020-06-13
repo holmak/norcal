@@ -41,16 +41,18 @@ class Assembler
         if (chr.Length != ChrRomSize) Program.Error("CHR ROM has wrong length: ", chr.Length);
 
         List<byte> prg = new List<byte>();
+        List<string> comments = new List<string>();
+
         foreach (Expr e in assembly)
         {
-            string label, name, mnemonic;
+            string label, name, mnemonic, text;
             int skipTarget, address, size;
             byte[] bytes;
             AsmOperand operand;
 
-            if (e.MatchTag(Tag.Comment))
+            if (e.Match(Tag.Comment, out text))
             {
-                // Ignore.
+                comments.Add(text);
             }
             else if (e.Match(Tag.Function, out label))
             {
@@ -150,7 +152,9 @@ class Assembler
                         Program.Error("not enough PRG-ROM for code");
                     }
 
-                    Debug.TagInstruction(PrgRomBase + prg.Count, instructionSize);
+                    Debug.TagInstruction(PrgRomBase + prg.Count, instructionSize, comments);
+                    comments.Clear();
+
                     prg.Add(candidates[0]);
                 }
                 else if (candidates.Count == 0)
