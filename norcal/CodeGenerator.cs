@@ -64,7 +64,6 @@ class CodeGenerator
         string name, functionName;
         CType type, returnType;
         MemoryRegion region;
-        int[] values;
         Expr value, body;
 
         // Pass: Process constants and struct/union declarations.
