@@ -1073,6 +1073,7 @@ class CodeGenerator
         {
             Speculate();
 
+            AsmOperand operand;
             if (TryGetOperand(expr, out operand))
             {
                 Reserve(Register.A);
