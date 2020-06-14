@@ -406,7 +406,6 @@ partial class Parser
                         {
                             if (TryParse(TokenType.COMMA))
                             {
-                                Expect(TokenType.COMMA);
                                 ExpectKeyword("Y");
                                 operand = operand.WithMode(AddressMode.IndirectY);
                             }
