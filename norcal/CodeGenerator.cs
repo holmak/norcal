@@ -718,7 +718,7 @@ class CodeGenerator
                 if (Commit()) return;
             }
 
-            NYI(wide ? "WIDE" : "NARROW");
+            NYI(expr, wide ? "WIDE" : "NARROW");
             return;
         }
 
@@ -1020,7 +1020,7 @@ class CodeGenerator
             if (Commit()) return;
         }
 
-        NYI("unhandled expression");
+        NYI(expr, "unhandled expression");
     }
 
     void CheckBinaryOperandWidth(Expr left, Expr right, out int leftSize, out int rightSize, out bool wide)
@@ -1294,7 +1294,7 @@ class CodeGenerator
             return;
         }
 
-        NYI("unhandled jump expression");
+        NYI(expr, "unhandled jump expression");
     }
 
     void CompileIntoA(Expr expr)
@@ -2507,10 +2507,9 @@ class CodeGenerator
         Emit(Tag.Comment, string.Format(format, args));
     }
 
-    // TODO: Report a fatal error if this is hit in release builds.
-    void NYI(string message)
+    void NYI(Expr origin, string message)
     {
-        EmitComment("NYI: {0}", message);
+        Error(origin, "not implemented: " + message);
     }
 
     void EmitVerboseComment(string format, params object[] args)
