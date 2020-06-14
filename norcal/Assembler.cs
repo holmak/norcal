@@ -80,10 +80,12 @@ class Assembler
                 // Pad out the code until reaching the target address:
                 if (skipTarget > ushort.MaxValue) Program.Panic("assembler: warning: skip address is too large");
                 if (prg.Count > skipTarget) Program.Panic("assembler: warning: cannot skip backward");
+                int freePrgRom = skipTarget - prg.Count;
                 while (prg.Count < skipTarget)
                 {
                     prg.Add(0);
                 }
+                Console.WriteLine("{0} bytes unused in PRG-ROM", freePrgRom);
             }
             else if (e.Match(Tag.Word, out label))
             {

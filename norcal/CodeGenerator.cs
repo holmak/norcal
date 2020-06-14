@@ -284,10 +284,9 @@ class CodeGenerator
             Program.Panic("root transaction error: {0}", Output.AbortReason);
         }
 
-        Console.WriteLine("Memory usage:");
         foreach (AllocationRegion allocator in new[] { ZeroPageRegion, OamRegion, RamRegion })
         {
-            Console.WriteLine("    {0}: {1} bytes free", allocator.Name, allocator.Top - allocator.Next);
+            Console.WriteLine("{1} bytes unused in {0}", allocator.Name, allocator.Top - allocator.Next);
         }
     }
 
