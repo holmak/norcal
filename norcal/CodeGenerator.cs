@@ -1072,9 +1072,21 @@ class CodeGenerator
         if (!OperatorsThatReturnBools.Contains(expr.GetTag()))
         {
             Speculate();
-            CompileIntoA(expr);
-            // TODO: This CMP can be omitted if loading A was the very last operation.
-            EmitAsm("CMP", new AsmOperand(0, AddressMode.Immediate));
+
+            if (TryGetOperand(expr, out operand))
+            {
+                Reserve(Register.A);
+                EmitAsm("LDA", operand);
+            }
+            else
+            {
+                // If we have to execute complicated code to load the test value, then we can't
+                // be sure that the flags represent the value in register A, and we therefore must
+                // emit an explicit comparison.
+                CompileIntoA(expr);
+                EmitAsm("CMP", new AsmOperand(0, AddressMode.Immediate));
+            }
+
             string opcode = condition ? "BNE" : "BEQ";
             EmitAsm(opcode, target);
             Release(Register.A);
