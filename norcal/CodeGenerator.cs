@@ -1433,30 +1433,25 @@ class CodeGenerator
 
         // Multiplication by a constant:
         if (expr.Match(Tag.Multiply, out left, out right) &&
-            TryGetOperand(left, out leftOperand) &&
             TryGetConstant(right, out number))
         {
-            Reserve(Register.A);
-            EmitAsm("LDA", new AsmOperand(0, AddressMode.Immediate));
-            EmitAsm("CLC");
-            for (int i = 0; i < number; i++)
+            // By a small power of two:
+            int power;
+            if (TryGetPowerOfTwo(number, out power) && power < 4)
             {
-                EmitAsm("ADC", leftOperand);
+                CompileIntoA(left);
+                for (int i = 0; i < power; i++)
+                {
+                    EmitAsm("ASL");
+                }
+                return;
             }
-            return;
-        }
 
-        // Multiplication by a power of two:
-        int power;
-        if (expr.Match(Tag.Multiply, out left, out right) &&
-            TryGetConstant(right, out number) &&
-            TryGetPowerOfTwo(number, out power))
-        {
-            CompileIntoA(left);
-            for (int i = 0; i < power; i++)
-            {
-                EmitAsm("ASL");
-            }
+            // By any number, via lookup table:
+            CompileIntoY(left);
+            Reserve(Register.A);
+            EmitAsm("LDA", GenerateMultiplicationTable(number).WithMode(AddressMode.AbsoluteY));
+            Release(Register.Y);
             return;
         }
 
@@ -1465,6 +1460,7 @@ class CodeGenerator
             TryGetConstant(right, out number))
         {
             // By a small power of two:
+            int power;
             if (TryGetPowerOfTwo(number, out power) && power < 4)
             {
                 CompileIntoA(left);
@@ -2230,6 +2226,18 @@ class CodeGenerator
             number >>= 1;
             power += 1;
         }
+    }
+
+    AsmOperand GenerateMultiplicationTable(int multiplier)
+    {
+        int[] table = new int[256];
+        for (int i = 0; i < 256; i++)
+        {
+            table[i] = i * multiplier;
+        }
+        string name = "_lookup_multiply_by_" + multiplier;
+        LookupTables[name] = table;
+        return new AsmOperand(name, AddressMode.Absolute);
     }
 
     AsmOperand GenerateDivisionTable(int divisor)
