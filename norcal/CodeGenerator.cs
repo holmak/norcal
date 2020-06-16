@@ -170,9 +170,19 @@ class CodeGenerator
                 }
                 NextLocalOffset = FrameSize;
 
-                for (int i = 0; i < FrameSize; i++)
+                if (FrameSize > 4)
                 {
-                    EmitAsm("DEX");
+                    EmitAsm("TXA");
+                    EmitAsm("SEC");
+                    EmitAsm("SBC", new AsmOperand(FrameSize, AddressMode.Immediate));
+                    EmitAsm("TAX");
+                }
+                else
+                {
+                    for (int i = 0; i < FrameSize; i++)
+                    {
+                        EmitAsm("DEX");
+                    }
                 }
 
                 // Declare parameters as local symbols:
@@ -2288,9 +2298,19 @@ class CodeGenerator
 
     void ReturnFromFunction()
     {
-        for (int i = 0; i < FrameSize; i++)
+        if (ReturnType == CType.Void && FrameSize > 4)
         {
-            EmitAsm("INX");
+            EmitAsm("TXA");
+            EmitAsm("CLC");
+            EmitAsm("ADC", new AsmOperand(FrameSize, AddressMode.Immediate));
+            EmitAsm("TAX");
+        }
+        else
+        {
+            for (int i = 0; i < FrameSize; i++)
+            {
+                EmitAsm("INX");
+            }
         }
         EmitAsm("RTS");
     }
