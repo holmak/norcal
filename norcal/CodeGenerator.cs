@@ -470,7 +470,8 @@ class CodeGenerator
                 BeginScope();
                 CompileStatement(body);
                 EndScope();
-                EmitAsm("JMP", endIf);
+                // The last clause doesn't need to skip to the end, it can just fall through.
+                if (i < parts.Length - 2) EmitAsm("JMP", endIf);
                 EmitLabel(elseLabel);
             }
             EmitLabel(endIf);
