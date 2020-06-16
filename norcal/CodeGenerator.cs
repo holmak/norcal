@@ -1304,7 +1304,7 @@ class CodeGenerator
         if (SizeOf(expr) != 1) Abort("too large for A");
 
         Expr left, right, subexpr, structExpr, pointerExpr, indexExpr, test, arrayExpr;
-        AsmOperand operand, leftOperand, rightOperand, baseAddress, basePointer;
+        AsmOperand operand, rightOperand, baseAddress, basePointer;
         int number;
         string fieldName;
         CType type;
