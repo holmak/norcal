@@ -401,6 +401,11 @@ class AsmOperand
         return new AsmOperand(Base, Offset, newMode, Modifier, Comment);
     }
 
+    public AsmOperand WithModifier(ImmediateModifier newModifier)
+    {
+        return new AsmOperand(Base, Offset, Mode, newModifier, Comment);
+    }
+
     public AsmOperand WithComment(string newComment)
     {
         return new AsmOperand(Base, Offset, Mode, Modifier, newComment);

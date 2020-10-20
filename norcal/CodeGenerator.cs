@@ -1348,6 +1348,16 @@ class CodeGenerator
                 Release(Register.Y);
                 return;
             }
+
+            WideOperand wideOperand;
+            if (TryGetWideOperand(pointerExpr, out wideOperand) && wideOperand.Low.Mode == AddressMode.Immediate)
+            {
+                CompileIntoY(indexExpr);
+                Reserve(Register.A);
+                EmitAsm("LDA", wideOperand.Low.WithModifier(ImmediateModifier.None).WithMode(AddressMode.AbsoluteY));
+                Release(Register.Y);
+                return;
+            }
         }
 
         // record->field
