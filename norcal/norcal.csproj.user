@@ -2,6 +2,6 @@
 <Project ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|AnyCPU'">
     <StartWorkingDirectory>C:\Repos\hackmatch-nes</StartWorkingDirectory>
-    <StartArguments>src\board.c src\common.c src\data.c src\main.c src\mode_splash.c src\mode_title.c src\mode_single.c src\mode_versus.c src\shuffled.c -o hackmatch.nes --debug-output</StartArguments>
+    <StartArguments>src\audio.c src\board.c src\common.c src\data.c src\main.c src\mode_splash.c src\mode_title.c src\mode_single.c src\mode_versus.c src\music.c src\shuffled.c -o hackmatch.nes --debug-output</StartArguments>
   </PropertyGroup>
 </Project>
